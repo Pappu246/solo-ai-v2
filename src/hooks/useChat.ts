@@ -20,6 +20,7 @@ export function useChat(user: User | null, defaultModel = 'llama-3.3-70b') {
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   const [autoRoute, setAutoRoute] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
+  const [error, setError] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
   // ── Load Models ─────────────────────────────────────────────────────────────
@@ -126,6 +127,7 @@ export function useChat(user: User | null, defaultModel = 'llama-3.3-70b') {
     setIsLoading(true);
     setStreamingContent('');
     setStreamingModel(null);
+    setError(null);
 
     const chatHistory: ChatMessage[] = [...messages, { role: 'user', content }].map(m => ({
       role: m.role as 'user' | 'assistant' | 'system',
@@ -171,7 +173,15 @@ export function useChat(user: User | null, defaultModel = 'llama-3.3-70b') {
         signal: abortController.signal,
       });
 
-      if (!response.ok || !response.body) throw new Error('Failed to get response');
+      if (!response.ok) {
+        let errorMsg = `Request failed (${response.status})`;
+        try {
+          const errData = await response.json();
+          if (errData.error) errorMsg = errData.error;
+        } catch { /* ignore parse error */ }
+        throw new Error(errorMsg);
+      }
+      if (!response.body) throw new Error('No response body');
 
       // Read model info from response headers
       const headerModel = response.headers.get('X-Model-Used') || finalModelInfo.id;
@@ -253,6 +263,8 @@ export function useChat(user: User | null, defaultModel = 'llama-3.3-70b') {
     } catch (error) {
       if ((error as Error).name !== 'AbortError') {
         console.error('Chat error:', error);
+        const errMsg = (error as Error).message || 'Something went wrong';
+        setError(errMsg);
         setStreamingContent('');
         setStreamingModel(null);
       }
@@ -277,7 +289,7 @@ export function useChat(user: User | null, defaultModel = 'llama-3.3-70b') {
 
   return {
     conversations, filteredConversations, activeConversation, messages,
-    isLoading, streamingContent, streamingModel,
+    isLoading, streamingContent, streamingModel, error,
     selectedModel, autoRoute, availableModels,
     searchQuery, setSearchQuery,
     loadConversations, loadMessages, selectConversation,

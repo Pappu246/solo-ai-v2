@@ -30,7 +30,7 @@ export function ChatInput({ onSend, isLoading, onStop, autoRoute, selectedModel,
   const [fileError, setFileError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const recognitionRef = useRef<unknown>(null);
+  const recognitionRef = useRef<{ stop(): void; start(): void; abort(): void; lang: string; continuous: boolean; interimResults: boolean; onresult: ((event: Event) => void) | null; onerror: ((event: Event) => void) | null; onend: ((event: Event) => void) | null } | null>(null);
 
   // Auto-resize textarea
   useEffect(() => {

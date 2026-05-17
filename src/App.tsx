@@ -195,6 +195,21 @@ export default function App() {
                 <StreamingMessage content={chat.streamingContent} model={chat.streamingModel} />
               )}
 
+              {chat.error && (
+                <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
+                  <div className="flex-1">
+                    <p className="text-red-400 text-sm font-medium">Error</p>
+                    <p className="text-red-300/80 text-sm mt-1">{chat.error}</p>
+                  </div>
+                  <button
+                    onClick={() => chat.sendMessage(chat.messages[chat.messages.length - 1]?.content || '')}
+                    className="text-xs text-red-400 hover:text-red-300 underline flex-shrink-0"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+
               <div ref={messagesEndRef} />
             </div>
           )}

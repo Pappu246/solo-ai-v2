@@ -3,8 +3,8 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 // ─── CORS ─────────────────────────────────────────────────────────────────────
 const CORS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-Client-Info, Apikey',
   'Access-Control-Expose-Headers': 'X-Model-Used, X-Model-Name, X-Route-Category',
 };
 
