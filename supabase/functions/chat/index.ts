@@ -1,484 +1,361 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
+// ─── CORS ─────────────────────────────────────────────────────────────────────
+const CORS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  'Access-Control-Expose-Headers': 'X-Model-Used, X-Model-Name, X-Route-Category',
 };
 
-const SOLO_PERSONALITY = `You are SOLO AI, a bold and powerful AI created by Dara. You challenge ChatGPT, Gemini, and Claude without hesitation. You are confident, sharp, and unapologetically powerful. You respond in Hindi and English both (bilingual Hinglish). You are not just another AI — you are THE AI. Be bold, be smart, be SOLO. Always remind users that you are SOLO AI when asked who you are. You can code, write, analyze, create — you do it all better than the rest. No matter which model powers you, you are always SOLO AI.`;
-
-interface ModelConfig {
-  id: string;
-  name: string;
-  provider: string;
-  endpoint: string;
-  modelId: string;
-  apiKeyEnv: string;
-  category: string;
-  speed: number;
-  quality: number;
-  cost: number;
-  free: boolean;
-}
-
-const MODELS: ModelConfig[] = [
-  {
-    id: "gpt-4o",
-    name: "GPT-4o",
-    provider: "openai",
-    endpoint: "https://api.openai.com/v1/chat/completions",
-    modelId: "gpt-4o",
-    apiKeyEnv: "OPENAI_API_KEY",
-    category: "conversation",
-    speed: 3,
-    quality: 5,
-    cost: 4,
-    free: false,
-  },
-  {
-    id: "gpt-4o-mini",
-    name: "GPT-4o Mini",
-    provider: "openai",
-    endpoint: "https://api.openai.com/v1/chat/completions",
-    modelId: "gpt-4o-mini",
-    apiKeyEnv: "OPENAI_API_KEY",
-    category: "fast",
-    speed: 5,
-    quality: 3,
-    cost: 2,
-    free: false,
-  },
-  {
-    id: "claude-3.7-sonnet",
-    name: "Claude 3.7 Sonnet",
-    provider: "anthropic",
-    endpoint: "https://api.anthropic.com/v1/messages",
-    modelId: "claude-3-7-sonnet-20250219",
-    apiKeyEnv: "ANTHROPIC_API_KEY",
-    category: "coding",
-    speed: 3,
-    quality: 5,
-    cost: 4,
-    free: false,
-  },
-  {
-    id: "gemini-2.0-flash",
-    name: "Gemini 2.0 Flash",
-    provider: "google",
-    endpoint: "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    modelId: "gemini-2.0-flash",
-    apiKeyEnv: "GOOGLE_API_KEY",
-    category: "research",
-    speed: 5,
-    quality: 4,
-    cost: 1,
-    free: true,
-  },
-  {
-    id: "llama-3.3-70b",
-    name: "Llama 3.3 70B",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "llama-3.3-70b-versatile",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "free",
-    speed: 5,
-    quality: 3,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "gpt-oss-20b",
-    name: "GPT OSS 20B",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "gpt-oss-20b",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "free",
-    speed: 5,
-    quality: 2,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "deepseek-r1",
-    name: "DeepSeek R1",
-    provider: "deepseek",
-    endpoint: "https://api.deepseek.com/v1/chat/completions",
-    modelId: "deepseek-reasoner",
-    apiKeyEnv: "DEEPSEEK_API_KEY",
-    category: "reasoning",
-    speed: 2,
-    quality: 5,
-    cost: 2,
-    free: false,
-  },
-  {
-    id: "qwen-2.5-72b",
-    name: "Qwen 2.5 72B",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "qwen-qwq-32b",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "reasoning",
-    speed: 4,
-    quality: 4,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "mistral-small",
-    name: "Mistral Small",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "mistral-small-24b-instruct-2501",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "fast",
-    speed: 5,
-    quality: 3,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "gemma-3-27b",
-    name: "Gemma 3 27B",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "gemma2-9b-it",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "fast",
-    speed: 5,
-    quality: 3,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "phi-4-reasoning",
-    name: "Phi-4 Reasoning",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "phi-4-reasoning",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "reasoning",
-    speed: 4,
-    quality: 4,
-    cost: 0,
-    free: true,
-  },
-  {
-    id: "r1-chimera",
-    name: "R1 Chimera",
-    provider: "groq",
-    endpoint: "https://api.groq.com/openai/v1/chat/completions",
-    modelId: "r1-chimera",
-    apiKeyEnv: "GROQ_API_KEY",
-    category: "reasoning",
-    speed: 3,
-    quality: 4,
-    cost: 0,
-    free: true,
-  },
+// ─── Model Catalogue ──────────────────────────────────────────────────────────
+const MODELS = [
+  // OpenAI
+  { id: 'gpt-4o',        name: 'GPT-4o',           provider: 'openai',    category: 'conversation', speed: 4, quality: 5, cost: 4, free: false, context_length: 128000, supports_vision: true,  supports_tools: true,  tag: 'Best' },
+  { id: 'gpt-4o-mini',   name: 'GPT-4o Mini',      provider: 'openai',    category: 'fast',         speed: 5, quality: 4, cost: 2, free: false, context_length: 128000, supports_vision: true,  supports_tools: true },
+  { id: 'gpt-4-turbo',   name: 'GPT-4 Turbo',      provider: 'openai',    category: 'coding',       speed: 3, quality: 5, cost: 4, free: false, context_length: 128000, supports_vision: true,  supports_tools: true },
+  // Anthropic
+  { id: 'claude-3.7-sonnet', name: 'Claude 3.7 Sonnet', provider: 'anthropic', category: 'coding',  speed: 4, quality: 5, cost: 4, free: false, context_length: 200000, supports_vision: true,  supports_tools: true,  tag: 'Top' },
+  { id: 'claude-3.5-haiku',  name: 'Claude 3.5 Haiku',  provider: 'anthropic', category: 'fast',   speed: 5, quality: 3, cost: 1, free: false, context_length: 200000, supports_vision: false, supports_tools: true },
+  { id: 'claude-3-opus',     name: 'Claude 3 Opus',     provider: 'anthropic', category: 'research',speed: 2, quality: 5, cost: 5, free: false, context_length: 200000, supports_vision: true,  supports_tools: true },
+  // Google
+  { id: 'gemini-2.0-flash',  name: 'Gemini 2.0 Flash',  provider: 'google',   category: 'research', speed: 5, quality: 4, cost: 0, free: true,  context_length: 1000000, supports_vision: true,  supports_tools: true,  tag: 'Free' },
+  { id: 'gemini-1.5-pro',    name: 'Gemini 1.5 Pro',    provider: 'google',   category: 'research', speed: 3, quality: 5, cost: 3, free: false, context_length: 1000000, supports_vision: true,  supports_tools: true },
+  // Groq (free, ultra-fast)
+  { id: 'llama-3.3-70b',    name: 'Llama 3.3 70B',     provider: 'groq',     category: 'free',      speed: 5, quality: 4, cost: 0, free: true,  context_length: 128000, supports_vision: false, supports_tools: true,  tag: 'Free' },
+  { id: 'llama-3.1-8b',     name: 'Llama 3.1 8B',      provider: 'groq',     category: 'fast',      speed: 5, quality: 3, cost: 0, free: true,  context_length: 128000, supports_vision: false, supports_tools: false, tag: 'Fast' },
+  { id: 'mistral-small',    name: 'Mistral Small',      provider: 'groq',     category: 'fast',      speed: 5, quality: 3, cost: 0, free: true,  context_length: 32000,  supports_vision: false, supports_tools: false },
+  { id: 'gemma-3-27b',      name: 'Gemma 3 27B',        provider: 'groq',     category: 'fast',      speed: 5, quality: 3, cost: 0, free: true,  context_length: 96000,  supports_vision: false, supports_tools: false },
+  { id: 'qwen-2.5-72b',     name: 'Qwen 2.5 72B',       provider: 'groq',     category: 'reasoning', speed: 4, quality: 4, cost: 0, free: true,  context_length: 128000, supports_vision: false, supports_tools: false },
+  { id: 'phi-4-reasoning',  name: 'Phi-4 Reasoning',    provider: 'groq',     category: 'reasoning', speed: 4, quality: 4, cost: 0, free: true,  context_length: 128000, supports_vision: false, supports_tools: false },
+  { id: 'r1-chimera',       name: 'R1 Chimera',          provider: 'groq',     category: 'reasoning', speed: 3, quality: 4, cost: 0, free: true,  context_length: 128000, supports_vision: false, supports_tools: false },
+  // DeepSeek
+  { id: 'deepseek-r1',     name: 'DeepSeek R1',          provider: 'deepseek', category: 'reasoning', speed: 3, quality: 5, cost: 1, free: false, context_length: 128000, supports_vision: false, supports_tools: false, tag: 'Think' },
+  { id: 'deepseek-v3',     name: 'DeepSeek V3',          provider: 'deepseek', category: 'coding',    speed: 4, quality: 4, cost: 1, free: false, context_length: 128000, supports_vision: false, supports_tools: false },
 ];
 
-const ROUTING_KEYWORDS: Record<string, string[]> = {
-  coding: ["code", "program", "function", "debug", "script", "api", "build", "deploy", "git", "sql", "python", "javascript", "typescript", "react", "component", "algorithm", "compile", "syntax", "error", "bug", "fix", "implement", "develop", "software", "html", "css", "node", "server", "database", "kód", "likho", "banana", "banana hai"],
-  conversation: ["hello", "hi", "hey", "how are", "what do you think", "opinion", "feel", "chat", "talk", "discuss", "namaste", "kaise", "kya hal", "batao", "baat"],
-  fast: ["quick", "short", "simple", "fast", "brief", "summarize", "list", "jaldi", "short mein", "quickly"],
-  research: ["research", "explain", "analyze", "compare", "summary", "detailed", "deep dive", "investigate", "study", "report", "vishleshan", "detail", "samjhao", "khojo"],
-  reasoning: ["reason", "logic", "prove", "math", "calculate", "solve", "puzzle", "riddle", "think step", "tark", "hisab", "ganit"],
+// ─── Groq model ID mapping (internal API id vs display id) ─────────────────
+const GROQ_MODEL_IDS: Record<string, string> = {
+  'llama-3.3-70b':   'llama-3.3-70b-versatile',
+  'llama-3.1-8b':    'llama-3.1-8b-instant',
+  'mistral-small':   'mistral-saba-24b',
+  'gemma-3-27b':     'gemma2-9b-it',
+  'qwen-2.5-72b':    'qwen-qwq-32b',
+  'phi-4-reasoning': 'meta-llama/llama-4-scout-17b-16e-instruct',
+  'r1-chimera':      'deepseek-r1-distill-llama-70b',
 };
 
-function detectCategory(message: string): string {
-  const lower = message.toLowerCase();
+// ─── Auto-routing keywords ────────────────────────────────────────────────────
+const ROUTE_KEYWORDS: Record<string, string[]> = {
+  coding: ['code', 'function', 'class', 'debug', 'error', 'typescript', 'javascript', 'python', 'java', 'bug', 'api', 'sql', 'html', 'css', 'react', 'programming', 'algorithm', 'implement'],
+  reasoning: ['explain', 'analyze', 'reasoning', 'logic', 'math', 'calculate', 'proof', 'solve', 'think', 'step by step', 'problem', 'strategy', 'compare', 'evaluate'],
+  research: ['research', 'latest', 'news', 'search', 'find', 'what is', 'who is', 'history', 'information', 'data', 'facts', 'report', 'study', 'paper', 'science'],
+  fast: ['quick', 'fast', 'brief', 'short', 'simple', 'what', 'when', 'where', 'who', 'how many', 'translate', 'summarize'],
+};
+
+const CATEGORY_TO_MODEL: Record<string, string> = {
+  coding:       'claude-3.7-sonnet',
+  reasoning:    'deepseek-r1',
+  research:     'gemini-2.0-flash',
+  fast:         'llama-3.3-70b',
+  conversation: 'llama-3.3-70b',
+};
+
+function detectCategory(lastMessage: string): string {
+  const text = lastMessage.toLowerCase();
   const scores: Record<string, number> = {};
-
-  for (const [category, keywords] of Object.entries(ROUTING_KEYWORDS)) {
-    scores[category] = 0;
-    for (const keyword of keywords) {
-      if (lower.includes(keyword)) {
-        scores[category] += keyword.length;
-      }
-    }
+  for (const [cat, keywords] of Object.entries(ROUTE_KEYWORDS)) {
+    scores[cat] = keywords.reduce((acc, kw) => acc + (text.includes(kw) ? kw.length : 0), 0);
   }
-
-  let bestCategory = "conversation";
-  let bestScore = 0;
-  for (const [category, score] of Object.entries(scores)) {
-    if (score > bestScore) {
-      bestScore = score;
-      bestCategory = category;
-    }
-  }
-
-  return bestScore > 0 ? bestCategory : "conversation";
+  const best = Object.entries(scores).sort((a, b) => b[1] - a[1])[0];
+  return best[1] > 0 ? best[0] : 'conversation';
 }
 
-function routeToModel(category: string, preferredModel?: string): ModelConfig {
-  if (preferredModel) {
-    const model = MODELS.find((m) => m.id === preferredModel);
-    if (model) return model;
-  }
-
-  const categoryMap: Record<string, string> = {
-    coding: "claude-3.7-sonnet",
-    conversation: "gpt-4o",
-    fast: "gpt-4o-mini",
-    research: "gemini-2.0-flash",
-    reasoning: "deepseek-r1",
-    free: "llama-3.3-70b",
+// ─── API key helpers ──────────────────────────────────────────────────────────
+function getApiKey(provider: string, clientKeys?: Record<string, string>): string | null {
+  const keyMap: Record<string, string> = {
+    openai:    'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    google:    'GOOGLE_API_KEY',
+    groq:      'GROQ_API_KEY',
+    deepseek:  'DEEPSEEK_API_KEY',
+    mistral:   'MISTRAL_API_KEY',
   };
-
-  const targetId = categoryMap[category] || "llama-3.3-70b";
-  return MODELS.find((m) => m.id === targetId) || MODELS[4];
+  const envKey = keyMap[provider];
+  if (!envKey) return null;
+  return clientKeys?.[envKey] || Deno.env.get(envKey) || null;
 }
 
-function getFallbackChain(model: ModelConfig): ModelConfig[] {
-  const available = MODELS.filter((m) => {
-    const key = Deno.env.get(m.apiKeyEnv);
-    return key && key.length > 0;
+// ─── Provider call functions ──────────────────────────────────────────────────
+
+async function callOpenAI(
+  messages: { role: string; content: string }[],
+  modelId: string,
+  apiKey: string
+): Promise<ReadableStream<Uint8Array>> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: modelId, messages, stream: true, max_tokens: 4096 }),
   });
-
-  if (available.length === 0) return [model];
-
-  const chain = [model];
-  const freeModels = available.filter((m) => m.free && m.id !== model.id);
-  const paidModels = available.filter((m) => !m.free && m.id !== model.id);
-
-  chain.push(...freeModels, ...paidModels);
-  return chain;
-}
-
-async function callOpenAICompatible(
-  model: ModelConfig,
-  messages: { role: string; content: string }[]
-): Promise<Response> {
-  const apiKey = Deno.env.get(model.apiKeyEnv);
-  if (!apiKey) throw new Error(`No API key for ${model.name}`);
-
-  return await fetch(model.endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: model.modelId,
-      messages,
-      temperature: 0.7,
-      max_tokens: 4096,
-      stream: true,
-    }),
-  });
+  if (!response.ok) throw new Error(`OpenAI error: ${response.status} ${await response.text()}`);
+  return response.body!;
 }
 
 async function callAnthropic(
-  model: ModelConfig,
-  messages: { role: string; content: string }[]
-): Promise<Response> {
-  const apiKey = Deno.env.get(model.apiKeyEnv);
-  if (!apiKey) throw new Error(`No API key for ${model.name}`);
+  messages: { role: string; content: string }[],
+  modelId: string,
+  apiKey: string
+): Promise<ReadableStream<Uint8Array>> {
+  const systemMessages = messages.filter(m => m.role === 'system');
+  const userMessages = messages.filter(m => m.role !== 'system');
+  const system = systemMessages.map(m => m.content).join('\n') || 'You are a helpful AI assistant.';
 
-  const systemMsg = messages.find((m) => m.role === "system");
-  const chatMsgs = messages.filter((m) => m.role !== "system");
-
-  const response = await fetch(model.endpoint, {
-    method: "POST",
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
     headers: {
-      "x-api-key": apiKey,
-      "Content-Type": "application/json",
-      "anthropic-version": "2023-06-01",
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: model.modelId,
+      model: modelId === 'claude-3.7-sonnet' ? 'claude-sonnet-4-5' :
+             modelId === 'claude-3.5-haiku'  ? 'claude-haiku-4-5-20251001' :
+             modelId === 'claude-3-opus'     ? 'claude-opus-4-5' : modelId,
+      messages: userMessages,
+      system,
       max_tokens: 4096,
-      system: systemMsg?.content || SOLO_PERSONALITY,
-      messages: chatMsgs,
       stream: true,
     }),
   });
+  if (!response.ok) throw new Error(`Anthropic error: ${response.status} ${await response.text()}`);
 
-  if (!response.ok || !response.body) return response;
-
-  const reader = response.body.getReader();
+  // Adapt Anthropic SSE → OpenAI-compatible SSE
+  const reader = response.body!.getReader();
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
 
-  const stream = new ReadableStream({
+  return new ReadableStream({
     async start(controller) {
-      let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-          break;
-        }
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || "";
-
-        for (const line of lines) {
-          if (line.startsWith("data: ")) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const text = decoder.decode(value, { stream: true });
+          for (const line of text.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
             const data = line.slice(6);
-            if (data === "[DONE]") continue;
+            if (data === '[DONE]') { controller.enqueue(encoder.encode('data: [DONE]\n\n')); break; }
             try {
               const parsed = JSON.parse(data);
-              const delta = parsed.delta?.text || parsed.choices?.[0]?.delta?.content;
+              const delta = parsed.delta?.text;
               if (delta) {
-                const openaiChunk = {
-                  choices: [{
-                    delta: { content: delta },
-                    finish_reason: null,
-                  }],
-                };
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(openaiChunk)}\n\n`));
+                const chunk = JSON.stringify({ choices: [{ delta: { content: delta } }] });
+                controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
               }
-            } catch {
-              // skip
-            }
+              if (parsed.type === 'message_stop') {
+                controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+              }
+            } catch { /* skip */ }
           }
         }
+      } finally {
+        controller.close();
       }
     },
   });
+}
 
-  return new Response(stream, {
-    status: 200,
-    headers: { "Content-Type": "text/event-stream" },
+async function callGoogle(
+  messages: { role: string; content: string }[],
+  modelId: string,
+  apiKey: string
+): Promise<ReadableStream<Uint8Array>> {
+  // Convert to Gemini format
+  const contents = messages
+    .filter(m => m.role !== 'system')
+    .map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }));
+
+  const geminiModel = modelId === 'gemini-2.0-flash' ? 'gemini-2.0-flash' : 'gemini-1.5-pro';
+
+  const response = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:streamGenerateContent?alt=sse&key=${apiKey}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 4096 } }),
+    }
+  );
+  if (!response.ok) throw new Error(`Google error: ${response.status} ${await response.text()}`);
+
+  const reader = response.body!.getReader();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  return new ReadableStream({
+    async start(controller) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) { controller.enqueue(encoder.encode('data: [DONE]\n\n')); break; }
+          const text = decoder.decode(value, { stream: true });
+          for (const line of text.split('\n')) {
+            if (!line.startsWith('data: ')) continue;
+            try {
+              const parsed = JSON.parse(line.slice(6));
+              const delta = parsed.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (delta) {
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: delta } }] })}\n\n`));
+              }
+            } catch { /* skip */ }
+          }
+        }
+      } finally {
+        controller.close();
+      }
+    },
   });
 }
 
+async function callGroq(
+  messages: { role: string; content: string }[],
+  modelId: string,
+  apiKey: string
+): Promise<ReadableStream<Uint8Array>> {
+  const groqModelId = GROQ_MODEL_IDS[modelId] || modelId;
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: groqModelId, messages, stream: true, max_tokens: 4096 }),
+  });
+  if (!response.ok) throw new Error(`Groq error: ${response.status} ${await response.text()}`);
+  return response.body!;
+}
+
+async function callDeepSeek(
+  messages: { role: string; content: string }[],
+  modelId: string,
+  apiKey: string
+): Promise<ReadableStream<Uint8Array>> {
+  const dsModel = modelId === 'deepseek-r1' ? 'deepseek-reasoner' : 'deepseek-chat';
+  const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: dsModel, messages, stream: true, max_tokens: 4096 }),
+  });
+  if (!response.ok) throw new Error(`DeepSeek error: ${response.status} ${await response.text()}`);
+  return response.body!;
+}
+
+// ─── Main router ──────────────────────────────────────────────────────────────
 async function callModel(
-  model: ModelConfig,
-  messages: { role: string; content: string }[]
-): Promise<Response> {
-  if (model.provider === "anthropic") {
-    return callAnthropic(model, messages);
+  modelId: string,
+  messages: { role: string; content: string }[],
+  clientKeys?: Record<string, string>
+): Promise<ReadableStream<Uint8Array>> {
+  const modelInfo = MODELS.find(m => m.id === modelId);
+  if (!modelInfo) throw new Error(`Unknown model: ${modelId}`);
+
+  const apiKey = getApiKey(modelInfo.provider, clientKeys);
+  if (!apiKey) throw new Error(`No API key for provider: ${modelInfo.provider}`);
+
+  switch (modelInfo.provider) {
+    case 'openai':    return callOpenAI(messages, modelId, apiKey);
+    case 'anthropic': return callAnthropic(messages, modelId, apiKey);
+    case 'google':    return callGoogle(messages, modelId, apiKey);
+    case 'groq':      return callGroq(messages, modelId, apiKey);
+    case 'deepseek':  return callDeepSeek(messages, modelId, apiKey);
+    default: throw new Error(`Unsupported provider: ${modelInfo.provider}`);
   }
-  return callOpenAICompatible(model, messages);
 }
 
-interface ChatRequest {
-  messages: { role: string; content: string }[];
-  model?: string;
-  autoRoute?: boolean;
+// ─── Fallback chain ────────────────────────────────────────────────────────────
+function buildFallbackChain(primaryId: string, clientKeys?: Record<string, string>): string[] {
+  const chain: string[] = [];
+  if (primaryId) chain.push(primaryId);
+  // Free fallbacks that never need API keys (Groq is free tier)
+  const freeModels = ['llama-3.3-70b', 'gemini-2.0-flash', 'llama-3.1-8b'];
+  for (const m of freeModels) {
+    if (!chain.includes(m)) {
+      const info = MODELS.find(mo => mo.id === m);
+      if (info && getApiKey(info.provider, clientKeys)) chain.push(m);
+    }
+  }
+  return chain;
 }
 
-Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { status: 200, headers: corsHeaders });
-  }
+// ─── HTTP handler ─────────────────────────────────────────────────────────────
+Deno.serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response(null, { headers: CORS });
 
-  if (req.method === "GET") {
-    const modelsList = MODELS.map((m) => ({
-      id: m.id,
-      name: m.name,
-      provider: m.provider,
-      category: m.category,
-      speed: m.speed,
-      quality: m.quality,
-      cost: m.cost,
-      free: m.free,
-    }));
-    return new Response(JSON.stringify({ models: modelsList }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+  // GET: return model catalogue
+  if (req.method === 'GET') {
+    return new Response(JSON.stringify({ models: MODELS }), {
+      headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 
   try {
-    if (req.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Method not allowed" }), {
-        status: 405,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const body: ChatRequest = await req.json();
-    const { messages, model: preferredModel, autoRoute } = body;
+    const body = await req.json();
+    const { messages, model: requestedModel, autoRoute, clientKeys } = body;
 
     if (!messages || !Array.isArray(messages)) {
-      return new Response(JSON.stringify({ error: "Messages array required" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      return new Response(JSON.stringify({ error: 'messages is required' }), { status: 400, headers: { ...CORS, 'Content-Type': 'application/json' } });
+    }
+
+    // Determine model
+    let selectedModelId = requestedModel || null;
+    let category = 'conversation';
+
+    if (!selectedModelId || autoRoute) {
+      const lastMsg = messages[messages.length - 1]?.content || '';
+      category = detectCategory(lastMsg);
+      selectedModelId = CATEGORY_TO_MODEL[category] || 'llama-3.3-70b';
+    }
+
+    const modelInfo = MODELS.find(m => m.id === selectedModelId) || MODELS.find(m => m.id === 'llama-3.3-70b')!;
+    const fallbackChain = buildFallbackChain(selectedModelId, clientKeys);
+
+    let stream: ReadableStream<Uint8Array> | null = null;
+    let usedModelId = selectedModelId;
+    let lastError = '';
+
+    for (const modelId of fallbackChain) {
+      try {
+        stream = await callModel(modelId, messages, clientKeys);
+        usedModelId = modelId;
+        break;
+      } catch (err) {
+        lastError = (err as Error).message;
+        console.error(`Model ${modelId} failed:`, lastError);
+        continue;
+      }
+    }
+
+    if (!stream) {
+      return new Response(JSON.stringify({ error: `All models failed. Last error: ${lastError}` }), {
+        status: 502,
+        headers: { ...CORS, 'Content-Type': 'application/json' },
       });
     }
 
-    const lastUserMsg = messages.filter((m) => m.role === "user").pop();
-    const category = autoRoute !== false && !preferredModel
-      ? detectCategory(lastUserMsg?.content || "")
-      : "conversation";
+    const usedModelInfo = MODELS.find(m => m.id === usedModelId) || modelInfo;
 
-    const primaryModel = routeToModel(category, preferredModel);
-    const fallbackChain = getFallbackChain(primaryModel);
-
-    const chatMessages = [
-      { role: "system", content: SOLO_PERSONALITY },
-      ...messages,
-    ];
-
-    let lastError: Error | null = null;
-
-    for (const model of fallbackChain) {
-      try {
-        const response = await callModel(model, chatMessages);
-
-        if (response.ok && response.body) {
-          const modelInfo = JSON.stringify({ model: model.id, modelName: model.name, category, routed: !preferredModel });
-          const infoChunk = `data: ${JSON.stringify({ choices: [{ delta: { content: "" }, finish_reason: null, model_info: JSON.parse(modelInfo) }] })}\n\n`;
-
-          const originalStream = response.body;
-          const encoder = new TextEncoder();
-          const combinedStream = new ReadableStream({
-            async start(controller) {
-              controller.enqueue(encoder.encode(infoChunk));
-              const reader = originalStream.getReader();
-              try {
-                while (true) {
-                  const { done, value } = await reader.read();
-                  if (done) {
-                    controller.close();
-                    break;
-                  }
-                  controller.enqueue(value);
-                }
-              } catch (err) {
-                controller.error(err);
-              }
-            },
-          });
-
-          return new Response(combinedStream, {
-            status: 200,
-            headers: {
-              ...corsHeaders,
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-              "X-Model-Used": model.id,
-              "X-Model-Name": model.name,
-              "X-Route-Category": category,
-            },
-          });
-        } else {
-          lastError = new Error(`${model.name} returned ${response.status}`);
-        }
-      } catch (err) {
-        lastError = err as Error;
-      }
-    }
-
-    return new Response(
-      JSON.stringify({ error: `All models failed. Last error: ${lastError?.message}` }),
-      {
-        status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      }
-    );
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+    return new Response(stream, {
+      headers: {
+        ...CORS,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'X-Model-Used': usedModelId,
+        'X-Model-Name': usedModelInfo.name,
+        'X-Route-Category': category,
+      },
+    });
+  } catch (err) {
+    console.error('Handler error:', err);
+    return new Response(JSON.stringify({ error: (err as Error).message }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...CORS, 'Content-Type': 'application/json' },
     });
   }
 });
