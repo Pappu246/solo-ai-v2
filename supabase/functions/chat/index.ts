@@ -19,7 +19,7 @@ const json = (req: Request, body: unknown, status = 200) =>
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
 let publishableKey = "";
-try { publishableKey = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "{}").default || ""; } catch {}
+try { publishableKey = JSON.parse(Deno.env.get("SUPABASE_PUBLISHABLE_KEYS") || "{}").default || ""; } catch { publishableKey = ""; }
 publishableKey ||= Deno.env.get("SUPABASE_ANON_KEY") || "";
 const authClient = supabaseUrl && publishableKey
   ? createClient(supabaseUrl, publishableKey, { auth: { persistSession: false } })
@@ -68,9 +68,7 @@ type Model = typeof models[number];
 type Message = { role: "user" | "assistant" | "system"; content: string | Array<Record<string, unknown>> };
 type Image = { base64: string; mime_type: string };
 
-const keyFor: Record<string, string> = {
-  openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY", google: "GOOGLE_API_KEY", groq: "GROQ_API_KEY", deepseek: "DEEPSEEK_API_KEY",
-};
+const keyFor: Record<string, string> = { openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY", google: "GOOGLE_API_KEY", groq: "GROQ_API_KEY", deepseek: "DEEPSEEK_API_KEY" };
 const key = (provider: string) => { const name = keyFor[provider]; return name ? Deno.env.get(name) || "" : ""; };
 const signal = () => AbortSignal.timeout(90_000);
 
@@ -113,14 +111,14 @@ async function anthropic(messages: Message[], model: string, apiKey: string) {
   const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n") || "You are a helpful AI assistant.";
   const body = { model, system, messages: messages.filter(m => m.role !== "system"), max_tokens: 4096, stream: true };
   const bodyStream = await streamFetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" }, body: JSON.stringify(body) }, "Anthropic");
-  return adaptSSE(bodyStream, data => data.type === "content_block_delta" ? data.delta?.text : null);
+  return adaptSSE(bodyStream, data => { const delta = data.delta as { text?: unknown } | undefined; return data.type === "content_block_delta" && typeof delta?.text === "string" ? delta.text : null; });
 }
 
 async function google(messages: Message[], model: string, apiKey: string) {
   const contents = messages.filter(m => m.role !== "system").map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: Array.isArray(m.content) ? m.content : [{ text: m.content }] }));
   const endpoint = model === "gemini-3.1-pro" ? "gemini-3.1-pro-preview" : "gemini-3.7-flash";
   const bodyStream = await streamFetch(`https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 4096 } }) }, "Google");
-  return adaptSSE(bodyStream, data => data.candidates?.[0]?.content?.parts?.[0]?.text || null);
+  return adaptSSE(bodyStream, data => { const candidates = data.candidates as Array<{ content?: { parts?: Array<{ text?: unknown }> } }> | undefined; const text = candidates?.[0]?.content?.parts?.[0]?.text; return typeof text === "string" ? text : null; });
 }
 
 async function groq(messages: Message[], model: string, apiKey: string) {
@@ -132,7 +130,7 @@ async function deepseek(messages: Message[], model: string, apiKey: string) {
   return streamFetch("https://api.deepseek.com/v1/chat/completions", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` }, body: JSON.stringify({ model, messages, stream: true, max_tokens: 4096 }) }, "DeepSeek");
 }
 
-async function adaptSSE(stream: ReadableStream<Uint8Array>, extract: (data: any) => string | null) {
+async function adaptSSE(stream: ReadableStream<Uint8Array>, extract: (data: Record<string, unknown>) => string | null) {
   const reader = stream.getReader(); const decoder = new TextDecoder(); const encoder = new TextEncoder();
   return new ReadableStream<Uint8Array>({ async start(controller) {
     let buffer = "";
@@ -144,7 +142,7 @@ async function adaptSSE(stream: ReadableStream<Uint8Array>, extract: (data: any)
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const raw = line.slice(6).trim(); if (!raw || raw === "[DONE]") continue;
-          try { const data = JSON.parse(raw); const text = extract(data); if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)); } catch {}
+          try { const data = JSON.parse(raw) as Record<string, unknown>; const text = extract(data); if (text) controller.enqueue(encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`)); } catch { continue; }
         }
       }
       controller.enqueue(encoder.encode("data: [DONE]\n\n"));
@@ -194,8 +192,9 @@ Deno.serve(async req => {
     const total = messages.reduce((n, m) => n + String(m.content).length, 0);
     if (total > 120000) return json(req, { error: "Conversation context is too large" }, 413);
 
-    const images: Image[] = Array.isArray(body?.images) ? body.images.slice(0, 4).map((x: any) => {
-      const mime_type = String(x?.mime_type || "image/jpeg"); const base64 = String(x?.base64 || "");
+    const images: Image[] = Array.isArray(body?.images) ? body.images.slice(0, 4).map((x: unknown) => {
+      const item = (x && typeof x === "object" ? x : {}) as { mime_type?: unknown; base64?: unknown };
+      const mime_type = String(item.mime_type || "image/jpeg"); const base64 = String(item.base64 || "");
       if (!/^image\/(png|jpeg|webp|gif)$/.test(mime_type)) throw Object.assign(new Error("Unsupported image type"), { status: 400 });
       if (!base64 || base64.length > 12_000_000) throw Object.assign(new Error("Invalid or oversized image"), { status: 413 });
       return { mime_type, base64 };
