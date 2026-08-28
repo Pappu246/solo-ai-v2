@@ -95,7 +95,7 @@ export function useChat(user: User | null, defaultModel = 'gpt-oss-120b') {
     const userMessage: Message = { id: crypto.randomUUID(), conversation_id: conversation.id, role: 'user', content, attachments, created_at: new Date().toISOString() };
     setMessages(prev => [...prev, userMessage]);
 
-    const storedAttachments = attachments?.map(({ base64: _base64, ...attachment }) => attachment);
+    const storedAttachments = attachments?.map(attachment => { const { base64, ...safeAttachment } = attachment; void base64; return safeAttachment; });
     await supabase.from('messages').insert({ conversation_id: conversation.id, role: 'user', content, user_id: user.id, attachments: storedAttachments || null });
 
     setIsLoading(true); setStreamingContent(''); setStreamingModel(null); setError(null);
