@@ -88,7 +88,6 @@ export interface UserSettings {
   tts_voice: string;
   memory_enabled: boolean;
   default_model: string;
-  api_keys: Record<string, string>;
 }
 
 // ─── Model Color Maps ─────────────────────────────────────────────────────────
@@ -96,22 +95,17 @@ export interface UserSettings {
 export const MODEL_COLORS: Record<string, { bg: string; text: string; border: string; glow: string }> = {
   'gpt-4o':           { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20' },
   'gpt-4o-mini':      { bg: 'bg-emerald-500/10', text: 'text-emerald-300', border: 'border-emerald-500/20', glow: '' },
-  'gpt-4-turbo':      { bg: 'bg-teal-500/15',    text: 'text-teal-400',    border: 'border-teal-500/30',    glow: 'shadow-teal-500/20' },
-  'claude-3.7-sonnet':{ bg: 'bg-orange-500/15',  text: 'text-orange-400',  border: 'border-orange-500/30',  glow: 'shadow-orange-500/20' },
-  'claude-3.5-haiku': { bg: 'bg-amber-500/15',   text: 'text-amber-400',   border: 'border-amber-500/30',   glow: '' },
-  'claude-3-opus':    { bg: 'bg-red-500/15',      text: 'text-red-400',     border: 'border-red-500/30',     glow: 'shadow-red-500/20' },
-  'gemini-2.0-flash': { bg: 'bg-blue-500/15',    text: 'text-blue-400',    border: 'border-blue-500/30',    glow: 'shadow-blue-500/20' },
-  'gemini-1.5-pro':   { bg: 'bg-indigo-500/15',  text: 'text-indigo-400',  border: 'border-indigo-500/30',  glow: 'shadow-indigo-500/20' },
-  'llama-3.3-70b':    { bg: 'bg-amber-500/15',   text: 'text-amber-400',   border: 'border-amber-500/30',   glow: 'shadow-amber-500/20' },
-  'llama-3.1-8b':     { bg: 'bg-yellow-500/10',  text: 'text-yellow-300',  border: 'border-yellow-500/20',  glow: '' },
-  'deepseek-r1':      { bg: 'bg-sky-500/15',     text: 'text-sky-400',     border: 'border-sky-500/30',     glow: 'shadow-sky-500/20' },
-  'deepseek-v3':      { bg: 'bg-sky-500/10',     text: 'text-sky-300',     border: 'border-sky-500/20',     glow: '' },
-  'qwen-2.5-72b':     { bg: 'bg-rose-500/15',    text: 'text-rose-400',    border: 'border-rose-500/30',    glow: '' },
-  'mistral-large':    { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-400', border: 'border-fuchsia-500/30', glow: '' },
-  'mistral-small':    { bg: 'bg-cyan-500/15',    text: 'text-cyan-400',    border: 'border-cyan-500/30',    glow: '' },
-  'phi-4-reasoning':  { bg: 'bg-violet-500/15',  text: 'text-violet-400',  border: 'border-violet-500/30',  glow: '' },
-  'gemma-3-27b':      { bg: 'bg-pink-500/15',    text: 'text-pink-400',    border: 'border-pink-500/30',    glow: '' },
-  'r1-chimera':       { bg: 'bg-fuchsia-500/15', text: 'text-fuchsia-400', border: 'border-fuchsia-500/30', glow: '' },
+  'claude-sonnet-5':  { bg: 'bg-orange-500/15', text: 'text-orange-400', border: 'border-orange-500/30', glow: 'shadow-orange-500/20' },
+  'claude-opus-5':    { bg: 'bg-red-500/15', text: 'text-red-400', border: 'border-red-500/30', glow: 'shadow-red-500/20' },
+  'claude-haiku-4-5-20251001': { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30', glow: '' },
+  'gemini-3.7-flash':  { bg: 'bg-blue-500/15', text: 'text-blue-400', border: 'border-blue-500/30', glow: 'shadow-blue-500/20' },
+  'gemini-3.1-pro':    { bg: 'bg-indigo-500/15', text: 'text-indigo-400', border: 'border-indigo-500/30', glow: 'shadow-indigo-500/20' },
+  'llama-3.3-70b':     { bg: 'bg-amber-500/15', text: 'text-amber-400', border: 'border-amber-500/30', glow: 'shadow-amber-500/20' },
+  'llama-3.1-8b':      { bg: 'bg-yellow-500/10', text: 'text-yellow-300', border: 'border-yellow-500/20', glow: '' },
+  'gpt-oss-20b':       { bg: 'bg-emerald-500/10', text: 'text-emerald-300', border: 'border-emerald-500/20', glow: '' },
+  'gpt-oss-120b':      { bg: 'bg-emerald-500/15', text: 'text-emerald-400', border: 'border-emerald-500/30', glow: 'shadow-emerald-500/20' },
+  'deepseek-v4-pro':   { bg: 'bg-sky-500/15', text: 'text-sky-400', border: 'border-sky-500/30', glow: 'shadow-sky-500/20' },
+  'deepseek-v4-flash': { bg: 'bg-cyan-500/15', text: 'text-cyan-400', border: 'border-cyan-500/30', glow: 'shadow-cyan-500/20' },
 };
 
 export const DEFAULT_MODEL_COLORS = { bg: 'bg-zinc-500/15', text: 'text-zinc-400', border: 'border-zinc-500/30', glow: '' };
@@ -119,7 +113,7 @@ export const DEFAULT_MODEL_COLORS = { bg: 'bg-zinc-500/15', text: 'text-zinc-400
 export const MODEL_CATEGORIES: Record<ModelCategory, { label: string; color: string }> = {
   coding:       { label: 'Coding',    color: 'emerald' },
   conversation: { label: 'Chat',      color: 'blue' },
-  fast:         { label: 'Quick',     color: 'amber' },
+  fast:          { label: 'Quick',     color: 'amber' },
   research:     { label: 'Research',  color: 'cyan' },
   reasoning:    { label: 'Reasoning', color: 'violet' },
   free:         { label: 'Free',      color: 'green' },
@@ -137,6 +131,5 @@ export const DEFAULT_SETTINGS: UserSettings = {
   tts_enabled: false,
   tts_voice: 'alloy',
   memory_enabled: true,
-  default_model: 'llama-3.3-70b',
-  api_keys: {},
+  default_model: 'gpt-oss-120b',
 };
