@@ -1,95 +1,112 @@
 # ⚡ SOLO AI
 
-A modern multi-model AI chat application built with **React, TypeScript, Vite, Tailwind CSS, and Supabase**.
+A production-minded multi-model AI chat application built with **React, TypeScript, Vite, Tailwind CSS, and Supabase**.
 
-SOLO AI provides a clean chat experience with authentication, persistent conversations, model selection, automatic model routing, streaming responses, attachments, and voice/text utilities.
+SOLO AI provides authentication, persistent conversations, multi-provider model selection, automatic routing, streaming responses, attachments, vision-capable models, and voice/text utilities.
 
 ## ✨ Features
 
 - 🔐 Email authentication with Supabase
 - 💬 Persistent conversations and message history
-- 🧠 Multi-model AI support across multiple providers
-- ⚡ Automatic routing by task category
+- 🧠 Multi-provider AI model gateway
+- ⚡ Automatic task-based model routing
+- 🎯 Explicit model selection always wins over auto-routing
 - 🌊 Streaming AI responses
-- 🖼️ Image/vision attachment support where supported
-- 📎 File attachments and extracted text context
+- 🖼️ Vision/image input for supported models
+- 📎 File attachments and extracted-text context
 - 🔄 Regenerate responses
 - 📌 Pin, rename, search, and delete conversations
-- ⚙️ User settings and model preferences
-- 📱 Responsive dark UI
+- ⚙️ Theme, accent, typography, and chat preferences
+- 📱 Responsive dark-first UI
 - 🔊 Text-to-speech utility
+- 🛡️ Server-side provider secrets, request limits, validation, timeouts, and transient-error fallbacks
+- 🗃️ Supabase RLS-backed user ownership
 
 ## 🛠️ Tech Stack
 
 - React 18 + TypeScript
-- Vite
-- Tailwind CSS
-- Supabase Auth + Database + Edge Functions
+- Vite + Tailwind CSS
+- Supabase Auth + Postgres + Edge Functions
 - Lucide React
 
 ## 🏗️ Architecture
 
 ```text
 src/
-├── components/     # Reusable UI components
+├── components/     # Reusable UI
 ├── hooks/          # Authentication, chat, and settings logic
-├── lib/            # Supabase, file, settings, and TTS utilities
-├── App.tsx         # Application shell and UI composition
-├── main.tsx        # React entry point
-└── types.ts        # Shared TypeScript types
+├── lib/            # Supabase, files, settings, and TTS utilities
+├── App.tsx         # Application shell
+└── types.ts        # Shared domain types
 
 supabase/
-├── functions/chat/ # Server-side AI gateway and model routing
-└── migrations/     # Database schema migrations
+├── functions/chat/ # Authenticated AI gateway + routing + streaming
+├── migrations/     # Schema + RLS hardening
+└── config.toml     # Edge Function deployment configuration
 ```
 
 ## 🚀 Getting Started
 
-### 1. Clone the repository
+### 1. Clone
 
 ```bash
 git clone https://github.com/Pappu246/solo-ai-v2.git
 cd solo-ai-v2
 ```
 
-### 2. Install dependencies
+### 2. Install
 
 ```bash
 npm install
 ```
 
-### 3. Configure environment variables
+### 3. Configure the browser client
 
-Create a `.env` file using `.env.example` as a template and provide your Supabase project URL and anonymous key.
+Create `.env` from `.env.example` and set:
 
-> Never commit private provider API keys or other secrets to Git.
+```env
+VITE_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
 
-### 4. Start development server
+For older Supabase projects, the legacy `VITE_SUPABASE_ANON_KEY` remains supported as a temporary fallback.
+
+### 4. Configure provider secrets
+
+Put provider credentials in **Supabase Edge Function secrets**, never in the browser or Git repository.
+
+```text
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GOOGLE_API_KEY
+GROQ_API_KEY
+DEEPSEEK_API_KEY
+APP_ORIGIN
+```
+
+### 5. Run locally
 
 ```bash
 npm run dev
 ```
 
-### 5. Validate the project
+### 6. Validate
 
 ```bash
-npm run lint
-npm run typecheck
-npm run build
+npm run check
 ```
 
-## 🔑 Environment Variables
+`check` runs TypeScript validation, ESLint, and the production Vite build.
 
-```env
-VITE_SUPABASE_URL=your_supabase_project_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
+## 🔒 Security
 
-Provider API keys should remain server-side in Supabase Edge Function secrets rather than being exposed in the browser.
+Provider API keys are server-side only. The chat Edge Function authenticates the caller, validates request size and message roles, applies a per-user request guard, enforces vision capability, uses provider timeouts, and only falls back on transient provider failures.
+
+See [`SECURITY.md`](./SECURITY.md) before deploying publicly.
 
 ## 📌 Project Status
 
-SOLO AI is an actively developed portfolio project focused on modern AI application architecture, responsive UX, multi-provider model routing, and Supabase-backed persistence.
+SOLO AI is a portfolio-grade learning project focused on modern AI application architecture, responsive UX, multi-provider routing, streaming, vision input, and Supabase-backed persistence.
 
 ## 👨‍💻 Author
 
