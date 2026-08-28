@@ -1,25 +1,28 @@
-# Security Notes
+# Security & production checklist
 
-## Provider API keys
+## Secrets
 
-Keep all provider API keys in Supabase Edge Function secrets. Do not put provider keys in Vite environment variables or browser local storage.
+AI provider credentials must live in Supabase Edge Function secrets, never in Vite variables, localStorage, or source control. Supabase recommends publishable keys for browser code and secret keys only for backend components.
 
-Recommended secrets:
-
+Recommended Edge Function secrets:
 - `OPENAI_API_KEY`
 - `ANTHROPIC_API_KEY`
 - `GOOGLE_API_KEY`
 - `GROQ_API_KEY`
 - `DEEPSEEK_API_KEY`
+- `APP_ORIGIN`
 
-## Browser configuration
+## Browser keys
 
-Only the Supabase project URL and public anonymous key belong in the Vite client configuration.
+Only `VITE_SUPABASE_URL` and the Supabase publishable key belong in the browser. A legacy `VITE_SUPABASE_ANON_KEY` is supported temporarily for older projects.
 
 ## Production checklist
 
-- Keep the repository free of `.env` files and provider keys.
-- Set `APP_ORIGIN` to the exact production frontend origin.
-- Keep Supabase RLS enabled for every user-owned table.
-- Rotate any provider key immediately if it is ever exposed.
-- Test authentication and RLS with both authenticated and unauthenticated requests before making the deployment public.
+- Keep `.env`, `.env.local`, and provider credentials out of Git.
+- Keep Supabase RLS enabled on every user-owned table.
+- Configure `APP_ORIGIN` to the exact production frontend origin.
+- Enable email verification/password policies appropriate for production.
+- Rotate any provider credential immediately if exposed.
+- Deploy the chat Edge Function after changing its code or secrets.
+- Test sign-in, chat streaming, attachments, RLS isolation, and error/fallback behavior before making the repository public.
+- Keep dependency versions reviewed and update them regularly.
