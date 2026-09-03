@@ -1,250 +1,184 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { Menu, Zap, RefreshCw, ChevronDown } from 'lucide-react';
+import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
+import type { Conversation } from './types';
 import { useAuth } from './hooks/useAuth';
 import { useChat } from './hooks/useChat';
 import { useSettings } from './hooks/useSettings';
-import { AuthScreen } from './components/AuthScreen';
-import { Sidebar } from './components/Sidebar';
-import { ChatMessage, StreamingMessage, TypingIndicator } from './components/ChatMessage';
-import { ChatInput } from './components/ChatInput';
-import { WelcomeScreen } from './components/WelcomeScreen';
-import { ModelSelector } from './components/ModelSelector';
-import { SettingsModal } from './components/SettingsModal';
+import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
+import { isSupabaseConfigured } from './lib/supabase';
+import { AuthScreen } from './components/auth/AuthScreen';
+import { SetupScreen } from './components/auth/SetupScreen';
+import { Sidebar } from './components/layout/Sidebar';
+import { Topbar } from './components/layout/Topbar';
+import { MessageList } from './components/chat/MessageList';
+import { EmptyState } from './components/chat/EmptyState';
+import { Composer, type ComposerHandle } from './components/chat/Composer';
+import { SettingsPanel } from './components/settings/SettingsPanel';
+import { ConfirmDialog, Logo, ToastProvider, useToast } from './components/ui';
+
+const SIDEBAR_KEY = 'solo-ai-sidebar-collapsed';
 
 export default function App() {
+  if (!isSupabaseConfigured) return <SetupScreen />;
+  return (
+    <ToastProvider>
+      <Shell />
+    </ToastProvider>
+  );
+}
+
+function Shell() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth();
-  const { settings, updateSettings } = useSettings();
-  const chat = useChat(user, settings.default_model);
+  const { settings, updateSettings, resetSettings } = useSettings();
+  const chat = useChat(user, { settings });
+  const { toast } = useToast();
 
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [authError, setAuthError] = useState<string | null>(null);
-  const [authLoading2, setAuthLoading2] = useState(false);
-  const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null);
+  const composerRef = useRef<ComposerHandle>(null);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const messagesContainerRef = useRef<HTMLDivElement>(null);
-
-  // Load data on mount
-  useEffect(() => {
-    if (user) {
-      chat.loadConversations();
-      chat.loadModels();
-    }
-  }, [user, chat]);
-
-  // Auto-scroll
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chat.messages, chat.streamingContent]);
-
-  // Show scroll-to-bottom button
-  const handleScroll = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const distFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
-    setShowScrollBtn(distFromBottom > 200);
+  const toggleSidebar = useCallback((collapsed: boolean) => {
+    setSidebarCollapsed(collapsed);
+    localStorage.setItem(SIDEBAR_KEY, collapsed ? '1' : '0');
   }, []);
 
-  const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  // Surface non-chat errors (e.g. a failed rename) as toasts; chat errors render inline.
+  const lastToastedError = useRef<unknown>(null);
+  useEffect(() => {
+    const err = chat.error;
+    if (!err || err === lastToastedError.current) return;
+    if (chat.messages.length === 0 && !chat.activeConversation) {
+      lastToastedError.current = err;
+      toast({ title: err.title, description: err.message, tone: 'error' });
+      chat.clearError();
+    }
+  }, [chat, toast]);
 
-  const handleSignIn = async (email: string, password: string) => {
-    setAuthError(null);
-    setAuthLoading2(true);
-    try { await signIn(email, password); }
-    catch (e) { setAuthError((e as Error).message); }
-    finally { setAuthLoading2(false); }
-  };
+  const shortcuts = useMemo(() => [
+    { key: 'o', mod: true, shift: true, handler: () => { chat.startNewChat(); composerRef.current?.focus(); } },
+    { key: 'k', mod: true, handler: () => { if (sidebarCollapsed) toggleSidebar(false); window.dispatchEvent(new Event('solo:focus-search')); } },
+    { key: 'b', mod: true, handler: () => toggleSidebar(!sidebarCollapsed) },
+    { key: ',', mod: true, handler: () => setSettingsOpen(true) },
+    { key: 'Escape', handler: () => { if (chat.isGenerating) chat.stopGeneration(); }, allowInInputs: true },
+  ], [chat, sidebarCollapsed, toggleSidebar]);
+  useKeyboardShortcuts(shortcuts);
 
-  const handleSignUp = async (email: string, password: string) => {
-    setAuthError(null);
-    setAuthLoading2(true);
-    try { await signUp(email, password); }
-    catch (e) { setAuthError((e as Error).message); }
-    finally { setAuthLoading2(false); }
-  };
+  const handleSignOut = useCallback(async () => {
+    try { setSettingsOpen(false); await signOut(); }
+    catch (e) { toast({ title: 'Could not sign out', description: (e as Error).message, tone: 'error' }); }
+  }, [signOut, toast]);
 
-  const handleNewChat = () => { chat.createConversation(); setSidebarOpen(false); };
-  const handleSuggestion = (text: string) => chat.sendMessage(text);
+  const confirmDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    const title = pendingDelete.title;
+    setPendingDelete(null);
+    await chat.deleteConversation(pendingDelete.id);
+    toast({ title: 'Chat deleted', description: title, tone: 'success' });
+  }, [pendingDelete, chat, toast]);
 
-  // ── Auth loading ──────────────────────────────────────────────────────────
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-xl shadow-amber-500/30 animate-pulse">
-            <Zap className="w-6 h-6 text-black" fill="black" />
-          </div>
-          <div className="flex gap-1.5">
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
-          </div>
-        </div>
+      <div className="h-screen bg-bg flex items-center justify-center" aria-busy="true" aria-label="Loading Solo AI">
+        <Logo size={40} className="animate-pulse" />
       </div>
     );
   }
 
-  // ── Not authenticated ─────────────────────────────────────────────────────
-  if (!user) {
-    return <AuthScreen onSignIn={handleSignIn} onSignUp={handleSignUp} error={authError} loading={authLoading2} />;
-  }
+  if (!user) return <AuthScreen onSignIn={signIn} onSignUp={signUp} />;
 
-  const isStreaming = chat.isLoading && chat.streamingContent;
-  const isWaiting = chat.isLoading && !chat.streamingContent;
+  const hasMessages = chat.messages.length > 0 || chat.isGenerating || chat.messagesStatus === 'loading';
+  const activeModelName = chat.selectedModel
+    ? chat.availableModels.find(m => m.id === chat.selectedModel)?.name ?? chat.selectedModel
+    : null;
 
-  // ── Main app ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen overflow-hidden bg-[#080808]">
-      {/* Sidebar */}
+    <div className="flex h-screen overflow-hidden bg-bg text-fg">
       <Sidebar
         conversations={chat.conversations}
-        filteredConversations={chat.filteredConversations}
-        activeId={chat.activeConversation?.id || null}
-        searchQuery={chat.searchQuery}
-        onSearchChange={chat.setSearchQuery}
+        status={chat.conversationsStatus}
+        activeId={chat.activeConversation?.id ?? null}
         onSelect={chat.selectConversation}
-        onNew={handleNewChat}
-        onDelete={chat.deleteConversation}
+        onNewChat={() => { chat.startNewChat(); composerRef.current?.focus(); }}
         onRename={chat.renameConversation}
         onPin={chat.pinConversation}
-        isOpen={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
-        onOpenSettings={() => { setSettingsOpen(true); setSidebarOpen(false); }}
+        onArchive={(id, archived) => { chat.archiveConversation(id, archived); toast({ title: archived ? 'Chat archived' : 'Chat restored', tone: 'success' }); }}
+        onDeleteRequest={setPendingDelete}
+        onOpenSettings={() => setSettingsOpen(true)}
+        onRetryLoad={chat.loadConversations}
+        mobileOpen={mobileSidebarOpen}
+        onCloseMobile={() => setMobileSidebarOpen(false)}
+        collapsed={sidebarCollapsed}
+        onCollapse={() => toggleSidebar(true)}
         userEmail={user.email}
       />
 
-      {/* Main */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
-        {/* Top bar */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-sm flex-shrink-0">
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200 md:hidden"
-            >
-              <Menu className="w-5 h-5" />
-            </button>
-            <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="hidden md:flex p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200"
-            >
-              <Menu className="w-4 h-4" />
-            </button>
-
-            {chat.activeConversation ? (
-              <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-200 truncate max-w-[200px] md:max-w-[360px]">
-                  {chat.activeConversation.title}
-                </h2>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
-                  <Zap className="w-3.5 h-3.5 text-black" fill="black" />
-                </div>
-                <span className="text-sm font-black text-amber-400 tracking-widest">SOLO AI</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center gap-2">
-            {/* Regenerate */}
-            {chat.messages.length > 0 && !chat.isLoading && (
-              <button
-                onClick={chat.regenerateLastMessage}
-                className="p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200"
-                title="Regenerate last response"
-              >
-                <RefreshCw className="w-4 h-4" />
-              </button>
-            )}
-
-            {/* Model selector */}
-            <ModelSelector
-              models={chat.availableModels}
-              selectedModel={chat.selectedModel}
-              autoRoute={chat.autoRoute}
-              onSelectModel={chat.setSelectedModel}
-              onToggleAutoRoute={() => chat.setAutoRoute(!chat.autoRoute)}
-            />
-          </div>
-        </header>
-
-        {/* Messages */}
-        <div
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-          className="flex-1 overflow-y-auto relative"
-        >
-          {chat.messages.length === 0 && !chat.isLoading ? (
-            <WelcomeScreen onSuggestion={handleSuggestion} userName={user.email} />
-          ) : (
-            <div className="max-w-3xl mx-auto px-4 py-6 space-y-6">
-              {chat.messages.map(msg => (
-                <ChatMessage
-                  key={msg.id}
-                  message={msg}
-                  onRegenerate={msg.role === 'assistant' ? chat.regenerateLastMessage : undefined}
-                  showModelBadge={settings.show_model_badges}
-                />
-              ))}
-
-              {isWaiting && <TypingIndicator model={chat.streamingModel} />}
-              {isStreaming && (
-                <StreamingMessage content={chat.streamingContent} model={chat.streamingModel} />
-              )}
-
-              {chat.error && (
-                <div className="flex items-start gap-3 p-4 rounded-xl bg-red-500/10 border border-red-500/20">
-                  <div className="flex-1">
-                    <p className="text-red-400 text-sm font-medium">Error</p>
-                    <p className="text-red-300/80 text-sm mt-1">{chat.error}</p>
-                  </div>
-                  <button
-                    onClick={() => chat.sendMessage(chat.messages[chat.messages.length - 1]?.content || '')}
-                    className="text-xs text-red-400 hover:text-red-300 underline flex-shrink-0"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
-
-              <div ref={messagesEndRef} />
-            </div>
-          )}
-
-          {/* Scroll to bottom button */}
-          {showScrollBtn && (
-            <button
-              onClick={scrollToBottom}
-              className="fixed bottom-24 right-6 w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center shadow-xl transition-all duration-200 animate-fade-up z-20"
-            >
-              <ChevronDown className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-
-        {/* Input */}
-        <ChatInput
-          onSend={chat.sendMessage}
-          isLoading={chat.isLoading}
-          onStop={chat.stopStreaming}
-          autoRoute={chat.autoRoute}
+      <div className="flex-1 flex flex-col min-w-0 h-full">
+        <Topbar
+          title={chat.activeConversation?.title ?? null}
+          models={chat.availableModels}
           selectedModel={chat.selectedModel}
+          onSelectModel={chat.setSelectedModel}
+          sidebarCollapsed={sidebarCollapsed}
+          onOpenSidebar={() => toggleSidebar(false)}
+          onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+          disabled={chat.isGenerating}
+        />
+
+        {hasMessages ? (
+          <MessageList
+            messages={chat.messages}
+            loading={chat.messagesStatus === 'loading'}
+            isGenerating={chat.isGenerating}
+            streamingContent={chat.streamingContent}
+            streamingModel={chat.streamingModel}
+            error={chat.error}
+            canRetry={chat.canRetry}
+            showModelBadge={settings.show_model_badges}
+            ttsEnabled={settings.tts_enabled}
+            ttsRate={settings.tts_rate}
+            onRegenerate={chat.regenerate}
+            onEdit={chat.editMessage}
+            onRetry={chat.retry}
+            onDismissError={chat.clearError}
+          />
+        ) : (
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <EmptyState onSuggestion={text => chat.sendMessage(text)} userName={user.email} />
+          </div>
+        )}
+
+        <Composer
+          ref={composerRef}
+          onSend={chat.sendMessage}
+          onStop={chat.stopGeneration}
+          isGenerating={chat.isGenerating}
+          sendOnEnter={settings.send_on_enter}
+          hint={activeModelName ? `Using ${activeModelName}` : 'Auto picks the best model for each message'}
+          autoFocus
         />
       </div>
 
-      {/* Settings modal */}
-      {settingsOpen && (
-        <SettingsModal
-          settings={settings}
-          onUpdate={updateSettings}
-          onClose={() => setSettingsOpen(false)}
-          onSignOut={signOut}
-          userEmail={user.email}
-        />
-      )}
+      <SettingsPanel
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        onUpdate={updateSettings}
+        onReset={() => { resetSettings(); toast({ title: 'Settings reset', tone: 'success' }); }}
+        models={chat.availableModels}
+        userEmail={user.email}
+        onSignOut={handleSignOut}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        title="Delete this chat?"
+        description={pendingDelete ? `“${pendingDelete.title}” and all of its messages will be permanently deleted.` : undefined}
+        confirmLabel="Delete"
+        destructive
+        onConfirm={confirmDelete}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

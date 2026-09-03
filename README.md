@@ -1,26 +1,23 @@
 # SOLO AI
 
-A multi-model AI chat app built with React, TypeScript, Vite, Tailwind CSS and Supabase.
+A premium AI workspace built with React, TypeScript, Vite, Tailwind CSS and Supabase.
 
-SOLO AI brings different AI providers into one chat interface with saved conversations, streaming replies, image input and a responsive UI.
+SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release is **Phase 1 — Foundation** (app shell, chat engine, auth, database, streaming, history, settings). Projects, files, memory, tools and agents arrive in later phases.
 
 ## Features
 
-- Email authentication
-- Saved chat history
-- Multiple AI providers and models
-- Manual model selection and automatic routing
-- Streaming responses
-- Image input for supported models
-- File attachments
-- Regenerate responses
-- Search, rename, pin and delete chats
-- Theme and chat settings
-- Responsive interface
-- Text-to-speech
-- Supabase Row Level Security
-- Server-side API keys
-- Request validation and rate limiting
+- Email authentication with clear sign-up / confirmation feedback
+- Saved chat history: search, rename, pin, archive, delete (with confirmation)
+- Multiple AI providers and models — **Auto** routing by default, manual override per chat
+- Streaming responses; **Stop** keeps the partial reply
+- Regenerate, **edit & resend**, retry — without duplicating messages
+- GitHub-flavoured Markdown, tables, and syntax-highlighted code blocks with copy
+- Image and file attachments (text is extracted for TXT/CSV; images go to vision models)
+- Light / dark / system theme, accent colour, text size — all token-based
+- Keyboard shortcuts: `⌘/Ctrl+K` search, `⌘/Ctrl+Shift+O` new chat, `⌘/Ctrl+B` sidebar, `⌘/Ctrl+,` settings, `Esc` stop
+- Read-aloud (browser TTS) and voice input (browser STT) where supported
+- Humane error states with expandable technical details
+- Supabase Row Level Security, server-side API keys, request validation and rate limiting
 
 ## Tech Stack
 
@@ -36,8 +33,17 @@ SOLO AI brings different AI providers into one chat interface with saved convers
 ```text
 src/
 ├── components/
-├── hooks/
+│   ├── auth/       AuthScreen, SetupScreen
+│   ├── chat/       Composer, MessageList, Message, Markdown, CodeBlock, ModelSelector…
+│   ├── layout/     Sidebar, Topbar
+│   ├── settings/   SettingsPanel
+│   └── ui/         Button, IconButton, Dialog, ConfirmDialog, Toast, Toggle, Kbd, Logo
+├── hooks/          useAuth, useChat, useSettings, useKeyboardShortcuts, useSpeechInput
 ├── lib/
+│   ├── chat/       api.ts (persistence), stream.ts (SSE client)
+│   ├── errors.ts   friendly error mapping
+│   └── settings.ts schema normalisation + theme application
+├── test/           test setup and Supabase mock
 ├── App.tsx
 └── types.ts
 
@@ -96,7 +102,11 @@ npm run dev
 npm run check
 ```
 
-This runs TypeScript checking, ESLint and the production build.
+This runs TypeScript checking, ESLint, the Vitest suite and the production build. Use `npm test` for tests alone.
+
+### 7. Apply database migrations
+
+Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). The latest, `20260903000100_add_archived_to_conversations.sql`, adds the `archived` column used by the sidebar.
 
 ## Security
 
