@@ -25,13 +25,15 @@ export default function App() {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
 
-  // Load data on mount
+  // Load data on mount (only when user changes — NOT on every `chat` object recreation,
+  // which would re-trigger this effect on every render and cause a request storm)
   useEffect(() => {
     if (user) {
       chat.loadConversations();
       chat.loadModels();
     }
-  }, [user, chat]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
 
   // Auto-scroll
   useEffect(() => {
@@ -70,15 +72,15 @@ export default function App() {
   // ── Auth loading ──────────────────────────────────────────────────────────
   if (authLoading) {
     return (
-      <div className="min-h-screen bg-[#080808] flex items-center justify-center">
+      <div className="min-h-screen bg-zinc-50 dark:bg-[#080808] flex items-center justify-center">
         <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center shadow-xl shadow-amber-500/30 animate-pulse">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-[var(--accent-light)] to-[var(--accent-dark)] flex items-center justify-center shadow-xl shadow-[var(--accent)] animate-pulse">
             <Zap className="w-6 h-6 text-black" fill="black" />
           </div>
           <div className="flex gap-1.5">
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
-            <span className="bounce-dot w-2 h-2 rounded-full bg-amber-400" />
+            <span className="bounce-dot w-2 h-2 rounded-full bg-[var(--accent-light)]" />
+            <span className="bounce-dot w-2 h-2 rounded-full bg-[var(--accent-light)]" />
+            <span className="bounce-dot w-2 h-2 rounded-full bg-[var(--accent-light)]" />
           </div>
         </div>
       </div>
@@ -95,7 +97,7 @@ export default function App() {
 
   // ── Main app ──────────────────────────────────────────────────────────────
   return (
-    <div className="flex h-screen overflow-hidden bg-[#080808]">
+    <div className="flex h-screen overflow-hidden bg-zinc-50 dark:bg-[#080808]">
       {/* Sidebar */}
       <Sidebar
         conversations={chat.conversations}
@@ -117,33 +119,33 @@ export default function App() {
       {/* Main */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top bar */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-zinc-800/60 bg-zinc-950/80 backdrop-blur-sm flex-shrink-0">
+        <header className="relative z-30 flex items-center justify-between px-4 py-3 border-b border-zinc-200/60 dark:border-zinc-800/60 bg-zinc-50/80 dark:bg-zinc-950/80 backdrop-blur-sm flex-shrink-0">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200 md:hidden"
+              className="p-2 rounded-xl text-zinc-500 hover:text-zinc-800 hover:dark:text-zinc-200 hover:bg-zinc-200/60 hover:dark:bg-zinc-800/60 transition-all duration-200 md:hidden"
             >
               <Menu className="w-5 h-5" />
             </button>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="hidden md:flex p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200"
+              className="hidden md:flex p-2 rounded-xl text-zinc-500 hover:text-zinc-800 hover:dark:text-zinc-200 hover:bg-zinc-200/60 hover:dark:bg-zinc-800/60 transition-all duration-200"
             >
               <Menu className="w-4 h-4" />
             </button>
 
             {chat.activeConversation ? (
               <div className="flex items-center gap-2 min-w-0">
-                <h2 className="text-sm font-semibold text-zinc-200 truncate max-w-[200px] md:max-w-[360px]">
+                <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 truncate max-w-[200px] md:max-w-[360px]">
                   {chat.activeConversation.title}
                 </h2>
               </div>
             ) : (
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-amber-400 to-amber-600 flex items-center justify-center">
+                <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-[var(--accent-light)] to-[var(--accent-dark)] flex items-center justify-center">
                   <Zap className="w-3.5 h-3.5 text-black" fill="black" />
                 </div>
-                <span className="text-sm font-black text-amber-400 tracking-widest">SOLO AI</span>
+                <span className="text-sm font-black text-[var(--accent)] tracking-widest">SOLO AI</span>
               </div>
             )}
           </div>
@@ -153,7 +155,7 @@ export default function App() {
             {chat.messages.length > 0 && !chat.isLoading && (
               <button
                 onClick={chat.regenerateLastMessage}
-                className="p-2 rounded-xl text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800/60 transition-all duration-200"
+                className="p-2 rounded-xl text-zinc-500 hover:text-zinc-800 hover:dark:text-zinc-200 hover:bg-zinc-200/60 hover:dark:bg-zinc-800/60 transition-all duration-200"
                 title="Regenerate last response"
               >
                 <RefreshCw className="w-4 h-4" />
@@ -186,6 +188,7 @@ export default function App() {
                   key={msg.id}
                   message={msg}
                   onRegenerate={msg.role === 'assistant' ? chat.regenerateLastMessage : undefined}
+                  onReact={chat.reactToMessage}
                   showModelBadge={settings.show_model_badges}
                 />
               ))}
@@ -218,7 +221,7 @@ export default function App() {
           {showScrollBtn && (
             <button
               onClick={scrollToBottom}
-              className="fixed bottom-24 right-6 w-9 h-9 rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-white hover:bg-zinc-700 flex items-center justify-center shadow-xl transition-all duration-200 animate-fade-up z-20"
+              className="fixed bottom-24 right-6 w-9 h-9 rounded-full bg-zinc-200 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-600 dark:text-zinc-400 hover:text-white hover:bg-zinc-300 hover:dark:bg-zinc-700 flex items-center justify-center shadow-xl transition-all duration-200 animate-fade-up z-20"
             >
               <ChevronDown className="w-4 h-4" />
             </button>
