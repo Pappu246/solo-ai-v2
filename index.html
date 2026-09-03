@@ -3,13 +3,22 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#080808" />
-    <meta name="description" content="SOLO AI — a modern multi-model AI chat assistant." />
-    <meta property="og:title" content="SOLO AI — Multi-Model AI Assistant" />
-    <meta property="og:description" content="Chat with multiple AI models in one powerful workspace." />
+    <meta name="theme-color" content="#0c0c0d" />
+    <meta name="description" content="Solo AI — a premium AI workspace: chat with the best model for every task." />
+    <meta property="og:title" content="Solo AI" />
+    <meta property="og:description" content="A premium AI workspace: chat with the best model for every task." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary" />
-    <title>SOLO AI — Multi-Model AI Assistant</title>
+    <title>Solo AI</title>
+    <script>
+      // Apply the saved theme before first paint to avoid a flash.
+      try {
+        var s = JSON.parse(localStorage.getItem('solo-ai-settings') || '{}');
+        var t = s.theme === 'light' || s.theme === 'dark' ? s.theme : (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+        if (t === 'dark') document.documentElement.classList.add('dark');
+        if (s.accent) document.documentElement.setAttribute('data-accent', s.accent);
+      } catch (e) {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

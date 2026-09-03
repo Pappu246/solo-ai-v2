@@ -68,6 +68,14 @@ type Model = typeof models[number];
 type Message = { role: "user" | "assistant" | "system"; content: string | Array<Record<string, unknown>> };
 type Image = { base64: string; mime_type: string };
 
+// Server-controlled identity prompt. Clients cannot send system messages (rejected below).
+const SYSTEM_PROMPT = [
+  "You are Solo AI, a helpful, precise assistant inside the Solo AI workspace.",
+  "Answer directly and concisely. Use Markdown: headings only for long answers, fenced code blocks with a language tag for code, and tables where they aid comparison.",
+  "If you are unsure or lack information, say so plainly instead of guessing. Never invent citations, URLs, or file contents.",
+  "Reply in the language the user writes in.",
+].join(" ");
+
 const keyFor: Record<string, string> = { openai: "OPENAI_API_KEY", anthropic: "ANTHROPIC_API_KEY", google: "GOOGLE_API_KEY", groq: "GROQ_API_KEY", deepseek: "DEEPSEEK_API_KEY" };
 const key = (provider: string) => { const name = keyFor[provider]; return name ? Deno.env.get(name) || "" : ""; };
 const signal = () => AbortSignal.timeout(90_000);
@@ -115,9 +123,10 @@ async function anthropic(messages: Message[], model: string, apiKey: string) {
 }
 
 async function google(messages: Message[], model: string, apiKey: string) {
+  const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n");
   const contents = messages.filter(m => m.role !== "system").map(m => ({ role: m.role === "assistant" ? "model" : "user", parts: Array.isArray(m.content) ? m.content : [{ text: m.content }] }));
   const endpoint = model === "gemini-3.1-pro" ? "gemini-3.1-pro-preview" : "gemini-3.7-flash";
-  const bodyStream = await streamFetch(`https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents, generationConfig: { maxOutputTokens: 4096 } }) }, "Google");
+  const bodyStream = await streamFetch(`https://generativelanguage.googleapis.com/v1beta/models/${endpoint}:streamGenerateContent?alt=sse&key=${apiKey}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens: 4096 } }) }, "Google");
   return adaptSSE(bodyStream, data => { const candidates = data.candidates as Array<{ content?: { parts?: Array<{ text?: unknown }> } }> | undefined; const text = candidates?.[0]?.content?.parts?.[0]?.text; return typeof text === "string" ? text : null; });
 }
 
@@ -153,13 +162,13 @@ async function adaptSSE(stream: ReadableStream<Uint8Array>, extract: (data: Reco
 async function callModel(model: Model, messages: Message[], images: Image[]) {
   if (images.length && !model.supports_vision) throw new ProviderError(model.provider, 400, "Selected model does not support image input.");
   const apiKey = key(model.provider); if (!apiKey) throw new ProviderError(model.provider, 503, "Provider is not configured");
-  const payload = providerMessages(messages, model.provider, images);
+  const payload = providerMessages([{ role: "system", content: SYSTEM_PROMPT }, ...messages], model.provider, images);
   if (model.provider === "openai") return openAI(payload, model.id, apiKey);
   if (model.provider === "anthropic") return anthropic(payload, model.id, apiKey);
   if (model.provider === "google") return google(payload, model.id, apiKey);
   if (model.provider === "groq") return groq(payload, model.id, apiKey);
   if (model.provider === "deepseek") return deepseek(payload, model.id, apiKey);
-  throw new ProviderError(model.provider, 400, "Unsupported provider");
+  throw new ProviderError((model as { provider: string }).provider, 400, "Unsupported provider"); // unreachable: all providers handled above
 }
 
 function fallbacks(primary: string, hasImages: boolean) {
