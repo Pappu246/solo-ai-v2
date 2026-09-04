@@ -5,7 +5,7 @@
  */
 import { supabase, CHAT_FUNCTION_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase';
 import { AppError } from '../errors';
-import type { AIModel, Attachment, ChatMessage, ModelInfo } from '../../types';
+import type { AIModel, Attachment, ChatContext, ChatMessage, ModelInfo } from '../../types';
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -29,6 +29,8 @@ export interface StreamRequest {
   /** Explicit model id, or null for Auto routing. */
   model: string | null;
   attachments?: Attachment[];
+  /** Phase 2: project instructions, memories and retrieved file excerpts. */
+  context?: ChatContext;
   signal: AbortSignal;
 }
 
@@ -103,6 +105,7 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
     ?.filter(a => a.type === 'image' && a.base64)
     .map(a => ({ base64: a.base64, mime_type: a.mime_type || 'image/jpeg' }));
   if (images?.length) body.images = images;
+  if (req.context) body.context = req.context;
 
   const res = await fetch(CHAT_FUNCTION_URL, {
     method: 'POST',

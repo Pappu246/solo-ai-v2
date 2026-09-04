@@ -1,12 +1,22 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff } from 'lucide-react';
-import type { Attachment } from '../../types';
+import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2 } from 'lucide-react';
+import type { Attachment, KnowledgeFile } from '../../types';
 import { processFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../lib/files';
+import { detectFileType, KNOWLEDGE_ACCEPT } from '../../lib/knowledge/fileTypes';
+import { attachmentFromFile } from '../../lib/knowledge/attachments';
 import { useSpeechInput } from '../../hooks/useSpeechInput';
 import { IconButton } from '../ui';
 import { cn } from '../../lib/cn';
 
 export interface ComposerHandle { focus: () => void }
+
+/** Phase 2: the composer can hand document files to the knowledge pipeline. */
+export interface KnowledgeUploader {
+  /** Upload + index files; resolves once every file is ready or failed. `onChange` streams state. */
+  upload: (files: File[], onChange: (file: KnowledgeFile) => void) => Promise<KnowledgeFile[]>;
+  /** Open the "attach from library" picker; resolves with the chosen files (or []). */
+  pickFromLibrary?: () => Promise<KnowledgeFile[]>;
+}
 
 interface Props {
   onSend: (message: string, attachments?: Attachment[]) => void;
@@ -17,12 +27,13 @@ interface Props {
   /** Short helper text under the box (e.g. active model). */
   hint?: string;
   autoFocus?: boolean;
+  knowledge?: KnowledgeUploader;
 }
 
 const MAX_ATTACHMENTS = 6;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus }, ref,
+  { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus, knowledge }, ref,
 ) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
@@ -46,11 +57,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     el.style.height = `${Math.min(el.scrollHeight, 220)}px`;
   }, [value]);
 
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !disabled && !processing;
+  const pendingKnowledge = attachments.some(a => a.file_id && (a.status === 'uploading' || a.status === 'processing'));
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !disabled && !processing && !pendingKnowledge;
 
   const submit = useCallback(() => {
     if (!canSend) return;
-    onSend(value.trim(), attachments.length ? attachments : undefined);
+    // Failed knowledge files are dropped rather than sent as empty context.
+    const usable = attachments.filter(a => !a.file_id || a.status === 'ready');
+    onSend(value.trim(), usable.length ? usable : undefined);
     setValue('');
     setAttachments([]);
     setFileError(null);
@@ -63,27 +77,61 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     if (wantsSend) { e.preventDefault(); submit(); }
   };
 
+  const upsertAttachment = useCallback((f: KnowledgeFile) => {
+    setAttachments(prev => {
+      const next = attachmentFromFile(f);
+      return prev.some(a => a.id === next.id) ? prev.map(a => (a.id === next.id ? next : a)) : [...prev, next];
+    });
+  }, []);
+
   const addFiles = useCallback(async (files: FileList | File[]) => {
     setFileError(null);
     const list = Array.from(files);
     const room = MAX_ATTACHMENTS - attachments.length;
     if (room <= 0) { setFileError(`You can attach up to ${MAX_ATTACHMENTS} files.`); return; }
     const errors: string[] = [];
-    const accepted = list.filter(f => {
-      if (!ACCEPTED_TYPES[f.type]) { errors.push(`${f.name}: unsupported type`); return false; }
-      if (f.size > MAX_FILE_SIZE) { errors.push(`${f.name}: larger than 20 MB`); return false; }
-      return true;
-    }).slice(0, room);
+    const images: File[] = [];
+    const documents: File[] = [];
+    for (const f of list) {
+      if (f.size > MAX_FILE_SIZE) { errors.push(`${f.name}: larger than 20 MB`); continue; }
+      if (ACCEPTED_TYPES[f.type] === 'image') { images.push(f); continue; }
+      if (knowledge && detectFileType(f)) { documents.push(f); continue; }
+      if (!knowledge && ACCEPTED_TYPES[f.type]) { documents.push(f); continue; }
+      errors.push(`${f.name}: unsupported type`);
+    }
+    const accepted = [...images, ...documents].slice(0, room);
     if (errors.length) setFileError(errors.join(' · '));
     if (!accepted.length) return;
     setProcessing(true);
     try {
-      const processed = await Promise.all(accepted.map(processFile));
-      setAttachments(prev => [...prev, ...processed]);
+      const inlineFiles = accepted.filter(f => images.includes(f) || !knowledge);
+      const knowledgeFiles = knowledge ? accepted.filter(f => documents.includes(f)) : [];
+      if (inlineFiles.length) {
+        const processed = await Promise.all(inlineFiles.map(processFile));
+        setAttachments(prev => [...prev, ...processed]);
+      }
+      if (knowledgeFiles.length && knowledge) {
+        setProcessing(false);
+        // Runs in the background; chips update as each file moves through its lifecycle.
+        knowledge.upload(knowledgeFiles, upsertAttachment).catch(() => setFileError('Could not upload one of the files.'));
+      }
     } catch {
       setFileError('Could not read one of the files.');
     } finally { setProcessing(false); }
-  }, [attachments.length]);
+  }, [attachments.length, knowledge, upsertAttachment]);
+
+  const pickFromLibrary = async () => {
+    if (!knowledge?.pickFromLibrary) return;
+    const picked = await knowledge.pickFromLibrary();
+    if (!picked.length) return;
+    setAttachments(prev => {
+      const existing = new Set(prev.map(a => a.id));
+      const fresh = picked.filter(f => !existing.has(f.id)).map(attachmentFromFile);
+      const next = [...prev, ...fresh];
+      if (next.length > MAX_ATTACHMENTS) setFileError(`You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return next.slice(0, MAX_ATTACHMENTS);
+    });
+  };
 
   const removeAttachment = (id: string) => setAttachments(prev => prev.filter(a => a.id !== id));
 
@@ -91,6 +139,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     const files = Array.from(e.clipboardData.files || []);
     if (files.length) { e.preventDefault(); addFiles(files); }
   };
+
+  const accept = knowledge
+    ? `${Object.keys(ACCEPTED_TYPES).filter(t => ACCEPTED_TYPES[t] === 'image').join(',')},${KNOWLEDGE_ACCEPT}`
+    : Object.keys(ACCEPTED_TYPES).join(',');
 
   return (
     <div
@@ -133,9 +185,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 type="file"
                 multiple
                 className="hidden"
-                accept={Object.keys(ACCEPTED_TYPES).join(',')}
+                accept={accept}
                 onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }}
               />
+              {knowledge?.pickFromLibrary && (
+                <IconButton label="Attach from your files" size="sm" disabled={disabled} onClick={pickFromLibrary}>
+                  <Library className="w-4 h-4" />
+                </IconButton>
+              )}
               {speech.supported && (
                 <IconButton
                   label={speech.listening ? 'Stop voice input' : 'Voice input'}
@@ -177,7 +234,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
         <div className="flex items-center justify-between min-h-[1.25rem] mt-1.5 px-1 text-[11px] text-fg-subtle">
           <span className={cn(fileError && 'text-danger')}>
-            {fileError || (speech.listening ? 'Listening…' : processing ? 'Reading files…' : hint || '')}
+            {fileError || (speech.listening ? 'Listening…' : processing ? 'Reading files…' : pendingKnowledge ? 'Preparing files…' : hint || '')}
           </span>
           <span className="hidden sm:inline">
             {sendOnEnter ? 'Enter to send · Shift+Enter for a new line' : '⌘/Ctrl+Enter to send'}
@@ -190,17 +247,26 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
 function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
   const isImage = attachment.type === 'image' && attachment.base64;
+  const busy = attachment.status === 'uploading' || attachment.status === 'processing';
+  const failed = attachment.status === 'failed';
   return (
-    <div className="flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border border-border bg-surface-2 text-xs text-fg max-w-[200px]">
+    <div
+      className={cn('flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border text-xs text-fg max-w-[220px]', failed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface-2')}
+      title={failed ? attachment.error : undefined}
+    >
       {isImage ? (
         <img src={`data:${attachment.mime_type};base64,${attachment.base64}`} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
       ) : attachment.type === 'image' ? (
         <ImageIcon className="w-4 h-4 text-fg-muted shrink-0" />
+      ) : busy ? (
+        <Loader2 className="w-4 h-4 text-fg-muted shrink-0 animate-spin-slow" aria-label={attachment.status === 'uploading' ? 'Uploading' : 'Processing'} />
+      ) : failed ? (
+        <AlertCircle className="w-4 h-4 text-danger shrink-0" aria-label="Failed" />
       ) : (
         <FileText className="w-4 h-4 text-fg-muted shrink-0" />
       )}
       <span className="truncate">{attachment.name}</span>
-      <span className="text-fg-subtle shrink-0">{formatFileSize(attachment.size)}</span>
+      <span className="text-fg-subtle shrink-0">{failed ? 'Failed' : busy ? (attachment.status === 'uploading' ? 'Uploading' : 'Processing') : formatFileSize(attachment.size)}</span>
       <IconButton label={`Remove ${attachment.name}`} size="sm" onClick={onRemove} className="w-5 h-5"><X className="w-3 h-3" /></IconButton>
     </div>
   );

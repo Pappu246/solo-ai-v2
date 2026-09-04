@@ -16,3 +16,20 @@ if (!window.matchMedia) {
   });
 }
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView || vi.fn();
+
+// jsdom's Blob lacks the text()/arrayBuffer() readers every browser ships.
+if (typeof Blob.prototype.arrayBuffer !== 'function') {
+  Blob.prototype.arrayBuffer = function (this: Blob) {
+    return new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsArrayBuffer(this);
+    });
+  };
+}
+if (typeof Blob.prototype.text !== 'function') {
+  Blob.prototype.text = async function (this: Blob) {
+    return new TextDecoder().decode(await this.arrayBuffer());
+  };
+}

@@ -1,9 +1,9 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   SquarePen, Search, Settings, Pin, PinOff, Pencil, Archive, ArchiveRestore, Trash2,
-  MoreHorizontal, X, PanelLeftClose, ChevronDown, ChevronRight,
+  MoreHorizontal, X, PanelLeftClose, ChevronDown, ChevronRight, FolderKanban, FileText, Brain, Plus, FolderInput,
 } from 'lucide-react';
-import type { Conversation } from '../../types';
+import type { Conversation, Project } from '../../types';
 import type { LoadStatus } from '../../hooks/useChat';
 import { IconButton, Kbd, Logo, Wordmark, modKey } from '../ui';
 import { cn } from '../../lib/cn';
@@ -28,14 +28,30 @@ interface SidebarProps {
   collapsed: boolean;
   onCollapse: () => void;
   userEmail?: string;
+  // ── Phase 2 ──
+  projects?: Project[];
+  /** Which top-level view is showing (drives the active state of Files / Memory / project rows). */
+  view?: SidebarView;
+  onOpenProject?: (project: Project) => void;
+  onNewProject?: () => void;
+  onOpenFiles?: () => void;
+  onOpenMemory?: () => void;
+  /** Open the global search palette (⌘K). */
+  onOpenSearch?: () => void;
+  /** Move a chat into a project (null = remove from its project). */
+  onMoveToProject?: (conversationId: string, projectId: string | null) => void;
 }
+
+export type SidebarView = { kind: 'chat' } | { kind: 'files' } | { kind: 'memory' } | { kind: 'project'; id: string };
 
 export function Sidebar({
   conversations, status, activeId, onSelect, onNewChat, onRename, onPin, onArchive, onDeleteRequest,
   onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, userEmail,
+  projects = [], view = { kind: 'chat' }, onOpenProject, onNewProject, onOpenFiles, onOpenMemory, onOpenSearch, onMoveToProject,
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
+  const [showProjects, setShowProjects] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   const isDesktop = useIsDesktop();
 
@@ -45,6 +61,9 @@ export function Sidebar({
     window.addEventListener('solo:focus-search', handler);
     return () => window.removeEventListener('solo:focus-search', handler);
   }, []);
+
+  const activeProjects = projects.filter(p => !p.archived);
+  const projectName = (id: string | null | undefined) => (id ? projects.find(p => p.id === id)?.name ?? null : null);
 
   const { pinned, recent, archived } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -57,7 +76,7 @@ export function Sidebar({
     };
   }, [conversations, query]);
 
-  const itemProps = { activeId, onSelect: (c: Conversation) => { onSelect(c); onCloseMobile(); }, onRename, onPin, onArchive, onDeleteRequest };
+  const itemProps = { activeId, onSelect: (c: Conversation) => { onSelect(c); onCloseMobile(); }, onRename, onPin, onArchive, onDeleteRequest, projects: activeProjects, onMoveToProject, projectName };
 
   const content = (
     <div className="flex flex-col h-full">
@@ -96,16 +115,73 @@ export function Sidebar({
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); (e.target as HTMLInputElement).blur(); } }}
-            placeholder="Search chats"
-            aria-label="Search chats"
+            placeholder="Filter chats"
+            aria-label="Filter chats"
             className="w-full h-9 pl-8 pr-14 rounded-lg bg-transparent text-sm text-fg placeholder:text-fg-subtle hover:bg-surface-2 focus:bg-surface-2 outline-none transition-colors"
           />
-          {!query && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5 pointer-events-none"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>}
+          {!query && !onOpenSearch && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5 pointer-events-none"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>}
         </label>
+        {onOpenSearch && (
+          <button
+            type="button"
+            onClick={() => { onOpenSearch(); onCloseMobile(); }}
+            className="w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-sm text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors"
+          >
+            <Search className="w-4 h-4" />
+            <span className="flex-1 text-left">Search everything</span>
+            <span className="hidden md:inline-flex items-center gap-0.5"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
+          </button>
+        )}
+        {(onOpenFiles || onOpenMemory) && (
+          <div className="pt-1">
+            {onOpenFiles && (
+              <NavButton icon={<FileText className="w-4 h-4" />} active={view.kind === 'files'} onClick={() => { onOpenFiles(); onCloseMobile(); }}>Files</NavButton>
+            )}
+            {onOpenMemory && (
+              <NavButton icon={<Brain className="w-4 h-4" />} active={view.kind === 'memory'} onClick={() => { onOpenMemory(); onCloseMobile(); }}>Memory</NavButton>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Projects */}
+      {onOpenProject && (
+        <div className="px-3 mt-3">
+          <div className="flex items-center justify-between pr-1">
+            <button
+              type="button"
+              onClick={() => setShowProjects(v => !v)}
+              aria-expanded={showProjects}
+              className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg-muted"
+            >
+              {showProjects ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              Projects
+            </button>
+            {onNewProject && (
+              <IconButton label="New project" size="sm" onClick={() => { onNewProject(); onCloseMobile(); }} className="w-6 h-6"><Plus className="w-3.5 h-3.5" /></IconButton>
+            )}
+          </div>
+          {showProjects && (
+            <ul className="space-y-0.5 mt-0.5" aria-label="Projects">
+              {activeProjects.length === 0 && (
+                <li className="px-2.5 py-1.5 text-xs text-fg-subtle">
+                  {onNewProject ? <button type="button" onClick={() => { onNewProject(); onCloseMobile(); }} className="hover:text-fg-muted">Create a project to group chats and files.</button> : 'No projects yet.'}
+                </li>
+              )}
+              {activeProjects.slice(0, 8).map(p => (
+                <li key={p.id}>
+                  <NavButton icon={<FolderKanban className="w-4 h-4" />} active={view.kind === 'project' && view.id === p.id} onClick={() => { onOpenProject(p); onCloseMobile(); }}>{p.name}</NavButton>
+                </li>
+              ))}
+              {activeProjects.length > 8 && <li className="px-2.5 py-1 text-[11px] text-fg-subtle">{activeProjects.length - 8} more — use search to find them.</li>}
+            </ul>
+          )}
+        </div>
+      )}
 
       {/* Conversation list */}
       <nav aria-label="Chats" className="flex-1 min-h-0 overflow-y-auto px-3 mt-3 pb-2">
+        {onOpenProject && (pinned.length + recent.length + archived.length > 0) && <p className="px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">Chats</p>}
         {status === 'loading' && conversations.length === 0 && (
           <ul className="space-y-1" aria-label="Loading chats">
             {[0, 1, 2, 3, 4].map(i => <li key={i} className="h-8 rounded-lg bg-surface-2 animate-pulse" style={{ opacity: 1 - i * 0.15 }} />)}
@@ -210,10 +286,28 @@ interface ItemProps {
   onPin: (id: string, pinned: boolean) => void;
   onArchive: (id: string, archived: boolean) => void;
   onDeleteRequest: (c: Conversation) => void;
+  projects?: Project[];
+  onMoveToProject?: (conversationId: string, projectId: string | null) => void;
+  projectName?: (id: string | null | undefined) => string | null;
 }
 
-function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin, onArchive, onDeleteRequest }: ItemProps) {
+function NavButton({ icon, active, onClick, children }: { icon: React.ReactNode; active?: boolean; onClick: () => void; children: React.ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={cn('w-full flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-sm transition-colors text-left', active ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-2/70')}
+    >
+      <span className="text-fg-muted shrink-0">{icon}</span>
+      <span className="truncate">{children}</span>
+    </button>
+  );
+}
+
+function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin, onArchive, onDeleteRequest, projects = [], onMoveToProject, projectName }: ItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [moveOpen, setMoveOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(c.title);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -227,6 +321,8 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
     document.addEventListener('keydown', onKey);
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [menuOpen]);
+  useEffect(() => { if (!menuOpen) setMoveOpen(false); }, [menuOpen]);
+  const currentProject = projectName?.(c.project_id) ?? null;
 
   const commitRename = () => {
     setRenaming(false);
@@ -260,6 +356,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
       >
         {c.pinned && !c.archived && <Pin className="w-3 h-3 text-fg-subtle shrink-0" aria-label="Pinned" />}
         <span className="truncate">{c.title}</span>
+        {currentProject && <FolderKanban className="w-3 h-3 text-fg-subtle shrink-0 ml-auto" aria-label={`In project ${currentProject}`} />}
       </button>
 
       <div ref={menuRef} className={cn('absolute right-1 top-1/2 -translate-y-1/2', menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
@@ -267,7 +364,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
         {menuOpen && (
-          <div role="menu" className="absolute right-0 top-full mt-1 w-44 rounded-xl border border-border bg-surface shadow-lg p-1 z-50 animate-scale-in">
+          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-border bg-surface shadow-lg p-1 z-50 animate-scale-in">
             <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>Rename</MenuItem>
             {!c.archived && (
               <MenuItem icon={c.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onPin(c.id, !c.pinned); }}>
@@ -277,6 +374,30 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
             <MenuItem icon={c.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onArchive(c.id, !c.archived); }}>
               {c.archived ? 'Unarchive' : 'Archive'}
             </MenuItem>
+            {onMoveToProject && (projects.length > 0 || c.project_id) && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-haspopup="menu"
+                  aria-expanded={moveOpen}
+                  onClick={() => setMoveOpen(v => !v)}
+                  className="w-full flex items-center gap-2.5 px-2.5 h-8 rounded-lg text-sm text-left text-fg hover:bg-surface-2 transition-colors"
+                >
+                  <FolderInput className="w-3.5 h-3.5" />
+                  <span className="flex-1">Move to project</span>
+                  <ChevronRight className={cn('w-3 h-3 text-fg-subtle transition-transform', moveOpen && 'rotate-90')} />
+                </button>
+                {moveOpen && (
+                  <div role="menu" aria-label="Choose a project" className="ml-3 pl-2 border-l border-border my-0.5 max-h-40 overflow-y-auto">
+                    {c.project_id && <MenuItem icon={<X className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onMoveToProject(c.id, null); }}>Remove from project</MenuItem>}
+                    {projects.filter(p => p.id !== c.project_id).map(p => (
+                      <MenuItem key={p.id} icon={<FolderKanban className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onMoveToProject(c.id, p.id); }}>{p.name}</MenuItem>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
             <div className="my-1 border-t border-border" />
             <MenuItem icon={<Trash2 className="w-3.5 h-3.5" />} danger onClick={() => { setMenuOpen(false); onDeleteRequest(c); }}>Delete</MenuItem>
           </div>

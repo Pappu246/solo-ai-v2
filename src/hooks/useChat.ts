@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
-import type { Conversation, Message, Attachment, AIModel, ModelInfo, UserSettings } from '../types';
+import type { Conversation, Message, Attachment, AIModel, ModelInfo, UserSettings, ChatContext, KnowledgeSource } from '../types';
 import { conversationsApi, messagesApi } from '../lib/chat/api';
 import { streamChat, fetchModels } from '../lib/chat/stream';
 import { toFriendlyError, type FriendlyError } from '../lib/errors';
@@ -15,11 +15,27 @@ export function deriveTitle(content: string): string {
   return oneLine.length > 48 ? `${oneLine.slice(0, 48).trimEnd()}…` : oneLine || NEW_CHAT_TITLE;
 }
 
-interface Options {
-  settings: Pick<UserSettings, 'auto_title' | 'preferred_model'>;
+/** Result of the Phase 2 knowledge lookup that runs before each generation. */
+export interface ResolvedContext {
+  context?: ChatContext;
+  sources?: KnowledgeSource[];
 }
 
-export function useChat(user: User | null, { settings }: Options) {
+/**
+ * Phase 2 hook-in: given the conversation, the user's latest message and any
+ * attachments, return the context to send (project instructions, memories,
+ * relevant file excerpts). Optional — without it Phase 1 behaviour is unchanged.
+ */
+export type ContextResolver = (input: { conversation: Conversation; query: string; attachments?: Attachment[] }) => Promise<ResolvedContext>;
+
+interface Options {
+  settings: Pick<UserSettings, 'auto_title' | 'preferred_model'>;
+  resolveContext?: ContextResolver;
+  /** Called after a conversation is created so callers can attach files etc. */
+  onConversationCreated?: (conversation: Conversation) => void;
+}
+
+export function useChat(user: User | null, { settings, resolveContext, onConversationCreated }: Options) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsStatus, setConversationsStatus] = useState<LoadStatus>('idle');
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -35,11 +51,19 @@ export function useChat(user: User | null, { settings }: Options) {
   /** Explicit model id, or null for Auto. Seeded from settings. */
   const [selectedModel, setSelectedModel] = useState<string | null>(settings.preferred_model);
 
+  /** Project a *new* chat will be created in (set when the user opens a project). */
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
   // Refs mirror state synchronously so async flows (send → stream → persist)
   // never read a stale value between a setState call and the next render.
   const messagesRef = useRef<Message[]>([]);
   const activeRef = useRef<Conversation | null>(null);
+  const activeProjectRef = useRef<string | null>(null);
+  // Latest callbacks without re-creating the generation pipeline on every render.
+  const resolveContextRef = useRef<ContextResolver | undefined>(resolveContext);
+  const onCreatedRef = useRef(onConversationCreated);
+  useEffect(() => { resolveContextRef.current = resolveContext; onCreatedRef.current = onConversationCreated; });
   const setMessagesSync = useCallback((next: Message[] | ((prev: Message[]) => Message[])) => {
     const value = typeof next === 'function' ? next(messagesRef.current) : next;
     messagesRef.current = value;
@@ -49,6 +73,13 @@ export function useChat(user: User | null, { settings }: Options) {
     activeRef.current = next;
     setActiveConversation(next);
   }, []);
+  const setActiveProject = useCallback((id: string | null) => {
+    activeProjectRef.current = id;
+    setActiveProjectId(id);
+  }, []);
+  // `patchLocal` is declared below (after the loaders); this ref lets earlier
+  // callbacks use it without reordering the Phase 1 code.
+  const patchLocalRef = useRef<(id: string, patch: Partial<Conversation>) => void>(() => {});
 
   // Keep the model selection in sync when the user changes the preference in Settings.
   useEffect(() => { setSelectedModel(settings.preferred_model); }, [settings.preferred_model]);
@@ -91,6 +122,8 @@ export function useChat(user: User | null, { settings }: Options) {
     setError(null);
     setActiveSync(conversation);
     setMessagesSync([]);
+    // Follow the opened chat's project so the next "New chat" lands beside it.
+    if (conversation) setActiveProject(conversation.project_id ?? null);
     if (!conversation) { setMessagesStatus('idle'); return; }
     setMessagesStatus('loading');
     try {
@@ -101,15 +134,25 @@ export function useChat(user: User | null, { settings }: Options) {
       setError(toFriendlyError(e));
       setMessagesStatus('error');
     }
-  }, [stopGeneration, setActiveSync, setMessagesSync]);
+  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject]);
 
-  const startNewChat = useCallback(() => {
+  /** Start a blank chat. Pass a project id to start it inside that project. */
+  const startNewChat = useCallback((projectId?: string | null) => {
     stopGeneration();
     setError(null);
     setActiveSync(null);
     setMessagesSync([]);
     setMessagesStatus('idle');
-  }, [stopGeneration, setActiveSync, setMessagesSync]);
+    if (projectId !== undefined) setActiveProject(projectId);
+  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject]);
+
+  /** Move a conversation into a project (or out of one with null). */
+  const moveConversation = useCallback(async (id: string, projectId: string | null) => {
+    const previous = conversations.find(c => c.id === id)?.project_id ?? null;
+    patchLocalRef.current(id, { project_id: projectId });
+    try { await conversationsApi.update(id, { project_id: projectId }); }
+    catch (e) { setError(toFriendlyError(e)); patchLocalRef.current(id, { project_id: previous }); }
+  }, [conversations]);
 
   // ── Conversation mutations ─────────────────────────────────────────────────
 
@@ -117,6 +160,7 @@ export function useChat(user: User | null, { settings }: Options) {
     setConversations(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
     if (activeRef.current?.id === id) setActiveSync({ ...activeRef.current, ...patch });
   }, [setActiveSync]);
+  patchLocalRef.current = patchLocal;
 
   const renameConversation = useCallback(async (id: string, title: string) => {
     const trimmed = title.trim();
@@ -164,9 +208,22 @@ export function useChat(user: User | null, { settings }: Options) {
 
     let content = '';
     let model: ModelInfo | null = null;
+    let sources: KnowledgeSource[] | undefined;
     try {
       const wire = history.slice(-MAX_HISTORY).map(m => ({ role: m.role, content: m.content }));
-      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, signal: controller.signal });
+      // Phase 2: look up project instructions, memories and relevant file
+      // excerpts. A failed lookup must never block the reply.
+      let context: ChatContext | undefined;
+      const lastUser = [...history].reverse().find(m => m.role === 'user');
+      if (resolveContextRef.current && lastUser) {
+        try {
+          const resolved = await resolveContextRef.current({ conversation, query: lastUser.content, attachments });
+          context = resolved.context;
+          sources = resolved.sources?.length ? resolved.sources : undefined;
+        } catch { /* answer without extra context */ }
+      }
+      if (controller.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, context, signal: controller.signal });
       model = handle.model;
       setStreamingModel(model);
       for await (const delta of handle.deltas) {
@@ -190,6 +247,7 @@ export function useChat(user: User | null, { settings }: Options) {
         model: model?.id ?? null,
         model_name: model?.name ?? null,
         category: model?.category ?? null,
+        sources: sources ?? null,
         created_at: new Date().toISOString(),
       };
       if (activeRef.current?.id === conversation.id) setMessagesSync(prev => [...prev, assistant]);
@@ -220,12 +278,13 @@ export function useChat(user: User | null, { settings }: Options) {
     let conversation = activeRef.current;
     if (!conversation) {
       try {
-        conversation = await conversationsApi.create(user.id, settings.auto_title ? deriveTitle(text) : NEW_CHAT_TITLE);
+        conversation = await conversationsApi.create(user.id, settings.auto_title ? deriveTitle(text) : NEW_CHAT_TITLE, activeProjectRef.current);
       } catch (e) { setError(toFriendlyError(e)); return; }
       setConversations(prev => [conversation!, ...prev]);
       setActiveSync(conversation);
       setMessagesSync([]);
       setMessagesStatus('ready');
+      onCreatedRef.current?.(conversation);
     } else if (settings.auto_title && conversation.title === NEW_CHAT_TITLE && messagesRef.current.length === 0 && text) {
       const title = deriveTitle(text);
       patchLocal(conversation.id, { title });
@@ -310,6 +369,8 @@ export function useChat(user: User | null, { settings }: Options) {
     conversations, conversationsStatus,
     activeConversation, messages, messagesStatus,
     availableModels, selectedModel, setSelectedModel,
+    // Phase 2: project scope for new chats
+    activeProjectId, setActiveProject, moveConversation,
     // generation state
     isGenerating, streamingContent, streamingModel, error, clearError, canRetry,
     // actions
