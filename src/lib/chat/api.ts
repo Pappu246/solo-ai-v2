@@ -20,21 +20,21 @@ export const conversationsApi = {
       .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false });
     throwIf(error, 'Loading chats');
-    return (data ?? []).map(row => ({ ...row, archived: Boolean(row.archived) })) as Conversation[];
+    return (data ?? []).map(row => ({ ...row, archived: Boolean(row.archived), project_id: row.project_id ?? null })) as Conversation[];
   },
 
-  async create(userId: string, title = 'New chat'): Promise<Conversation> {
+  async create(userId: string, title = 'New chat', projectId: string | null = null): Promise<Conversation> {
     const id = crypto.randomUUID();
     const { data, error } = await supabase
       .from('conversations')
-      .insert({ id, title, user_id: userId, pinned: false })
+      .insert({ id, title, user_id: userId, pinned: false, ...(projectId ? { project_id: projectId } : {}) })
       .select()
       .single();
     throwIf(error, 'Creating chat');
-    return { ...data, archived: Boolean(data.archived) } as Conversation;
+    return { ...data, archived: Boolean(data.archived), project_id: data.project_id ?? null } as Conversation;
   },
 
-  async update(id: string, patch: Partial<Pick<Conversation, 'title' | 'pinned' | 'archived' | 'model_id'>>): Promise<void> {
+  async update(id: string, patch: Partial<Pick<Conversation, 'title' | 'pinned' | 'archived' | 'model_id' | 'project_id'>>): Promise<void> {
     const { error } = await supabase.from('conversations').update(patch).eq('id', id);
     throwIf(error, 'Updating chat');
   },
@@ -79,6 +79,7 @@ export const messagesApi = {
       model_name: message.model_name ?? null,
       category: message.category ?? null,
       attachments: toStoredAttachments(message.attachments),
+      ...(message.sources?.length ? { sources: message.sources } : {}),
       created_at: message.created_at,
     });
     throwIf(error, 'Saving message');

@@ -21,14 +21,18 @@ export function toFriendlyError(error: unknown): FriendlyError {
   const err = error instanceof Error ? error : new Error(String(error));
   const status = (err as AppError).status;
   const raw = err.message || '';
-  const lower = raw.toLowerCase();
   const detail = (err as AppError).detail || raw || undefined;
+  // Database errors carry their code/message in `detail` (e.g. "[42501] new row violates row-level security policy").
+  const lower = `${raw} ${(err as AppError).detail ?? ''}`.toLowerCase();
 
   if (err.name === 'AbortError') {
     return { title: 'Stopped', message: 'Generation was stopped.', retryable: false };
   }
   if (status === 401 || lower.includes('session has expired') || lower.includes('unauthorized') || lower.includes('jwt')) {
     return { title: 'Signed out', message: 'Your session has expired. Please sign in again.', detail, retryable: false };
+  }
+  if (status === 403 || lower.includes('row-level security') || lower.includes('permission denied') || lower.includes('[42501]')) {
+    return { title: 'No access', message: 'You don’t have permission to do that.', detail, retryable: false };
   }
   if (status === 429 || lower.includes('rate limit')) {
     return { title: 'Slow down', message: 'You are sending messages too quickly. Wait a moment and try again.', detail, retryable: true };

@@ -120,7 +120,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                 </select>
               </Field>
               <p className="text-xs text-fg-subtle leading-relaxed">
-                Provider API keys are stored server-side and never reach the browser. Memory, projects and tools arrive in later releases.
+                Provider API keys are stored server-side and never reach the browser. Only the excerpts of your files, memories and project instructions that apply to a message are sent with it.
               </p>
             </Group>
           )}

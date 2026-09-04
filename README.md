@@ -2,7 +2,7 @@
 
 A premium AI workspace built with React, TypeScript, Vite, Tailwind CSS and Supabase.
 
-SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release is **Phase 1 — Foundation** (app shell, chat engine, auth, database, streaming, history, settings). Projects, files, memory, tools and agents arrive in later phases.
+SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. Tools and agents arrive in later phases.
 
 ## Features
 
@@ -18,6 +18,14 @@ SOLO AI brings different AI providers into one clean chat interface with saved c
 - Read-aloud (browser TTS) and voice input (browser STT) where supported
 - Humane error states with expandable technical details
 - Supabase Row Level Security, server-side API keys, request validation and rate limiting
+
+### Knowledge layer (Phase 2)
+
+- **Files** — upload PDF, TXT, Markdown, CSV, JSON and common code files (≤ 20 MB). Files are stored in a private Supabase Storage bucket, text is extracted in the browser (PDF via `pdfjs-dist`), chunked, and indexed for full-text search. Each file shows its lifecycle: *uploading → processing → ready | failed*, with retry and a reason on failure.
+- **Retrieval** — before each reply, only the excerpts relevant to the question (from files attached to the chat or in its project) are sent to the model, within a strict budget. Replies show which files and excerpts were used. Nothing is sent when nothing is relevant.
+- **Memory** — save facts, preferences, instructions and context explicitly (Memory view or *Remember this* on a reply). Memories carry a type, scope (every chat or one project), importance and source, and can be edited or deleted. Nothing is remembered automatically.
+- **Projects** — group chats, files and memories; project instructions are sent with every chat inside the project. Create, rename, archive, delete (chats and files are detached, not deleted). Projects live in the existing sidebar.
+- **Global search** — `⌘/Ctrl+K` searches chats, messages, projects, files and memories (Postgres full-text search, grouped results, per-group *more*, keyboard navigation). Results only ever include the signed-in user's data.
 
 ## Tech Stack
 
@@ -35,15 +43,22 @@ src/
 ├── components/
 │   ├── auth/       AuthScreen, SetupScreen
 │   ├── chat/       Composer, MessageList, Message, Markdown, CodeBlock, ModelSelector…
-│   ├── layout/     Sidebar, Topbar
+│   ├── knowledge/  FilesView, FileList, FileDetailDialog, FilePickerDialog, UploadDropzone, FileStatusBadge
+│   ├── memory/     MemoryView, MemoryEditor
+│   ├── projects/   ProjectView, ProjectDialog
+│   ├── search/     SearchPalette (⌘K)
+│   ├── layout/     Sidebar (chats + projects + Files/Memory), Topbar
 │   ├── settings/   SettingsPanel
 │   └── ui/         Button, IconButton, Dialog, ConfirmDialog, Toast, Toggle, Kbd, Logo
-├── hooks/          useAuth, useChat, useSettings, useKeyboardShortcuts, useSpeechInput
+├── hooks/          useAuth, useChat, useSettings, useKeyboardShortcuts, useSpeechInput,
+│                   useKnowledge, useMemories, useProjects, useSearch
 ├── lib/
 │   ├── chat/       api.ts (persistence), stream.ts (SSE client)
+│   ├── knowledge/  fileTypes, extract (PDF/CSV/JSON/text), chunker, fileService (upload → storage →
+│   │               metadata → extraction → chunking → indexing), retriever, search, api
 │   ├── errors.ts   friendly error mapping
 │   └── settings.ts schema normalisation + theme application
-├── test/           test setup and Supabase mock
+├── test/           test setup and Supabase mock (simulates RLS + Storage)
 ├── App.tsx
 └── types.ts
 
@@ -106,11 +121,11 @@ This runs TypeScript checking, ESLint, the Vitest suite and the production build
 
 ### 7. Apply database migrations
 
-Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). The latest, `20260903000100_add_archived_to_conversations.sql`, adds the `archived` column used by the sidebar.
+Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). The latest, `20260903120000_phase2_knowledge.sql`, creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. It is idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
 
 ## Security
 
-API keys are kept on the server side. The chat function authenticates requests, validates messages and attachments, limits request size, applies a per-user request guard and uses provider timeouts.
+API keys are kept on the server side. The chat function authenticates requests, validates messages, attachments and knowledge context, limits request size, applies a per-user request guard and uses provider timeouts. All Phase 2 tables and the `knowledge` bucket are protected by Row Level Security: a user can only see and change their own projects, files, chunks and memories, storage objects live under `<user_id>/…` and are only readable by that user, and the search / retrieval functions run as the caller (`SECURITY INVOKER`).
 
 See [SECURITY.md](./SECURITY.md) for deployment notes.
 

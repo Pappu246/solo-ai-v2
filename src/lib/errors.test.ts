@@ -34,3 +34,12 @@ describe('friendlyAuthMessage', () => {
     expect(friendlyAuthMessage(new Error('User already registered'))).toMatch(/already exists/i);
   });
 });
+
+describe('toFriendlyError (Phase 2)', () => {
+  it('maps RLS / permission failures to a clear "No access" message', () => {
+    expect(toFriendlyError(new AppError('Loading files failed', undefined, '[42501] new row violates row-level security policy')).title).toBe('No access');
+    expect(toFriendlyError(new AppError('Forbidden', 403)).title).toBe('No access');
+    expect(toFriendlyError(new Error('permission denied for table memories')).title).toBe('No access');
+    expect(toFriendlyError(new AppError('Forbidden', 403)).retryable).toBe(false);
+  });
+});

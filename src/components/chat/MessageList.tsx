@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ArrowDown } from 'lucide-react';
-import type { Message as MessageType, ModelInfo } from '../../types';
+import type { Message as MessageType, ModelInfo, KnowledgeSource } from '../../types';
 import type { FriendlyError } from '../../lib/errors';
 import { Message } from './Message';
 import { StreamingMessage } from './StreamingMessage';
@@ -22,13 +22,15 @@ interface Props {
   onEdit: (id: string, content: string) => void;
   onRetry: () => void;
   onDismissError: () => void;
+  onRemember?: (content: string) => void;
+  onOpenSource?: (source: KnowledgeSource) => void;
 }
 
 const NEAR_BOTTOM_PX = 120;
 
 export function MessageList({
   messages, loading, isGenerating, streamingContent, streamingModel, error, canRetry,
-  showModelBadge, ttsEnabled, ttsRate, onRegenerate, onEdit, onRetry, onDismissError,
+  showModelBadge, ttsEnabled, ttsRate, onRegenerate, onEdit, onRetry, onDismissError, onRemember, onOpenSource,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -75,6 +77,8 @@ export function MessageList({
               ttsRate={ttsRate}
               onRegenerate={m.role === 'assistant' ? onRegenerate : undefined}
               onEdit={m.role === 'user' ? onEdit : undefined}
+              onRemember={m.role === 'assistant' ? onRemember : undefined}
+              onOpenSource={onOpenSource}
             />
           ))}
           {isGenerating && <StreamingMessage content={streamingContent} model={streamingModel} showModelBadge={showModelBadge} />}

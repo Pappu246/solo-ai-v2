@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon } from 'lucide-react';
-import type { Message as MessageType, Attachment } from '../../types';
+import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon, Brain } from 'lucide-react';
+import type { Message as MessageType, Attachment, KnowledgeSource } from '../../types';
 import { Markdown } from './Markdown';
 import { IconButton, Button } from '../ui';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
@@ -15,10 +15,14 @@ interface MessageProps {
   ttsRate?: number;
   onRegenerate?: () => void;
   onEdit?: (id: string, content: string) => void;
+  /** Phase 2: save an excerpt of this reply as a memory. */
+  onRemember?: (content: string) => void;
+  /** Phase 2: open a source file referenced by this reply. */
+  onOpenSource?: (source: KnowledgeSource) => void;
 }
 
 export const Message = memo(function Message({
-  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1, onRegenerate, onEdit,
+  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1, onRegenerate, onEdit, onRemember, onOpenSource,
 }: MessageProps) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
@@ -63,6 +67,7 @@ export const Message = memo(function Message({
       <div className="text-fg">
         <Markdown content={message.content} />
       </div>
+      {message.sources && message.sources.length > 0 && <SourceList sources={message.sources} onOpen={onOpenSource} />}
       <div className={cn(
         'flex items-center gap-0.5 transition-opacity',
         isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
@@ -72,6 +77,11 @@ export const Message = memo(function Message({
         {onRegenerate && isLast && (
           <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}>
             <RefreshCw className="w-3.5 h-3.5" />
+          </IconButton>
+        )}
+        {onRemember && (
+          <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}>
+            <Brain className="w-3.5 h-3.5" />
           </IconButton>
         )}
         {showModelBadge && message.model && (
@@ -145,6 +155,26 @@ function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: s
         <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
         <Button size="sm" variant="primary" disabled={!canSave} onClick={() => onSave(value)}>Save & resend</Button>
       </div>
+    </div>
+  );
+}
+
+/** Files whose excerpts were given to the model for this reply. */
+function SourceList({ sources, onOpen }: { sources: KnowledgeSource[]; onOpen?: (s: KnowledgeSource) => void }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-label="Sources">
+      <span className="text-[11px] text-fg-subtle">Sources:</span>
+      {sources.map(s => {
+        const label = `${s.file_name}${s.chunk_indexes.length ? ` · ${s.chunk_indexes.length === 1 ? 'excerpt' : 'excerpts'} ${s.chunk_indexes.map(i => i + 1).join(', ')}` : ''}`;
+        const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]';
+        return onOpen ? (
+          <button key={s.file_id} type="button" onClick={() => onOpen(s)} className={cn(cls, 'hover:text-fg hover:border-border-strong transition-colors')} title={label}>
+            <FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span>
+          </button>
+        ) : (
+          <span key={s.file_id} className={cls} title={label}><FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span></span>
+        );
+      })}
     </div>
   );
 }
