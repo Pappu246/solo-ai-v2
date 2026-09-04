@@ -43,6 +43,12 @@ function reasonFor(e: unknown): string {
   return msg.length > 300 ? `${msg.slice(0, 300)}…` : msg;
 }
 
+function isMissingStorageObject(e: unknown): boolean {
+  const app = e instanceof AppError ? e : null;
+  const text = `${app?.message ?? ''} ${app?.detail ?? ''} ${(e as Error)?.message ?? ''}`.toLowerCase();
+  return text.includes('404') || text.includes('not found') || text.includes('no such object') || text.includes('object not found');
+}
+
 export const fileService = {
   validate: validateFile,
 
@@ -120,9 +126,14 @@ export const fileService = {
 
   /** Delete the row (chunks cascade) and the stored object. */
   async remove(row: KnowledgeFile): Promise<void> {
-    // Remove the object first so a partial failure never leaves an orphaned
-    // object without a row pointing at it… but tolerate "already gone".
-    try { await filesApi.removeObject(row.storage_path); } catch { /* object may never have been uploaded */ }
+    // Keep the DB row if Storage reports an unexpected failure. This avoids
+    // silently orphaning a stored object with no metadata/cleanup path. A
+    // missing object is safe to treat as already deleted.
+    try {
+      await filesApi.removeObject(row.storage_path);
+    } catch (e) {
+      if (!isMissingStorageObject(e)) throw e;
+    }
     await filesApi.remove(row.id);
   },
 };
