@@ -5,7 +5,6 @@
  * API keys are passed through a fake env reader. Run with:
  *   deno test supabase/functions/chat/providers_test.ts
  */
-import nodeAssert, { AssertionError } from "node:assert/strict";
 import {
   adapterFor,
   apiKeyFor,
@@ -35,31 +34,56 @@ import {
   type StreamEvent,
 } from "./providers.ts";
 
-// ── assertions (node:assert keeps the suite dependency- and network-free) ──
+// ── assertions (hand-rolled: the suite has zero dependencies) ──────────────
+
+class AssertionError extends Error {
+  constructor(message: string) { super(message); this.name = "AssertionError"; }
+}
+
+function show(value: unknown): string {
+  if (typeof value === "string") return JSON.stringify(value);
+  try { return JSON.stringify(value) ?? String(value); } catch { return String(value); }
+}
+
+function deepEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true;
+  if (typeof a !== "object" || typeof b !== "object" || a === null || b === null) return false;
+  if (Array.isArray(a) !== Array.isArray(b)) return false;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((item, i) => deepEqual(item, b[i]));
+  }
+  const left = a as Record<string, unknown>;
+  const right = b as Record<string, unknown>;
+  const keys = Object.keys(left);
+  if (keys.length !== Object.keys(right).length) return false;
+  return keys.every(key => key in right && deepEqual(left[key], right[key]));
+}
 
 function assert(condition: unknown, message?: string): asserts condition {
-  nodeAssert.ok(condition, message);
+  if (!condition) throw new AssertionError(message ?? "expected a truthy value");
 }
 function assertEquals<T>(actual: T, expected: T, message?: string): void {
-  nodeAssert.deepStrictEqual(actual, expected, message);
+  if (!deepEqual(actual, expected)) {
+    throw new AssertionError(message ?? `expected ${show(expected)}, got ${show(actual)}`);
+  }
 }
 function assertMatch(actual: string, expected: RegExp, message?: string): void {
-  nodeAssert.match(actual, expected, message);
+  if (!expected.test(actual)) throw new AssertionError(message ?? `expected ${show(actual)} to match ${expected}`);
 }
 function assertNotMatch(actual: string, expected: RegExp, message?: string): void {
-  nodeAssert.doesNotMatch(actual, expected, message);
+  if (expected.test(actual)) throw new AssertionError(message ?? `expected ${show(actual)} not to match ${expected}`);
 }
 function assertStringIncludes(actual: string, expected: string, message?: string): void {
-  nodeAssert.ok(actual.includes(expected), message ?? `expected "${actual}" to include "${expected}"`);
+  if (!actual.includes(expected)) throw new AssertionError(message ?? `expected ${show(actual)} to include ${show(expected)}`);
 }
 async function assertRejects<T extends Error>(fn: () => Promise<unknown>, ctor: new (...args: never[]) => T, message?: string): Promise<T> {
   try {
     await fn();
   } catch (error) {
-    nodeAssert.ok(error instanceof ctor, message ?? `expected ${ctor.name}, got ${String(error)}`);
-    return error as T;
+    if (!(error instanceof ctor)) throw new AssertionError(message ?? `expected ${ctor.name}, got ${String(error)}`);
+    return error;
   }
-  throw new AssertionError({ message: message ?? `expected ${ctor.name} to be thrown` });
+  throw new AssertionError(message ?? `expected ${ctor.name} to be thrown`);
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────
