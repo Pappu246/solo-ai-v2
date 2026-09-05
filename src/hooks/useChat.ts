@@ -46,6 +46,8 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
   const [streamingContent, setStreamingContent] = useState('');
   const [streamingModel, setStreamingModel] = useState<ModelInfo | null>(null);
   const [error, setError] = useState<FriendlyError | null>(null);
+  /** True when the last reply was cut short mid-stream but was kept on screen. */
+  const [interrupted, setInterrupted] = useState(false);
 
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
   /** Explicit model id, or null for Auto. Seeded from settings. */
@@ -120,6 +122,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     if (activeRef.current?.id === conversation?.id) return;
     stopGeneration();
     setError(null);
+    setInterrupted(false);
     setActiveSync(conversation);
     setMessagesSync([]);
     // Follow the opened chat's project so the next "New chat" lands beside it.
@@ -140,6 +143,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
   const startNewChat = useCallback((projectId?: string | null) => {
     stopGeneration();
     setError(null);
+    setInterrupted(false);
     setActiveSync(null);
     setMessagesSync([]);
     setMessagesStatus('idle');
@@ -205,6 +209,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setStreamingContent('');
     setStreamingModel(null);
     setError(null);
+    setInterrupted(false);
 
     let content = '';
     let model: ModelInfo | null = null;
@@ -232,7 +237,12 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
       }
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError' || controller.signal.aborted;
-      if (!aborted) setError(toFriendlyError(e));
+      if (!aborted) {
+        setError(toFriendlyError(e));
+        // A stream that died mid-answer keeps whatever was generated (persisted
+        // below) and stays retryable instead of losing the partial reply.
+        if (content) setInterrupted(true);
+      }
     } finally {
       abortRef.current = null;
     }
@@ -329,13 +339,25 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     await generate(conversation, history, lastUser.attachments ?? undefined);
   }, [isGenerating, generate, setMessagesSync]);
 
-  /** Retry after an error: re-request a reply for the existing last user turn. */
+  /**
+   * Retry after an error: re-request a reply for the existing last user turn.
+   * After an interrupted stream the partial assistant reply is dropped and the
+   * turn is generated again (`regenerate`), so no duplicate rows are created.
+   */
   const retry = useCallback(async () => {
     const conversation = activeRef.current;
     const current = messagesRef.current;
-    if (!conversation || isGenerating || current[current.length - 1]?.role !== 'user') return;
-    await generate(conversation, current, current[current.length - 1].attachments ?? undefined);
-  }, [isGenerating, generate]);
+    if (!conversation || isGenerating) return;
+    const tail = current[current.length - 1];
+    if (!tail) return;
+    if (tail.role === 'assistant') {
+      if (!interrupted) return;
+      await regenerate();
+      return;
+    }
+    if (tail.role !== 'user') return;
+    await generate(conversation, current, tail.attachments ?? undefined);
+  }, [isGenerating, generate, interrupted, regenerate]);
 
   /**
    * Edit a user message in place and regenerate from that point.
@@ -362,7 +384,8 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
 
   const clearError = useCallback(() => setError(null), []);
 
-  const canRetry = !isGenerating && messages.length > 0 && messages[messages.length - 1].role === 'user';
+  const last = messages[messages.length - 1];
+  const canRetry = !isGenerating && Boolean(last) && (last.role === 'user' || (interrupted && last.role === 'assistant'));
 
   return {
     // data
@@ -372,7 +395,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     // Phase 2: project scope for new chats
     activeProjectId, setActiveProject, moveConversation,
     // generation state
-    isGenerating, streamingContent, streamingModel, error, clearError, canRetry,
+    isGenerating, streamingContent, streamingModel, error, clearError, canRetry, interrupted,
     // actions
     loadConversations, selectConversation, startNewChat,
     renameConversation, pinConversation, archiveConversation, deleteConversation,

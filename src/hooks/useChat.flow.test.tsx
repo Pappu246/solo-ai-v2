@@ -141,3 +141,68 @@ describe('useChat flow', () => {
     expect(mock.tables.conversations).toHaveLength(0);
   });
 });
+
+describe('useChat — interrupted streams (chat 502 fix)', () => {
+  /** Streams raw SSE frames so tests can reproduce a truncated provider reply. */
+  function mockRawStream(frames: string[]) {
+    return vi.fn(async (_url: string, init?: RequestInit) => {
+      if (!init || init.method === 'GET') return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      const enc = new TextEncoder();
+      const stream = new ReadableStream<Uint8Array>({
+        start(c) { for (const f of frames) c.enqueue(enc.encode(f)); c.close(); },
+      });
+      return new Response(stream, { status: 200, headers: { 'Content-Type': 'text/event-stream', 'X-Model-Used': 'gpt-oss-120b', 'X-Model-Name': 'GPT OSS 120B', 'X-Route-Category': 'conversation' } });
+    });
+  }
+  const delta = (text: string) => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+
+  it('keeps and persists the partial reply when the stream is cut short', async () => {
+    vi.stubGlobal('fetch', mockRawStream([delta('partial '), delta('answer')]));
+    const { result } = renderHook(() => useChat(user, { settings }));
+    await waitFor(() => expect(result.current.conversationsStatus).toBe('ready'));
+
+    await act(async () => { await result.current.sendMessage('hi'); });
+
+    expect(result.current.messages.map(m => m.role)).toEqual(['user', 'assistant']);
+    expect(result.current.messages[1].content).toBe('partial answer');
+    expect(mock.tables.messages[1].content).toBe('partial answer');
+    expect(result.current.error?.message).toBe('The response was interrupted. You can retry to continue.');
+    expect(result.current.canRetry).toBe(true);
+
+    // Retrying replaces the truncated reply instead of duplicating the turn.
+    vi.stubGlobal('fetch', mockChatFetch('complete answer'));
+    await act(async () => { await result.current.retry(); });
+    expect(result.current.messages.map(m => m.content)).toEqual(['hi', 'complete answer']);
+    expect(mock.tables.messages).toHaveLength(2);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('surfaces a structured mid-stream provider error without losing text', async () => {
+    const errorFrame = 'event: error\ndata: {"error":"AI provider is temporarily unavailable. Please try again.","code":"providers_unavailable","request_id":"req-1"}\n\n';
+    vi.stubGlobal('fetch', mockRawStream([delta('so far'), errorFrame]));
+    const { result } = renderHook(() => useChat(user, { settings }));
+    await waitFor(() => expect(result.current.conversationsStatus).toBe('ready'));
+
+    await act(async () => { await result.current.sendMessage('hi'); });
+
+    expect(result.current.messages[1].content).toBe('so far');
+    expect(result.current.error?.title).toBe('AI is unavailable');
+    expect(result.current.error?.message).toBe('AI provider is temporarily unavailable. Please try again.');
+  });
+
+  it('maps a 502 from the function to a useful message, not a generic one', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      if (!init || init.method === 'GET') return new Response(JSON.stringify({ models: [] }), { status: 200 });
+      return new Response(JSON.stringify({ error: 'AI provider is temporarily unavailable. Please try again.', code: 'providers_unavailable', request_id: 'req-2' }), { status: 502 });
+    }));
+    const { result } = renderHook(() => useChat(user, { settings }));
+    await waitFor(() => expect(result.current.conversationsStatus).toBe('ready'));
+
+    await act(async () => { await result.current.sendMessage('hi'); });
+
+    expect(result.current.error?.message).toBe('AI provider is temporarily unavailable. Please try again.');
+    expect(result.current.error?.detail).toContain('req-2');
+    expect(result.current.canRetry).toBe(true);
+    expect(mock.tables.messages).toHaveLength(1);
+  });
+});

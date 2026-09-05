@@ -25,3 +25,24 @@ jobs:
         run: npm ci
       - name: Validate
         run: npm run check
+
+  edge-functions:
+    name: Edge function (Deno)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # The Edge Function is Deno-only: never resolve the app's package.json.
+      DENO_NO_PACKAGE_JSON: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Deno version
+        run: deno --version
+      - name: Type-check provider layer
+        run: deno check supabase/functions/chat/providers.ts supabase/functions/chat/providers_test.ts
+      - name: Test provider layer
+        run: deno test supabase/functions/chat/providers_test.ts

@@ -64,9 +64,23 @@ src/
 
 supabase/
 ├── functions/chat/
+│   ├── index.ts          request validation, auth, rate limit, Phase 2 context, SSE response
+│   ├── providers.ts      model catalog + aliases, provider fallback, stream guards, safe errors
+│   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
 ├── migrations/
 └── config.toml
 ```
+
+### Chat reliability contract
+
+The `chat` function never returns a raw provider error. Failures come back as
+`{ error, code, request_id }` (and as an `event: error` SSE frame mid-stream),
+with `code` mapped to actionable copy in `src/lib/errors.ts`. Transient
+failures (model retired/not found, 401/402/403, 408, 429, 5xx, network resets,
+provider timeouts) fall back to the next provider; request-specific failures
+(invalid input, context overflow, content policy) fail fast. A clean stream
+always ends with `data: [DONE]`, so an interrupted answer is detected
+(`stream_incomplete`), kept on screen and persisted.
 
 ## Run Locally
 
