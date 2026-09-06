@@ -52,6 +52,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
       if (ready) toast({ title: ready === 1 ? 'File ready' : `${ready} files ready`, tone: 'success' });
       if (failed) toast({ title: failed === 1 ? 'A file could not be processed' : `${failed} files could not be processed`, description: 'Open the file to see why.', tone: 'error' });
       for (const reason of outcome.rejected) toast({ title: 'File skipped', description: reason, tone: 'error' });
+      if (outcome.cancelled.length) toast({ title: outcome.cancelled.length === 1 ? 'Upload cancelled' : `${outcome.cancelled.length} uploads cancelled`, tone: 'info' });
     } finally { setUploading(false); }
   };
 
@@ -111,6 +112,8 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
               files={visible}
               projects={projects}
               onOpen={onOpenFile}
+              progress={knowledge.progress}
+              onCancelUpload={knowledge.cancelUpload}
               emptyMessage={knowledge.files.length === 0 ? 'No files yet. Upload one above to get started.' : query ? `No files match “${query}”.` : `No ${filter} files.`}
             />
           )}

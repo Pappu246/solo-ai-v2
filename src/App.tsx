@@ -204,9 +204,12 @@ function Shell() {
       const outcome = await knowledge.uploadFiles(files, { conversationId, projectId, onChange });
       if (!conversationId) pendingAttachRef.current.push(...outcome.files.filter(f => f.status === 'ready').map(f => f.id));
       for (const reason of outcome.rejected) toast({ title: 'File skipped', description: reason, tone: 'error' });
+      if (outcome.cancelled.length) toast({ title: outcome.cancelled.length === 1 ? 'Upload cancelled' : `${outcome.cancelled.length} uploads cancelled`, tone: 'info' });
       return outcome.files;
     },
     pickFromLibrary: () => new Promise<KnowledgeFile[]>(resolve => setPicker({ resolve })),
+    cancelUpload: knowledge.cancelUpload,
+    progress: knowledge.progress,
   }), [chat.activeConversation, chat.activeProjectId, knowledge, toast]);
 
   const sendMessage = useCallback((text: string, attachments?: Attachment[]) => {
@@ -282,6 +285,7 @@ function Shell() {
           disabled={chat.isGenerating}
         />
 
+        <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {view.kind === 'files' && (
           <FilesView knowledge={knowledge} projects={projectsCtl.projects} onOpenFile={setFileDetail} />
         )}
@@ -348,6 +352,7 @@ function Shell() {
             />
           </>
         )}
+        </main>
       </div>
 
       <SettingsPanel

@@ -4,16 +4,21 @@
  *   register row (uploading) → upload bytes to Storage → processing
  *     → extract text → chunk → save chunks → ready
  *     ↘ any failure → failed (with a user-facing reason)
+ *     ↘ cancelled while uploading → row + partial object removed
  *
  * Kept free of React so hooks and tests can drive it directly. Callers get
  * progress through `onChange`, which fires with the latest row on every
- * transition.
+ * transition, and byte-level progress through `onProgress`.
+ *
+ * Uploads are resumable (TUS, 6 MB chunks) for anything that is not tiny, so
+ * large files survive flaky connections and can be cancelled mid-flight.
  */
 import type { KnowledgeFile, FileMetadata } from '../../types';
-import { filesApi, chunksApi, storagePathFor } from './api';
-import { detectFileType, describeUnsupported, KNOWLEDGE_MAX_FILE_SIZE } from './fileTypes';
+import { filesApi, chunksApi, storagePathFor, type UploadTransportOptions } from './api';
+import { detectFileType, describeUnsupported, KNOWLEDGE_MAX_FILE_SIZE, KNOWLEDGE_MAX_FILE_SIZE_LABEL } from './fileTypes';
 import { extractText, ExtractionError } from './extract';
 import { chunkText, makePreview } from './chunker';
+import { isUploadCancelled } from './resumableUpload';
 import { AppError } from '../errors';
 
 export interface UploadOptions {
@@ -21,24 +26,35 @@ export interface UploadOptions {
   projectId?: string | null;
   conversationId?: string | null;
   onChange?: (file: KnowledgeFile) => void;
+  /** Byte-level progress while the file is being sent to Storage. */
+  onProgress?: (file: KnowledgeFile, sent: number, total: number) => void;
+  /** Abort to cancel: the row and any partial object are removed. */
+  signal?: AbortSignal;
+  /** Test hook: force a transport. */
+  transport?: UploadTransportOptions['transport'];
 }
 
 export class FileValidationError extends Error {
   constructor(message: string) { super(message); this.name = 'FileValidationError'; }
 }
 
+/** Thrown by `upload` when the caller cancels before the file was stored. */
+export class UploadCancelled extends Error {
+  constructor(public readonly fileId: string) { super('Upload cancelled'); this.name = 'AbortError'; }
+}
+
 /** Synchronous pre-flight so the UI can reject bad files before any network call. */
 export function validateFile(file: { name: string; size: number; type?: string }): string | null {
   if (!file.name.trim()) return 'The file has no name.';
   if (file.size === 0) return `${file.name}: the file is empty.`;
-  if (file.size > KNOWLEDGE_MAX_FILE_SIZE) return `${file.name}: larger than 20 MB.`;
+  if (file.size > KNOWLEDGE_MAX_FILE_SIZE) return `${file.name}: larger than ${KNOWLEDGE_MAX_FILE_SIZE_LABEL}.`;
   if (!detectFileType(file)) return `${file.name}: ${describeUnsupported(file.name)}`;
   return null;
 }
 
 function reasonFor(e: unknown): string {
   if (e instanceof ExtractionError || e instanceof FileValidationError) return e.message;
-  if (e instanceof AppError) return e.detail ? `${e.message}: ${e.detail}` : e.message;
+  if (e instanceof AppError) return e.detail && e.detail !== e.message ? `${e.message}: ${e.detail}` : e.message;
   const msg = (e as Error)?.message || 'Unknown error';
   return msg.length > 300 ? `${msg.slice(0, 300)}…` : msg;
 }
@@ -54,12 +70,14 @@ export const fileService = {
 
   /**
    * Upload and index one file. Resolves with the final row (ready or failed);
-   * only rejects when the row could not be created at all.
+   * rejects with `UploadCancelled` when the caller aborts during the upload,
+   * and only otherwise rejects when the row could not be created at all.
    */
   async upload(file: File, opts: UploadOptions): Promise<KnowledgeFile> {
     const problem = validateFile(file);
     if (problem) throw new FileValidationError(problem);
     const type = detectFileType(file)!;
+    if (opts.signal?.aborted) throw new UploadCancelled('');
 
     const id = crypto.randomUUID();
     const metadata: FileMetadata = { kind: type.kind, extension: type.extension, uploaded: false };
@@ -76,12 +94,22 @@ export const fileService = {
     });
     opts.onChange?.(row);
 
-    // 1. Bytes → Storage
+    // 1. Bytes → Storage (resumable for anything that is not tiny)
     try {
-      await filesApi.upload(row.storage_path, file, type.mime);
+      await filesApi.upload(row.storage_path, file, type.mime, {
+        signal: opts.signal,
+        transport: opts.transport,
+        onProgress: (sent, total) => opts.onProgress?.(row, sent, total),
+      });
     } catch (e) {
+      if (isUploadCancelled(e) || opts.signal?.aborted) {
+        await discard(row);
+        throw new UploadCancelled(row.id);
+      }
       return fail(row, `Upload failed. ${reasonFor(e)}`, opts.onChange);
     }
+    // A cancel that raced the final chunk: honour it instead of indexing.
+    if (opts.signal?.aborted) { await discard(row); throw new UploadCancelled(row.id); }
     row = await transition(row, { status: 'processing', metadata: { ...metadata, uploaded: true } }, opts.onChange);
 
     // 2. Extract → chunk → index
@@ -137,6 +165,12 @@ export const fileService = {
     await filesApi.remove(row.id);
   },
 };
+
+/** Remove a cancelled upload: best-effort object cleanup, then the row. */
+async function discard(row: KnowledgeFile): Promise<void> {
+  await filesApi.removeObject(row.storage_path).catch(() => { /* partial object may not exist */ });
+  await filesApi.remove(row.id).catch(() => { /* row may already be gone */ });
+}
 
 async function transition(row: KnowledgeFile, patch: Parameters<typeof filesApi.update>[1], onChange?: (f: KnowledgeFile) => void): Promise<KnowledgeFile> {
   await filesApi.update(row.id, patch);

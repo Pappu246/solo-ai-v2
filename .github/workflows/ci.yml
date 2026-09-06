@@ -23,8 +23,42 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      - name: Validate
+      - name: Validate (typecheck, lint, unit tests, build)
         run: npm run check
+      - name: Type-check end-to-end specs
+        run: npx tsc -p e2e/tsconfig.json
+
+  e2e:
+    name: End-to-end (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run end-to-end tests
+        # The suite mocks the whole Supabase HTTP surface in-browser; the VITE_*
+        # values come from playwright.config.ts and no secrets are required.
+        run: npm run test:e2e
+        env:
+          CI: true
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 7
 
   edge-functions:
     name: Edge function (Deno)

@@ -1,6 +1,7 @@
-import { FileText, FolderKanban, Check } from 'lucide-react';
+import { FileText, FolderKanban, Check, X } from 'lucide-react';
 import type { KnowledgeFile, Project } from '../../types';
 import { FileStatusBadge } from './FileStatusBadge';
+import { IconButton } from '../ui';
 import { formatFileSize } from '../../lib/files';
 import { cn } from '../../lib/cn';
 
@@ -14,6 +15,10 @@ interface Props {
   showProject?: boolean;
   dense?: boolean;
   emptyMessage?: string;
+  /** Byte-level progress for uploads in flight, keyed by file id. */
+  progress?: Record<string, { sent: number; total: number }>;
+  /** When provided, uploading rows show a cancel button. */
+  onCancelUpload?: (fileId: string) => boolean;
 }
 
 function relativeTime(iso: string): string {
@@ -29,7 +34,7 @@ function relativeTime(iso: string): string {
 }
 
 /** Plain list of files; the row is a button that opens the detail dialog. */
-export function FileList({ files, projects = [], onOpen, selectedIds, onToggleSelect, showProject = true, dense, emptyMessage = 'No files yet.' }: Props) {
+export function FileList({ files, projects = [], onOpen, selectedIds, onToggleSelect, showProject = true, dense, emptyMessage = 'No files yet.', progress, onCancelUpload }: Props) {
   if (!files.length) return <p className="px-2 py-8 text-sm text-fg-subtle text-center">{emptyMessage}</p>;
   const selectable = Boolean(selectedIds && onToggleSelect);
   return (
@@ -38,6 +43,8 @@ export function FileList({ files, projects = [], onOpen, selectedIds, onToggleSe
         const project = showProject && f.project_id ? projects.find(p => p.id === f.project_id) : null;
         const selected = selectedIds?.has(f.id) ?? false;
         const canSelect = selectable && f.status === 'ready';
+        const p = f.status === 'uploading' ? progress?.[f.id] : undefined;
+        const percent = p && p.total > 0 ? Math.min(100, Math.round((p.sent / p.total) * 100)) : null;
         return (
           <li key={f.id} className={cn('flex items-center gap-3', dense ? 'py-2' : 'py-2.5', selected && 'bg-accent/5')}>
             {selectable && (
@@ -71,6 +78,12 @@ export function FileList({ files, projects = [], onOpen, selectedIds, onToggleSe
                   <span>{formatFileSize(f.size)}</span>
                   <span aria-hidden>·</span>
                   <span>{relativeTime(f.created_at)}</span>
+                  {percent !== null && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span role="progressbar" aria-label={`Uploading ${f.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={percent} className="tabular-nums">{percent}%</span>
+                    </>
+                  )}
                   {project && (
                     <>
                       <span aria-hidden>·</span>
@@ -81,6 +94,11 @@ export function FileList({ files, projects = [], onOpen, selectedIds, onToggleSe
               </span>
               <FileStatusBadge status={f.status} className="shrink-0" />
             </button>
+            {onCancelUpload && f.status === 'uploading' && (
+              <IconButton label={`Cancel upload of ${f.name}`} size="sm" onClick={() => onCancelUpload(f.id)} className="mr-1 shrink-0">
+                <X className="w-3.5 h-3.5" />
+              </IconButton>
+            )}
           </li>
         );
       })}

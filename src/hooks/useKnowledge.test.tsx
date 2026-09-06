@@ -109,6 +109,46 @@ describe('useKnowledge', () => {
     expect(result.current.files[0].error).toBeNull();
   });
 
+  it('cancels an in-flight upload: the row disappears, nothing is stored, and the outcome reports it', async () => {
+    const { result } = renderHook(() => useKnowledge(user));
+    await waitFor(() => expect(result.current.status).toBe('ready'));
+
+    // Hold the storage write until the test cancels the upload from the hook.
+    let release!: () => void;
+    const held = new Promise<void>(r => { release = r; });
+    const original = mock.client.storage.from;
+    mock.client.storage.from = vi.fn((bucket: string) => {
+      const api = original(bucket);
+      const upload = api.upload;
+      api.upload = vi.fn(async (...args: Parameters<typeof upload>) => { await held; return upload(...args); }) as typeof upload;
+      return api;
+    }) as typeof original;
+
+    let outcome!: Awaited<ReturnType<typeof result.current.uploadFiles>>;
+    let done: Promise<void>;
+    act(() => { done = result.current.uploadFiles([textFile('slow.txt', 'slow content')]).then(o => { outcome = o; }); });
+    await waitFor(() => expect(result.current.files.map(f => f.status)).toEqual(['uploading']));
+    const id = result.current.files[0].id;
+
+    let cancelled = false;
+    act(() => { cancelled = result.current.cancelUpload(id); });
+    expect(cancelled).toBe(true);
+    release();
+    await act(async () => { await done; });
+    mock.client.storage.from = original;
+
+    expect(outcome.cancelled).toEqual([id]);
+    expect(outcome.files).toEqual([]);
+    expect(outcome.rejected).toEqual([]);
+    expect(result.current.files).toEqual([]);
+    expect(result.current.progress).toEqual({});
+    expect(mock.tables.files).toEqual([]);
+    expect(mock.tables.file_chunks).toEqual([]);
+    expect(Object.keys(mock.storage)).toEqual([]);
+    // Cancelling something that is not uploading is a no-op.
+    expect(result.current.cancelUpload('nope')).toBe(false);
+  });
+
   it('only ever lists the signed-in user’s files', async () => {
     const { result } = renderHook(() => useKnowledge(user));
     await waitFor(() => expect(result.current.status).toBe('ready'));

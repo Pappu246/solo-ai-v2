@@ -5,7 +5,14 @@
  */
 import type { FileKind, FileStatus } from '../../types';
 
-export const KNOWLEDGE_MAX_FILE_SIZE = 20 * 1024 * 1024; // 20 MB — matches the bucket limit
+/**
+ * There is no artificial client-side size cap: uploads are resumable and the
+ * bucket / plan limit is the authority (a too-large file is rejected by
+ * Storage with a clear message). This ceiling only matches the maximum size
+ * Supabase accepts for a single resumable upload.
+ */
+export const KNOWLEDGE_MAX_FILE_SIZE = 50 * 1024 * 1024 * 1024; // 50 GB
+export const KNOWLEDGE_MAX_FILE_SIZE_LABEL = '50 GB';
 export const KNOWLEDGE_MAX_FILES_PER_UPLOAD = 10;
 
 interface KindRule { kind: FileKind; mime: string; label: string }

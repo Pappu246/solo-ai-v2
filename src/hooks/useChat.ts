@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Conversation, Message, Attachment, AIModel, ModelInfo, UserSettings, ChatContext, KnowledgeSource } from '../types';
-import { conversationsApi, messagesApi } from '../lib/chat/api';
+import { conversationsApi, messagesApi, ConversationNotFoundError, type ConversationPatch } from '../lib/chat/api';
 import { streamChat, fetchModels } from '../lib/chat/stream';
 import { toFriendlyError, type FriendlyError } from '../lib/errors';
 
@@ -13,6 +13,30 @@ const MAX_HISTORY = 40;
 export function deriveTitle(content: string): string {
   const oneLine = content.replace(/\s+/g, ' ').trim();
   return oneLine.length > 48 ? `${oneLine.slice(0, 48).trimEnd()}…` : oneLine || NEW_CHAT_TITLE;
+}
+
+/**
+ * The one ordering used everywhere: pinned first, then most recently updated.
+ * It is exactly what `conversationsApi.list` returns, so the sidebar looks the
+ * same after an optimistic change as it does after a reload.
+ */
+export function sortConversations(list: Conversation[]): Conversation[] {
+  return [...list].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at));
+}
+
+/**
+ * Which chat to show once `removedId` leaves the list (deleted or archived):
+ * the one after it in sidebar order, else the one before it, else the top of
+ * the list. Stays within the same section (archived chats never surface when
+ * an active, unarchived chat goes away). `null` means "show a blank new chat".
+ */
+export function fallbackAfterRemoval(list: Conversation[], removedId: string): Conversation | null {
+  const removed = list.find(c => c.id === removedId);
+  if (!removed) return null;
+  const section = sortConversations(list).filter(c => Boolean(c.archived) === Boolean(removed.archived));
+  const idx = section.findIndex(c => c.id === removedId);
+  const neighbour = idx === -1 ? null : section[idx + 1] ?? section[idx - 1] ?? null;
+  return neighbour ?? sortConversations(list).find(c => !c.archived && c.id !== removedId) ?? null;
 }
 
 /** Result of the Phase 2 knowledge lookup that runs before each generation. */
@@ -79,10 +103,6 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     activeProjectRef.current = id;
     setActiveProjectId(id);
   }, []);
-  // `patchLocal` is declared below (after the loaders); this ref lets earlier
-  // callbacks use it without reordering the Phase 1 code.
-  const patchLocalRef = useRef<(id: string, patch: Partial<Conversation>) => void>(() => {});
-
   // Keep the model selection in sync when the user changes the preference in Settings.
   useEffect(() => { setSelectedModel(settings.preferred_model); }, [settings.preferred_model]);
 
@@ -97,13 +117,19 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     if (!user) return;
     setConversationsStatus('loading');
     try {
-      setConversations(await conversationsApi.list(user.id));
+      const list = await conversationsApi.list(user.id);
+      setConversations(list);
+      // The open chat must show the same title/flags as its sidebar row.
+      // (A chat missing from the list is left alone: it may have been created
+      // while this request was in flight.)
+      const fresh = activeRef.current ? list.find(c => c.id === activeRef.current!.id) : undefined;
+      if (fresh) setActiveSync(fresh);
       setConversationsStatus('ready');
     } catch (e) {
       setError(toFriendlyError(e));
       setConversationsStatus('error');
     }
-  }, [user]);
+  }, [user, setActiveSync]);
 
   // Initial load — runs once per signed-in user.
   useEffect(() => {
@@ -150,50 +176,90 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     if (projectId !== undefined) setActiveProject(projectId);
   }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject]);
 
-  /** Move a conversation into a project (or out of one with null). */
-  const moveConversation = useCallback(async (id: string, projectId: string | null) => {
-    const previous = conversations.find(c => c.id === id)?.project_id ?? null;
-    patchLocalRef.current(id, { project_id: projectId });
-    try { await conversationsApi.update(id, { project_id: projectId }); }
-    catch (e) { setError(toFriendlyError(e)); patchLocalRef.current(id, { project_id: previous }); }
-  }, [conversations]);
-
   // ── Conversation mutations ─────────────────────────────────────────────────
+  // Every mutation follows the same contract: apply optimistically to the list
+  // *and* to the open chat (so the header, sidebar highlight and composer all
+  // agree), persist, then reconcile with the row the database returned. The
+  // list is re-sorted on each step so it never differs from what a reload shows.
 
   const patchLocal = useCallback((id: string, patch: Partial<Conversation>) => {
-    setConversations(prev => prev.map(c => (c.id === id ? { ...c, ...patch } : c)));
+    setConversations(prev => sortConversations(prev.map(c => (c.id === id ? { ...c, ...patch } : c))));
     if (activeRef.current?.id === id) setActiveSync({ ...activeRef.current, ...patch });
   }, [setActiveSync]);
-  patchLocalRef.current = patchLocal;
+
+  /** The open chat is leaving the list: show its neighbour, or a blank chat if it was the last one. */
+  const leaveActive = useCallback((id: string, list: Conversation[]) => {
+    if (activeRef.current?.id !== id) return;
+    const next = fallbackAfterRemoval(list, id);
+    if (next) void selectConversation(next); else startNewChat();
+  }, [selectConversation, startNewChat]);
+
+  /** Drop a chat that turned out not to exist any more (deleted elsewhere, or never ours). */
+  const evictLocal = useCallback((id: string, list: Conversation[]) => {
+    leaveActive(id, list);
+    setConversations(prev => prev.filter(c => c.id !== id));
+  }, [leaveActive]);
+
+  // Per-chat mutation counter: when two edits race (rename twice, pin/unpin),
+  // only the latest one is allowed to write the server's answer back.
+  const mutationSeq = useRef(new Map<string, number>());
+
+  const mutateConversation = useCallback(async (id: string, patch: ConversationPatch) => {
+    const seq = (mutationSeq.current.get(id) ?? 0) + 1;
+    mutationSeq.current.set(id, seq);
+    const before = conversations;
+    // Optimistic: the database bumps updated_at on every change, so mirror that
+    // and let the chat take the position it will have after a reload.
+    patchLocal(id, { ...patch, updated_at: new Date().toISOString() });
+    try {
+      const stored = await conversationsApi.update(id, patch);
+      // Reconcile only what this call changed (plus the trigger-set timestamp)
+      // so an older response can never overwrite a newer edit to another field.
+      if (mutationSeq.current.get(id) === seq) {
+        const confirmed: Partial<Conversation> = { updated_at: stored.updated_at };
+        for (const key of Object.keys(patch) as (keyof ConversationPatch)[]) Object.assign(confirmed, { [key]: stored[key] });
+        patchLocal(id, confirmed);
+      }
+    } catch (e) {
+      if (mutationSeq.current.get(id) === seq) {
+        if (e instanceof ConversationNotFoundError) evictLocal(id, before);
+        else void loadConversations();
+      }
+      // Set last: opening the fallback chat clears stale errors, and this one
+      // must survive so the user learns the change did not apply.
+      setError(toFriendlyError(e));
+    }
+  }, [conversations, patchLocal, evictLocal, loadConversations]);
 
   const renameConversation = useCallback(async (id: string, title: string) => {
     const trimmed = title.trim();
     if (!trimmed) return;
-    patchLocal(id, { title: trimmed });
-    try { await conversationsApi.update(id, { title: trimmed }); }
-    catch (e) { setError(toFriendlyError(e)); loadConversations(); }
-  }, [patchLocal, loadConversations]);
+    await mutateConversation(id, { title: trimmed });
+  }, [mutateConversation]);
 
   const pinConversation = useCallback(async (id: string, pinned: boolean) => {
-    patchLocal(id, { pinned });
-    try { await conversationsApi.update(id, { pinned }); }
-    catch (e) { setError(toFriendlyError(e)); loadConversations(); }
-  }, [patchLocal, loadConversations]);
+    await mutateConversation(id, { pinned });
+  }, [mutateConversation]);
 
   const archiveConversation = useCallback(async (id: string, archived: boolean) => {
-    patchLocal(id, { archived });
-    if (archived && activeRef.current?.id === id) startNewChat();
-    try { await conversationsApi.update(id, { archived }); }
-    catch (e) { setError(toFriendlyError(e)); loadConversations(); }
-  }, [patchLocal, loadConversations, startNewChat]);
+    // Decide the fallback *before* the flag flips so the neighbour is picked
+    // from the section the chat is leaving.
+    if (archived) leaveActive(id, conversations);
+    await mutateConversation(id, { archived });
+  }, [conversations, leaveActive, mutateConversation]);
+
+  /** Move a conversation into a project (or out of one with null). */
+  const moveConversation = useCallback(async (id: string, projectId: string | null) => {
+    await mutateConversation(id, { project_id: projectId });
+  }, [mutateConversation]);
 
   const deleteConversation = useCallback(async (id: string) => {
     const snapshot = conversations;
+    leaveActive(id, snapshot);
     setConversations(prev => prev.filter(c => c.id !== id));
-    if (activeRef.current?.id === id) startNewChat();
     try { await conversationsApi.remove(id); }
-    catch (e) { setError(toFriendlyError(e)); setConversations(snapshot); }
-  }, [conversations, startNewChat]);
+    catch (e) { setError(toFriendlyError(e)); setConversations(sortConversations(snapshot)); }
+  }, [conversations, leaveActive]);
 
   // ── Generation core ────────────────────────────────────────────────────────
 
@@ -264,10 +330,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
       try {
         await messagesApi.insert({ ...assistant, user_id: user.id });
         await conversationsApi.touch(conversation.id);
-        setConversations(prev => {
-          const updated = prev.map(c => (c.id === conversation.id ? { ...c, updated_at: assistant.created_at } : c));
-          return [...updated].sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updated_at.localeCompare(a.updated_at));
-        });
+        setConversations(prev => sortConversations(prev.map(c => (c.id === conversation.id ? { ...c, updated_at: assistant.created_at } : c))));
       } catch (e) {
         setError(toFriendlyError(e));
       }
@@ -290,7 +353,8 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
       try {
         conversation = await conversationsApi.create(user.id, settings.auto_title ? deriveTitle(text) : NEW_CHAT_TITLE, activeProjectRef.current);
       } catch (e) { setError(toFriendlyError(e)); return; }
-      setConversations(prev => [conversation!, ...prev]);
+      // Newest chat tops the "Recent" section — pinned chats stay above it, as after a reload.
+      setConversations(prev => sortConversations([conversation!, ...prev]));
       setActiveSync(conversation);
       setMessagesSync([]);
       setMessagesStatus('ready');

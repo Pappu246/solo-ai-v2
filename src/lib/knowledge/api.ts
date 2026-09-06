@@ -8,9 +8,20 @@
  */
 import { supabase } from '../supabase';
 import { AppError } from '../errors';
+import { uploadResumable } from './resumableUpload';
 import type { FileChunk, FileMetadata, FileStatus, KnowledgeFile, Memory, MemorySource, MemoryType, Project } from '../../types';
 
 export const KNOWLEDGE_BUCKET = 'knowledge';
+
+/** Files at or above this size go through the resumable (TUS) path. Smaller ones use one request. */
+export const RESUMABLE_THRESHOLD = 6 * 1024 * 1024;
+
+export interface UploadTransportOptions {
+  onProgress?: (sent: number, total: number) => void;
+  signal?: AbortSignal;
+  /** Force one transport (tests); default picks by size. */
+  transport?: 'auto' | 'simple' | 'resumable';
+}
 
 function throwIf(error: { message: string; code?: string } | null, context: string): void {
   if (error) throw new AppError(`${context} failed`, undefined, `${error.code ? `[${error.code}] ` : ''}${error.message}`);
@@ -76,9 +87,29 @@ export const filesApi = {
     throwIf(error, 'Deleting file');
   },
 
-  async upload(path: string, blob: Blob, contentType: string): Promise<void> {
+  /**
+   * Store the bytes. Small files use a single request; anything at or above
+   * `RESUMABLE_THRESHOLD` (or when forced) goes through the resumable TUS
+   * endpoint with 6 MB chunks, per-chunk retry, progress and cancellation.
+   */
+  async upload(path: string, blob: Blob, contentType: string, opts: UploadTransportOptions = {}): Promise<void> {
+    const transport = opts.transport ?? 'auto';
+    const resumable = transport === 'resumable' || (transport === 'auto' && blob.size >= RESUMABLE_THRESHOLD);
+    if (resumable) {
+      await uploadResumable(blob, { bucket: KNOWLEDGE_BUCKET, path, contentType, onProgress: opts.onProgress, signal: opts.signal });
+      return;
+    }
+    if (opts.signal?.aborted) throw Object.assign(new Error('Upload cancelled'), { name: 'AbortError' });
+    opts.onProgress?.(0, blob.size);
     const { error } = await supabase.storage.from(KNOWLEDGE_BUCKET).upload(path, blob, { contentType, upsert: false });
     if (error) throw new AppError('Uploading file failed', undefined, error.message);
+    // A cancel that landed while the single request was in flight: the object
+    // exists now, so remove it again rather than leaving an orphan behind.
+    if (opts.signal?.aborted) {
+      await supabase.storage.from(KNOWLEDGE_BUCKET).remove([path]).catch(() => { /* best effort */ });
+      throw Object.assign(new Error('Upload cancelled'), { name: 'AbortError' });
+    }
+    opts.onProgress?.(blob.size, blob.size);
   },
 
   async download(path: string): Promise<Blob> {

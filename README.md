@@ -21,7 +21,7 @@ SOLO AI brings different AI providers into one clean chat interface with saved c
 
 ### Knowledge layer (Phase 2)
 
-- **Files** — upload PDF, TXT, Markdown, CSV, JSON and common code files (≤ 20 MB). Files are stored in a private Supabase Storage bucket, text is extracted in the browser (PDF via `pdfjs-dist`), chunked, and indexed for full-text search. Each file shows its lifecycle: *uploading → processing → ready | failed*, with retry and a reason on failure.
+- **Files** — upload PDF, TXT, Markdown, CSV, JSON and common code files. Files are stored in a private Supabase Storage bucket, text is extracted in the browser (PDF via `pdfjs-dist`), chunked, and indexed for full-text search. Each file shows its lifecycle: *uploading → processing → ready | failed*, with retry and a reason on failure. Uploads are **resumable** (Phase 3): files of 6 MB and above go through the Storage TUS endpoint in 6 MB chunks with per-chunk retry, live progress and cancel; there is no artificial client-side size cap — the bucket / plan limit is the authority.
 - **Retrieval** — before each reply, only the excerpts relevant to the question (from files attached to the chat or in its project) are sent to the model, within a strict budget. Replies show which files and excerpts were used. Nothing is sent when nothing is relevant.
 - **Memory** — save facts, preferences, instructions and context explicitly (Memory view or *Remember this* on a reply). Memories carry a type, scope (every chat or one project), importance and source, and can be edited or deleted. Nothing is remembered automatically.
 - **Projects** — group chats, files and memories; project instructions are sent with every chat inside the project. Create, rename, archive, delete (chats and files are detached, not deleted). Projects live in the existing sidebar.
@@ -69,6 +69,9 @@ supabase/
 │   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
 ├── migrations/
 └── config.toml
+
+e2e/                    Playwright specs (auth, conversations, composer, upload) +
+└── support/            mockBackend.ts (Supabase HTTP mock with RLS/TUS/SSE), fixtures.ts
 ```
 
 ### Chat reliability contract
@@ -81,6 +84,22 @@ provider timeouts) fall back to the next provider; request-specific failures
 (invalid input, context overflow, content policy) fail fast. A clean stream
 always ends with `data: [DONE]`, so an interrupted answer is detected
 (`stream_incomplete`), kept on screen and persisted.
+
+### Conversation state contract
+
+Every conversation action (rename, pin, archive, move, delete) in
+`src/hooks/useChat.ts` follows one pattern: apply optimistically to the list
+*and* to the open chat, persist, then reconcile with the row the database
+returned (`conversationsApi.update` → `.select().single()`). The list is
+always kept in `sortConversations` order — pinned first, then most recently
+updated — which is the same order `conversationsApi.list` returns, so the
+sidebar never differs from what a reload would show. Renaming/pinning the open
+chat keeps it open; archiving or deleting it opens the neighbouring chat
+(`fallbackAfterRemoval`) or a blank chat when none is left. An update that
+matches no row (deleted on another device, or not yours — RLS makes both look
+identical) surfaces as *Not found* and the row is evicted locally. The app has
+no URL router (a single-screen shell), so there is no route state to keep in
+sync; nothing ever triggers a full reload.
 
 ## Run Locally
 
@@ -133,9 +152,39 @@ npm run check
 
 This runs TypeScript checking, ESLint, the Vitest suite and the production build. Use `npm test` for tests alone.
 
+End-to-end tests (Playwright) drive the real production build in Chromium
+against an in-browser mock of the Supabase HTTP surface (`e2e/support/mockBackend.ts`
+— auth, PostgREST with simulated RLS, Storage incl. the TUS resumable endpoint,
+and the SSE chat function), so they need no project, keys or network:
+
+```bash
+npm run test:e2e:install   # once: downloads Chromium
+npm run test:e2e           # builds, serves on :4173, runs e2e/*.spec.ts
+```
+
+They cover sign-in and cross-user isolation, rename / pin / archive / delete
+(cancel + confirm) with reload, composer keyboard behaviour (Enter, Shift+Enter,
+Ctrl+Enter mode, Stop/Escape), and the upload flow (single-request and
+resumable uploads with progress, cancel, and asking a question about the file).
+Where Chromium cannot be downloaded, point `PLAYWRIGHT_CHROMIUM_PATH` at an
+existing binary (and `PLAYWRIGHT_CHROMIUM_ARGS` at its launch flags).
+
+The same mock backend can also be *used* interactively — handy for demos and
+UI review without a Supabase project:
+
+```bash
+npm run demo               # http://localhost:5173 — sign in as e2e@example.com / "correct horse battery"
+```
+
+`e2e/support/mockServer.ts` serves the mock over HTTP (port 8787) and
+`vite.demo.config.ts` proxies `/mock/*` to it, so the app runs unmodified with
+seeded chats, streaming replies from a canned "model", resumable uploads and
+sign-up. Everything is in memory and resets on restart; the AI replies are
+placeholders, not real model output.
+
 ### 7. Apply database migrations
 
-Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). The latest, `20260903120000_phase2_knowledge.sql`, creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. It is idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
+Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). `20260903120000_phase2_knowledge.sql` creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. The latest, `20260906090000_phase3_resumable_uploads.sql`, lifts the bucket's 20 MB cap for resumable uploads, widens the MIME allow-list to the code types browsers report, and re-asserts the storage ownership policies. All migrations are idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
 
 ## Security
 

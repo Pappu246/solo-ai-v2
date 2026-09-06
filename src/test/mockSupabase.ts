@@ -23,6 +23,13 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
   let user = opts.userId === null ? null : { id: opts.userId ?? 'user-1', email: 'test@example.com' };
   const sessionFor = () => (user ? { access_token: 'token', user } : null);
   const rlsError = { code: '42501', message: 'new row violates row-level security policy', details: null, hint: null };
+  // Monotonic clock for created_at/updated_at so two writes in the same
+  // millisecond still sort in write order (like Postgres' now() precision does).
+  let lastTick = 0;
+  const nextTimestamp = () => {
+    lastTick = Math.max(lastTick + 1, Date.now());
+    return new Date(lastTick).toISOString();
+  };
 
   /** Ownership check used by the RLS simulation. Messages are owned via their conversation. */
   const visible = (table: string, r: Row): boolean => {
@@ -60,20 +67,29 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
           if (!user) return { data: null, error: rlsError };
           for (const r of items) {
             if (OWNED_BY_USER_ID.has(table) && r.user_id !== user.id) return { data: null, error: rlsError };
-            if (table === 'messages' && !visible('messages', r)) return { data: null, error: rlsError };
+            // `Users own messages`: WITH CHECK (auth.uid() = user_id) — and the
+            // conversation must be readable by the caller (FK + visibility).
+            if (table === 'messages' && (r.user_id !== user.id || !visible('messages', r))) return { data: null, error: rlsError };
             if (table === 'files' && String(r.storage_path ?? '').split('/')[0] !== user.id) return { data: null, error: rlsError };
             if (table === 'file_chunks' && !(tables.files ?? []).some(f => f.id === r.file_id && f.user_id === user!.id)) return { data: null, error: rlsError };
           }
         }
-        const now = new Date().toISOString();
+        const now = nextTimestamp();
         const inserted = items.map(r => ({ id: crypto.randomUUID(), created_at: now, updated_at: now, archived: false, ...r }));
         rows().push(...inserted);
         return { data: single ? inserted[0] : inserted, error: null };
       }
       if (op === 'update') {
         const matched = apply();
-        for (const r of matched) Object.assign(r, payload, { updated_at: new Date().toISOString() });
-        return { data: matched, error: null };
+        // Mirror the `update_updated_at` trigger; keep the clock strictly
+        // increasing so ordering by updated_at is deterministic in tests.
+        for (const r of matched) Object.assign(r, payload, { updated_at: nextTimestamp() });
+        if (single) {
+          // PostgREST: `.single()` over zero or many rows is a 406 / PGRST116.
+          if (matched.length !== 1) return { data: null, error: { code: 'PGRST116', message: 'JSON object requested, multiple (or no) rows returned', details: `Results contain ${matched.length} rows`, hint: null } };
+          return { data: { ...matched[0] }, error: null };
+        }
+        return { data: matched.map(r => ({ ...r })), error: null };
       }
       if (op === 'delete') {
         const matched = new Set(apply());
