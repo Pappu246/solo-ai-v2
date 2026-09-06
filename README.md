@@ -85,6 +85,31 @@ provider timeouts) fall back to the next provider; request-specific failures
 always ends with `data: [DONE]`, so an interrupted answer is detected
 (`stream_incomplete`), kept on screen and persisted.
 
+### PDF extraction and worker loading
+
+PDF processing runs entirely in the browser after Storage upload; there is no
+`process-file` Edge Function. `src/lib/knowledge/extract.ts` lazy-loads pdf.js
+and a Vite-built `?worker` chunk, supplies it through
+`GlobalWorkerOptions.workerPort`, and waits for the worker's ready signal (or
+an error/timeout). It does not ask pdf.js to load a standalone `.mjs` module
+worker via `workerSrc`, which can fail under production CSP, MIME or base-path
+configuration.
+
+If Workers are unavailable or blocked, the reader explicitly imports the
+bundled `?url` asset once and registers its `WorkerMessageHandler` before
+creating a main-thread reader. This is the pdf.js v6 equivalent of
+`disableWorker: true` (that option is no longer supported), not pdf.js's
+URL-based fake-worker fallback. The shared reader is reused across concurrent
+and later uploads; each document's loading task is cleaned up independently.
+If both paths fail, or the PDF is password-protected, corrupt or empty, the
+file's failure message retains the original diagnostic and is also logged to
+`console.error`. Unknown errors are not mislabeled as corruption.
+
+The modern pdf.js v6 build also requires recent browser APIs such as
+`Uint8Array.toHex()`. Keep the Playwright/browser revision current when running
+PDF regressions: the former Chromium 131 pin predates that API and cannot
+extract real PDFs with this version of pdf.js.
+
 ### Conversation state contract
 
 Every conversation action (rename, pin, archive, move, delete) in
@@ -166,6 +191,11 @@ They cover sign-in and cross-user isolation, rename / pin / archive / delete
 (cancel + confirm) with reload, composer keyboard behaviour (Enter, Shift+Enter,
 Ctrl+Enter mode, Stop/Escape), and the upload flow (single-request and
 resumable uploads with progress, cancel, and asking a question about the file).
+PDF regressions use valid, runtime-generated fixtures, including a 7 MB PDF
+that takes the TUS path. They exercise actual pdf.js extraction, block the
+standalone `.mjs` worker asset, disable Workers with CSP or a missing API,
+check concurrent/sequential reader reuse, and verify failure details in the UI
+and console. Only Supabase is mocked — not the PDF parser or Worker.
 Where Chromium cannot be downloaded, point `PLAYWRIGHT_CHROMIUM_PATH` at an
 existing binary (and `PLAYWRIGHT_CHROMIUM_ARGS` at its launch flags).
 
