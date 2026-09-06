@@ -106,31 +106,131 @@ function flatten(value: unknown, path: string, out: string[], limit: number): vo
   out.push(`${path || '$'}: ${typeof value === 'string' ? value : JSON.stringify(value)}`);
 }
 
+type PdfJs = typeof import('pdfjs-dist');
+interface PdfReader {
+  pdfjs: PdfJs;
+  worker: InstanceType<PdfJs['PDFWorker']>;
+}
+
+// Share initialization AND the PDFWorker, not just its underlying port. Passing
+// the worker explicitly to getDocument prevents one document's destroy() from
+// tearing down a worker that another concurrent upload is still using.
+let pdfReaderPromise: Promise<PdfReader> | undefined;
+
+function getPdfReader(): Promise<PdfReader> {
+  return pdfReaderPromise ??= loadPdfReader().catch(error => {
+    pdfReaderPromise = undefined; // allow retry after a transient loading failure
+    throw error;
+  });
+}
+
+async function loadPdfReader(): Promise<PdfReader> {
+  // Keep both the reader and worker out of the initial chat bundle.
+  const pdfjs = await import('pdfjs-dist');
+  let port: Worker | undefined;
+  let worker: PdfReader['worker'] | undefined;
+  try {
+    const { default: BundledPdfWorker } = await import('pdfjs-dist/build/pdf.worker.min.mjs?worker');
+    port = new BundledPdfWorker();
+    // A supplied workerPort bypasses pdf.js's startup/error checks. CSP and
+    // failed script loads may report errors asynchronously, so wait for ready.
+    await waitForPdfWorker(port);
+    pdfjs.GlobalWorkerOptions.workerPort = port;
+    worker = pdfjs.PDFWorker.create({ port });
+    await worker.promise;
+    return { pdfjs, worker };
+  } catch (workerError) {
+    worker?.destroy();
+    port?.terminate();
+    pdfjs.GlobalWorkerOptions.workerPort = null;
+    console.error('[PDF worker] Bundled worker unavailable; trying main-thread extraction.', workerError);
+
+    try {
+      // pdf.js v6 removed disableWorker: true. Its main-thread equivalent is
+      // to register WorkerMessageHandler BEFORE creating PDFWorker. Resolve
+      // our bundled asset explicitly, once, instead of letting pdf.js create
+      // a module Worker and then runtime-import workerSrc as a fake fallback.
+      const { default: workerUrl } = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
+      type WorkerModule = { WorkerMessageHandler?: { setup?: unknown } };
+      const workerModule: WorkerModule = await import(/* @vite-ignore */ workerUrl);
+      if (typeof workerModule.WorkerMessageHandler?.setup !== 'function') {
+        throw new Error('The PDF worker module did not export WorkerMessageHandler.');
+      }
+      (globalThis as typeof globalThis & { pdfjsWorker: WorkerModule }).pdfjsWorker = workerModule;
+      worker = pdfjs.PDFWorker.create({});
+      await worker.promise;
+      return { pdfjs, worker };
+    } catch (fallbackError) {
+      worker?.destroy();
+      throw new Error(`PDF worker startup failed: ${pdfErrorDetail(workerError)} Main-thread fallback failed: ${pdfErrorDetail(fallbackError)}`);
+    }
+  }
+}
+
+function waitForPdfWorker(port: Worker): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const finish = (error?: Error) => {
+      clearTimeout(timeout);
+      port.removeEventListener('message', onMessage);
+      port.removeEventListener('error', onError);
+      if (error) reject(error); else resolve();
+    };
+    const onMessage = (event: MessageEvent) => {
+      if (event.data?.sourceName === 'worker' && event.data?.action === 'ready') finish();
+    };
+    const onError = (event: ErrorEvent) => {
+      event.preventDefault();
+      finish(new Error(event.message || 'The browser blocked or could not load the PDF worker script.'));
+    };
+    // Don't leave a file stuck in "processing" if a browser never reports a
+    // blocked worker's error event. No document bytes have been transferred yet.
+    const timeout = setTimeout(() => finish(new Error('The PDF worker did not start within 10 seconds.')), 10_000);
+    port.addEventListener('message', onMessage);
+    port.addEventListener('error', onError);
+  });
+}
+
+function pdfErrorDetail(error: unknown): string {
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object') {
+    const { name, message } = error as { name?: unknown; message?: unknown };
+    const label = typeof name === 'string' && name !== 'Error' ? name : '';
+    if (typeof message === 'string' && message) return label ? `${label}: ${message}` : message;
+    return label;
+  }
+  return error == null ? '' : String(error);
+}
+
+/** Classify PDF failures without hiding the original diagnostic behind "corrupt". */
+export function describePdfError(error: unknown): string {
+  const detail = pdfErrorDetail(error);
+  const message = detail.toLowerCase();
+  let summary: string;
+  if (/password|encrypted/.test(message)) {
+    summary = 'This PDF is password-protected. Remove the password and upload it again.';
+  } else if (/empty|zero bytes|no (?:readable |extractable )?text|no pages/.test(message)) {
+    summary = 'No readable text was found in this PDF. It may be empty or scanned (images only); scanned PDFs aren’t supported yet.';
+  } else if (/worker|dynamically imported module|module script|importing a module|failed to fetch|loading chunk|chunkloaderror|securityerror|content security policy|\bcsp\b|\bmime\b/.test(message)) {
+    summary = 'The PDF reader could not start. Check your connection and browser security settings, then reload and try again.';
+  } else if (/invalidpdf|invalid pdf|invalid xref|invalid cross-reference|corrupt|formaterror/.test(message)) {
+    summary = 'This PDF could not be opened because it is invalid or corrupted.';
+  } else {
+    summary = 'This PDF could not be processed.';
+  }
+  return detail ? `${summary} Details: ${detail}` : summary;
+}
+
 async function extractPdf(file: Blob): Promise<ExtractionResult> {
-  // Lazy-load pdf.js so the chat bundle does not pay for it.
-  let pdfjs: typeof import('pdfjs-dist');
+  let task: ReturnType<PdfJs['getDocument']> | undefined;
   try {
-    pdfjs = await import('pdfjs-dist');
-    const worker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
-    pdfjs.GlobalWorkerOptions.workerSrc = worker.default;
-  } catch {
-    throw new ExtractionError('The PDF reader could not be loaded. Check your connection and try again.');
-  }
-
-  let doc: Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>;
-  try {
-    doc = await pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
-  } catch (e) {
-    const msg = String((e as Error)?.message || '').toLowerCase();
-    if (msg.includes('password')) throw new ExtractionError('This PDF is password-protected.');
-    throw new ExtractionError('This PDF could not be opened. It may be corrupted.');
-  }
-
-  const total = doc.numPages;
-  const pages = Math.min(total, MAX_PDF_PAGES);
-  const parts: string[] = [];
-  let chars = 0;
-  try {
+    if (!file.size) throw new ExtractionError('The PDF file is empty.');
+    const { pdfjs, worker } = await getPdfReader();
+    task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()), worker });
+    const doc = await task.promise;
+    const total = doc.numPages;
+    const pages = Math.min(total, MAX_PDF_PAGES);
+    const parts: string[] = [];
+    let chars = 0;
     for (let i = 1; i <= pages && chars < MAX_EXTRACTED_CHARS; i++) {
       const page = await doc.getPage(i);
       const content = await page.getTextContent();
@@ -138,13 +238,18 @@ async function extractPdf(file: Blob): Promise<ExtractionResult> {
       page.cleanup();
       if (text.trim()) { parts.push(`[Page ${i}]\n${text}`); chars += text.length; }
     }
+    const { text, truncated } = capped(parts.join('\n\n'));
+    if (!text) throw new ExtractionError('The PDF contains no readable text.');
+    return { text, metadata: { pages: total, truncated: truncated || total > pages } };
+  } catch (error) {
+    const message = describePdfError(error);
+    console.error('[PDF extraction]', message, error);
+    throw new ExtractionError(message);
   } finally {
-    await doc.loadingTask.destroy().catch(() => { /* already destroyed */ });
+    // Clean up rejected loading tasks and page/text failures too, but keep the
+    // explicitly supplied shared worker alive for other uploads and retries.
+    await task?.destroy().catch(() => { /* already destroyed */ });
   }
-
-  const { text, truncated } = capped(parts.join('\n\n'));
-  if (!text) throw new ExtractionError('No readable text was found. Scanned PDFs (images only) aren’t supported yet.');
-  return { text, metadata: { pages: total, truncated: truncated || total > pages } };
 }
 
 /** Rebuild lines from pdf.js text items, respecting explicit end-of-line markers. */
