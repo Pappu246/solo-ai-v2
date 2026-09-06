@@ -85,6 +85,22 @@ always ends with `data: [DONE]`, so an interrupted answer is detected
 ## Run Locally
 
 ### 1. Clone the repository
+### Conversation state contract
+
+Every conversation action (rename, pin, archive, move, delete) in
+`src/hooks/useChat.ts` follows one pattern: apply optimistically to the list
+*and* to the open chat, persist, then reconcile with the row the database
+returned (`conversationsApi.update` → `.select().single()`). The list is
+always kept in `sortConversations` order — pinned first, then most recently
+updated — which is the same order `conversationsApi.list` returns, so the
+sidebar never differs from what a reload would show. Renaming/pinning the open
+chat keeps it open; archiving or deleting it opens the neighbouring chat
+(`fallbackAfterRemoval`) or a blank chat when none is left. An update that
+matches no row (deleted on another device, or not yours — RLS makes both look
+identical) surfaces as *Not found* and the row is evicted locally. The app has
+no URL router (a single-screen shell), so there is no route state to keep in
+sync; nothing ever triggers a full reload.
+
 
 ```bash
 git clone https://github.com/Pappu246/solo-ai-v2.git

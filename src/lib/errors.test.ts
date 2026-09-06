@@ -42,6 +42,18 @@ describe('toFriendlyError (Phase 2)', () => {
     expect(toFriendlyError(new Error('permission denied for table memories')).title).toBe('No access');
     expect(toFriendlyError(new AppError('Forbidden', 403)).retryable).toBe(false);
   });
+
+  it('maps a write that matched no row (deleted elsewhere / not ours) to "Not found"', () => {
+    const e = toFriendlyError(new AppError('This chat no longer exists or you don’t have access to it.', 404, '[PGRST116] JSON object requested, multiple (or no) rows returned', 'not_found'));
+    expect(e.title).toBe('Not found');
+    expect(e.message).toBe('This chat no longer exists or you don’t have access to it.');
+    expect(e.retryable).toBe(false);
+    expect(e.code).toBe('not_found');
+    // Raw PostgREST detail without our code still maps to the same bucket.
+    expect(toFriendlyError(new AppError('Updating chat failed', undefined, '[PGRST116] JSON object requested')).title).toBe('Not found');
+    // A 404 from the function is never shown as the generic "Request rejected".
+    expect(toFriendlyError(new AppError('Request failed (404)', 404)).title).toBe('Not found');
+  });
 });
 
 describe('toFriendlyError (chat 502 fix: server error codes)', () => {

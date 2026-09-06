@@ -11,6 +11,27 @@ function throwIf(error: { message: string; code?: string } | null, context: stri
   if (error) throw new AppError(`${context} failed`, undefined, `${error.code ? `[${error.code}] ` : ''}${error.message}`);
 }
 
+/** PostgREST code for "expected exactly one row" — i.e. the update matched nothing. */
+const NO_ROW = 'PGRST116';
+
+/**
+ * A write that matched no row: the chat was deleted (possibly on another
+ * device) or belongs to someone else. RLS hides other users' rows entirely,
+ * so both cases surface identically — as no row, never as another's data.
+ */
+export class ConversationNotFoundError extends AppError {
+  constructor(detail?: string) {
+    super('This chat no longer exists or you don’t have access to it.', 404, detail, 'not_found');
+    this.name = 'ConversationNotFoundError';
+  }
+}
+
+function normalizeConversation(row: Record<string, unknown>): Conversation {
+  return { ...row, archived: Boolean(row.archived), project_id: row.project_id ?? null } as Conversation;
+}
+
+export type ConversationPatch = Partial<Pick<Conversation, 'title' | 'pinned' | 'archived' | 'model_id' | 'project_id'>>;
+
 export const conversationsApi = {
   async list(userId: string): Promise<Conversation[]> {
     const { data, error } = await supabase
@@ -20,7 +41,7 @@ export const conversationsApi = {
       .order('pinned', { ascending: false })
       .order('updated_at', { ascending: false });
     throwIf(error, 'Loading chats');
-    return (data ?? []).map(row => ({ ...row, archived: Boolean(row.archived), project_id: row.project_id ?? null })) as Conversation[];
+    return (data ?? []).map(normalizeConversation);
   },
 
   async create(userId: string, title = 'New chat', projectId: string | null = null): Promise<Conversation> {
@@ -31,12 +52,20 @@ export const conversationsApi = {
       .select()
       .single();
     throwIf(error, 'Creating chat');
-    return { ...data, archived: Boolean(data.archived), project_id: data.project_id ?? null } as Conversation;
+    return normalizeConversation(data);
   },
 
-  async update(id: string, patch: Partial<Pick<Conversation, 'title' | 'pinned' | 'archived' | 'model_id' | 'project_id'>>): Promise<void> {
-    const { error } = await supabase.from('conversations').update(patch).eq('id', id);
+  /**
+   * Persist a rename / pin / archive / move and return the row as stored.
+   * The returned `updated_at` (bumped by the database trigger) is what decides
+   * sidebar order after a reload, so callers reconcile local state with it.
+   * Throws `ConversationNotFoundError` when no row was updated.
+   */
+  async update(id: string, patch: ConversationPatch): Promise<Conversation> {
+    const { data, error } = await supabase.from('conversations').update(patch).eq('id', id).select().single();
+    if (error?.code === NO_ROW) throw new ConversationNotFoundError(`[${error.code}] ${error.message}`);
     throwIf(error, 'Updating chat');
+    return normalizeConversation(data);
   },
 
   /** Bump updated_at so the chat rises to the top of the list. */

@@ -72,6 +72,11 @@ export function toFriendlyError(error: unknown): FriendlyError {
   if (status === 403 || lower.includes('row-level security') || lower.includes('permission denied') || lower.includes('[42501]')) {
     return { title: 'No access', message: 'You don’t have permission to do that.', detail, retryable: false };
   }
+  // A write that matched no row (PGRST116): the item was deleted elsewhere or
+  // is not ours — RLS makes both look identical, so say so without guessing.
+  if (code === 'not_found' || status === 404 || lower.includes('[pgrst116]')) {
+    return { title: 'Not found', message: raw && code === 'not_found' ? raw : 'That item no longer exists or you don’t have access to it.', detail, retryable: false, ...(code ? { code } : {}) };
+  }
   if (status === 429 || lower.includes('rate limit')) {
     return { title: 'Slow down', message: 'You are sending messages too quickly. Wait a moment and try again.', detail, retryable: true };
   }
