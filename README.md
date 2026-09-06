@@ -85,9 +85,6 @@ provider timeouts) fall back to the next provider; request-specific failures
 always ends with `data: [DONE]`, so an interrupted answer is detected
 (`stream_incomplete`), kept on screen and persisted.
 
-## Run Locally
-
-### 1. Clone the repository
 ### Conversation state contract
 
 Every conversation action (rename, pin, archive, move, delete) in
@@ -104,6 +101,9 @@ identical) surfaces as *Not found* and the row is evicted locally. The app has
 no URL router (a single-screen shell), so there is no route state to keep in
 sync; nothing ever triggers a full reload.
 
+## Run Locally
+
+### 1. Clone the repository
 
 ```bash
 git clone https://github.com/Pappu246/solo-ai-v2.git
@@ -168,6 +168,20 @@ Ctrl+Enter mode, Stop/Escape), and the upload flow (single-request and
 resumable uploads with progress, cancel, and asking a question about the file).
 Where Chromium cannot be downloaded, point `PLAYWRIGHT_CHROMIUM_PATH` at an
 existing binary (and `PLAYWRIGHT_CHROMIUM_ARGS` at its launch flags).
+
+The same mock backend can also be *used* interactively — handy for demos and
+UI review without a Supabase project:
+
+```bash
+npm run demo               # http://localhost:5173 — sign in as e2e@example.com / "correct horse battery"
+```
+
+`e2e/support/mockServer.ts` serves the mock over HTTP (port 8787) and
+`vite.demo.config.ts` proxies `/mock/*` to it, so the app runs unmodified with
+seeded chats, streaming replies from a canned "model", resumable uploads and
+sign-up. Everything is in memory and resets on restart; the AI replies are
+placeholders, not real model output.
+
 ### 7. Apply database migrations
 
 Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). `20260903120000_phase2_knowledge.sql` creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. The latest, `20260906090000_phase3_resumable_uploads.sql`, lifts the bucket's 20 MB cap for resumable uploads, widens the MIME allow-list to the code types browsers report, and re-asserts the storage ownership policies. All migrations are idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
