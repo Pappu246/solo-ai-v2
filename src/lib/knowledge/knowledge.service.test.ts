@@ -43,7 +43,10 @@ describe('file upload lifecycle', () => {
   it('validates before any network call', async () => {
     expect(fileService.validate(textFile('empty.txt', ''))).toMatch(/empty/);
     expect(fileService.validate(textFile('deck.pptx', 'x', 'application/vnd.openxmlformats-officedocument.presentationml.presentation'))).toMatch(/\.pptx/);
-    expect(fileService.validate({ name: 'big.txt', size: 21 * 1024 * 1024, type: 'text/plain' })).toMatch(/20 MB/);
+    // No artificial size cap: large documents go through the resumable path.
+    expect(fileService.validate({ name: 'big.txt', size: 21 * 1024 * 1024, type: 'text/plain' })).toBeNull();
+    expect(fileService.validate({ name: 'huge.txt', size: 2 * 1024 * 1024 * 1024, type: 'text/plain' })).toBeNull();
+    expect(fileService.validate({ name: 'absurd.txt', size: 51 * 1024 * 1024 * 1024, type: 'text/plain' })).toMatch(/50 GB/);
     expect(fileService.validate(textFile('ok.md', '# hi'))).toBeNull();
     await expect(fileService.upload(textFile('deck.pptx', 'x', 'application/octet-stream'), { userId: ALICE.id })).rejects.toBeInstanceOf(FileValidationError);
     expect(mock.tables.files).toHaveLength(0);
@@ -176,7 +179,7 @@ describe('memory', () => {
 
   it('is only ever created explicitly (nothing is saved by sending chat messages)', async () => {
     const c = await conversationsApi.create(ALICE.id, 'My name is Ada and my card number is 4111');
-    await messagesApi.insert({ conversation_id: c.id, role: 'user', content: 'My name is Ada and my card number is 4111 1111 1111 1111' } as never);
+    await messagesApi.insert({ id: 'm-ada', conversation_id: c.id, user_id: ALICE.id, role: 'user', content: 'My name is Ada and my card number is 4111 1111 1111 1111', created_at: new Date().toISOString() });
     expect(mock.tables.memories).toHaveLength(0);
   });
 
@@ -304,7 +307,7 @@ describe('global search', () => {
   async function seedEverything() {
     const p = await projectsApi.create(ALICE.id, { name: 'Falcon rollout', description: 'Rollout of the falcon feature' });
     const c = await conversationsApi.create(ALICE.id, 'Falcon pricing discussion', p.id);
-    await messagesApi.insert({ conversation_id: c.id, role: 'user', content: 'What should falcon cost per seat?' } as never);
+    await messagesApi.insert({ id: 'm-falcon', conversation_id: c.id, user_id: ALICE.id, role: 'user', content: 'What should falcon cost per seat?', created_at: new Date().toISOString() });
     await fileService.upload(textFile('falcon-spec.md', 'Falcon spec: the falcon feature ships in October.', 'text/markdown'), { userId: ALICE.id, projectId: p.id });
     await memoriesApi.create(ALICE.id, { content: 'Falcon is the codename for the analytics add-on', type: 'context' });
     return { p, c };

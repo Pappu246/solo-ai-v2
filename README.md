@@ -21,7 +21,7 @@ SOLO AI brings different AI providers into one clean chat interface with saved c
 
 ### Knowledge layer (Phase 2)
 
-- **Files** — upload PDF, TXT, Markdown, CSV, JSON and common code files (≤ 20 MB). Files are stored in a private Supabase Storage bucket, text is extracted in the browser (PDF via `pdfjs-dist`), chunked, and indexed for full-text search. Each file shows its lifecycle: *uploading → processing → ready | failed*, with retry and a reason on failure.
+- **Files** — upload PDF, TXT, Markdown, CSV, JSON and common code files. Files are stored in a private Supabase Storage bucket, text is extracted in the browser (PDF via `pdfjs-dist`), chunked, and indexed for full-text search. Each file shows its lifecycle: *uploading → processing → ready | failed*, with retry and a reason on failure. Uploads are **resumable** (Phase 3): files of 6 MB and above go through the Storage TUS endpoint in 6 MB chunks with per-chunk retry, live progress and cancel; there is no artificial client-side size cap — the bucket / plan limit is the authority.
 - **Retrieval** — before each reply, only the excerpts relevant to the question (from files attached to the chat or in its project) are sent to the model, within a strict budget. Replies show which files and excerpts were used. Nothing is sent when nothing is relevant.
 - **Memory** — save facts, preferences, instructions and context explicitly (Memory view or *Remember this* on a reply). Memories carry a type, scope (every chat or one project), importance and source, and can be edited or deleted. Nothing is remembered automatically.
 - **Projects** — group chats, files and memories; project instructions are sent with every chat inside the project. Create, rename, archive, delete (chats and files are detached, not deleted). Projects live in the existing sidebar.
@@ -135,7 +135,7 @@ This runs TypeScript checking, ESLint, the Vitest suite and the production build
 
 ### 7. Apply database migrations
 
-Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). The latest, `20260903120000_phase2_knowledge.sql`, creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. It is idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
+Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). `20260903120000_phase2_knowledge.sql` creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. The latest, `20260906090000_phase3_resumable_uploads.sql`, lifts the bucket's 20 MB cap for resumable uploads, widens the MIME allow-list to the code types browsers report, and re-asserts the storage ownership policies. All migrations are idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.
 
 ## Security
 

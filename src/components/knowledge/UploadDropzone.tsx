@@ -44,7 +44,7 @@ export function UploadDropzone({ onFiles, disabled, compact, hint }: Props) {
             {dragging ? 'Drop to upload' : compact ? 'Upload files' : 'Click to upload or drop files here'}
           </span>
           <span className="block text-[11px] text-fg-subtle mt-0.5">
-            {hint ?? 'PDF, text, Markdown, CSV, JSON or code · up to 20 MB each'}
+            {hint ?? 'PDF, text, Markdown, CSV, JSON or code · large files upload in resumable chunks'}
           </span>
         </span>
       </button>

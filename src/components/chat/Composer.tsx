@@ -16,6 +16,10 @@ export interface KnowledgeUploader {
   upload: (files: File[], onChange: (file: KnowledgeFile) => void) => Promise<KnowledgeFile[]>;
   /** Open the "attach from library" picker; resolves with the chosen files (or []). */
   pickFromLibrary?: () => Promise<KnowledgeFile[]>;
+  /** Cancel an upload that is still sending bytes. Returns false when it can no longer be cancelled. */
+  cancelUpload?: (fileId: string) => boolean;
+  /** Byte-level progress per file id for uploads in flight. */
+  progress?: Record<string, { sent: number; total: number }>;
 }
 
 interface Props {
@@ -93,10 +97,17 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     const images: File[] = [];
     const documents: File[] = [];
     for (const f of list) {
-      if (f.size > MAX_FILE_SIZE) { errors.push(`${f.name}: larger than 20 MB`); continue; }
-      if (ACCEPTED_TYPES[f.type] === 'image') { images.push(f); continue; }
+      if (ACCEPTED_TYPES[f.type] === 'image') {
+        // Images travel inline (base64) with the request, so they keep a hard cap.
+        if (f.size > MAX_FILE_SIZE) { errors.push(`${f.name}: images must be under ${formatFileSize(MAX_FILE_SIZE)}`); continue; }
+        images.push(f); continue;
+      }
+      // Documents go through the resumable knowledge pipeline: no client cap here.
       if (knowledge && detectFileType(f)) { documents.push(f); continue; }
-      if (!knowledge && ACCEPTED_TYPES[f.type]) { documents.push(f); continue; }
+      if (!knowledge && ACCEPTED_TYPES[f.type]) {
+        if (f.size > MAX_FILE_SIZE) { errors.push(`${f.name}: larger than ${formatFileSize(MAX_FILE_SIZE)}`); continue; }
+        documents.push(f); continue;
+      }
       errors.push(`${f.name}: unsupported type`);
     }
     const accepted = [...images, ...documents].slice(0, room);
@@ -113,7 +124,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       if (knowledgeFiles.length && knowledge) {
         setProcessing(false);
         // Runs in the background; chips update as each file moves through its lifecycle.
-        knowledge.upload(knowledgeFiles, upsertAttachment).catch(() => setFileError('Could not upload one of the files.'));
+        knowledge.upload(knowledgeFiles, upsertAttachment)
+          .then(done => {
+            // Anything that never came back "ready" or "failed" was cancelled: drop its chip.
+            const finished = new Set(done.map(f => f.id));
+            setAttachments(prev => prev.filter(a => !a.file_id || finished.has(a.file_id) || a.status === 'ready' || a.status === 'failed'));
+          })
+          .catch(() => setFileError('Could not upload one of the files.'));
       }
     } catch {
       setFileError('Could not read one of the files.');
@@ -133,7 +150,12 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     });
   };
 
-  const removeAttachment = (id: string) => setAttachments(prev => prev.filter(a => a.id !== id));
+  const removeAttachment = (id: string) => {
+    // Removing a chip while its file is still uploading cancels the upload too.
+    const target = attachments.find(a => a.id === id);
+    if (target?.file_id && target.status === 'uploading') knowledge?.cancelUpload?.(target.file_id);
+    setAttachments(prev => prev.filter(a => a.id !== id));
+  };
 
   const onPaste = (e: React.ClipboardEvent) => {
     const files = Array.from(e.clipboardData.files || []);
@@ -158,7 +180,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
         )}>
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pt-3">
-              {attachments.map(a => <AttachmentChip key={a.id} attachment={a} onRemove={() => removeAttachment(a.id)} />)}
+              {attachments.map(a => (
+                <AttachmentChip
+                  key={a.id}
+                  attachment={a}
+                  progress={a.file_id ? knowledge?.progress?.[a.file_id] : undefined}
+                  onRemove={() => removeAttachment(a.id)}
+                />
+              ))}
             </div>
           )}
 
@@ -245,29 +274,44 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   );
 });
 
-function AttachmentChip({ attachment, onRemove }: { attachment: Attachment; onRemove: () => void }) {
+function AttachmentChip({ attachment, progress, onRemove }: { attachment: Attachment; progress?: { sent: number; total: number }; onRemove: () => void }) {
   const isImage = attachment.type === 'image' && attachment.base64;
-  const busy = attachment.status === 'uploading' || attachment.status === 'processing';
+  const uploading = attachment.status === 'uploading';
+  const busy = uploading || attachment.status === 'processing';
   const failed = attachment.status === 'failed';
+  const percent = uploading && progress && progress.total > 0 ? Math.min(100, Math.round((progress.sent / progress.total) * 100)) : null;
+  const statusLabel = failed ? 'Failed' : uploading ? (percent === null ? 'Uploading' : `${percent}%`) : busy ? 'Processing' : formatFileSize(attachment.size);
   return (
     <div
-      className={cn('flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border text-xs text-fg max-w-[220px]', failed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface-2')}
+      className={cn('relative overflow-hidden flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border text-xs text-fg max-w-[220px]', failed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface-2')}
       title={failed ? attachment.error : undefined}
+      data-file-status={attachment.status}
     >
+      {percent !== null && (
+        <span
+          role="progressbar"
+          aria-label={`Uploading ${attachment.name}`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={percent}
+          className="absolute inset-x-0 bottom-0 h-0.5 bg-accent/70 transition-[width] duration-200"
+          style={{ width: `${percent}%` }}
+        />
+      )}
       {isImage ? (
         <img src={`data:${attachment.mime_type};base64,${attachment.base64}`} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
       ) : attachment.type === 'image' ? (
         <ImageIcon className="w-4 h-4 text-fg-muted shrink-0" />
       ) : busy ? (
-        <Loader2 className="w-4 h-4 text-fg-muted shrink-0 animate-spin-slow" aria-label={attachment.status === 'uploading' ? 'Uploading' : 'Processing'} />
+        <Loader2 className="w-4 h-4 text-fg-muted shrink-0 animate-spin-slow" aria-label={uploading ? 'Uploading' : 'Processing'} />
       ) : failed ? (
         <AlertCircle className="w-4 h-4 text-danger shrink-0" aria-label="Failed" />
       ) : (
         <FileText className="w-4 h-4 text-fg-muted shrink-0" />
       )}
       <span className="truncate">{attachment.name}</span>
-      <span className="text-fg-subtle shrink-0">{failed ? 'Failed' : busy ? (attachment.status === 'uploading' ? 'Uploading' : 'Processing') : formatFileSize(attachment.size)}</span>
-      <IconButton label={`Remove ${attachment.name}`} size="sm" onClick={onRemove} className="w-5 h-5"><X className="w-3 h-3" /></IconButton>
+      <span className="text-fg-subtle shrink-0 tabular-nums" aria-live={uploading ? 'polite' : undefined}>{statusLabel}</span>
+      <IconButton label={uploading ? `Cancel upload of ${attachment.name}` : `Remove ${attachment.name}`} size="sm" onClick={onRemove} className="w-5 h-5"><X className="w-3 h-3" /></IconButton>
     </div>
   );
 }
