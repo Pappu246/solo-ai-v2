@@ -36,3 +36,8 @@ coverage/
 
 # Vite
 vite.config.*.timestamp-*
+
+# Playwright
+playwright-report/
+test-results/
+blob-report/

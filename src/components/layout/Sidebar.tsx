@@ -359,7 +359,9 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
         {currentProject && <FolderKanban className="w-3 h-3 text-fg-subtle shrink-0 ml-auto" aria-label={`In project ${currentProject}`} />}
       </button>
 
-      <div ref={menuRef} className={cn('absolute right-1 top-1/2 -translate-y-1/2', menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
+      {/* `-translate-y-1/2` makes this a stacking context, so the menu's own
+          z-index cannot escape it: lift the wrapper above later rows while open. */}
+      <div ref={menuRef} className={cn('absolute right-1 top-1/2 -translate-y-1/2', menuOpen ? 'z-20 opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
         <IconButton label={`Options for ${c.title}`} size="sm" onClick={() => setMenuOpen(v => !v)} aria-haspopup="menu" aria-expanded={menuOpen} className="w-6 h-6">
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>

@@ -12,7 +12,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.app.json",
     "check": "npm run typecheck && npm run lint && npm run test && npm run build",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:e2e:install": "playwright install --with-deps chromium"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
@@ -28,6 +30,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@playwright/test": "^1.49.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.7",

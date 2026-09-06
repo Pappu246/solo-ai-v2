@@ -69,6 +69,9 @@ supabase/
 │   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
 ├── migrations/
 └── config.toml
+
+e2e/                    Playwright specs (auth, conversations, composer, upload) +
+└── support/            mockBackend.ts (Supabase HTTP mock with RLS/TUS/SSE), fixtures.ts
 ```
 
 ### Chat reliability contract
@@ -149,6 +152,22 @@ npm run check
 
 This runs TypeScript checking, ESLint, the Vitest suite and the production build. Use `npm test` for tests alone.
 
+End-to-end tests (Playwright) drive the real production build in Chromium
+against an in-browser mock of the Supabase HTTP surface (`e2e/support/mockBackend.ts`
+— auth, PostgREST with simulated RLS, Storage incl. the TUS resumable endpoint,
+and the SSE chat function), so they need no project, keys or network:
+
+```bash
+npm run test:e2e:install   # once: downloads Chromium
+npm run test:e2e           # builds, serves on :4173, runs e2e/*.spec.ts
+```
+
+They cover sign-in and cross-user isolation, rename / pin / archive / delete
+(cancel + confirm) with reload, composer keyboard behaviour (Enter, Shift+Enter,
+Ctrl+Enter mode, Stop/Escape), and the upload flow (single-request and
+resumable uploads with progress, cancel, and asking a question about the file).
+Where Chromium cannot be downloaded, point `PLAYWRIGHT_CHROMIUM_PATH` at an
+existing binary (and `PLAYWRIGHT_CHROMIUM_ARGS` at its launch flags).
 ### 7. Apply database migrations
 
 Run the SQL files in `supabase/migrations/` in order (or `supabase db push`). `20260903120000_phase2_knowledge.sql` creates the `projects`, `files`, `file_chunks` and `memories` tables (with RLS), adds `conversations.project_id` and `messages.sources`, the search indexes, the `search_all` / `match_file_chunks` functions, and the private `knowledge` Storage bucket with its policies. The latest, `20260906090000_phase3_resumable_uploads.sql`, lifts the bucket's 20 MB cap for resumable uploads, widens the MIME allow-list to the code types browsers report, and re-asserts the storage ownership policies. All migrations are idempotent and safe to re-run. Then redeploy the chat Edge Function (`supabase functions deploy chat`) so it accepts the new `context` field.

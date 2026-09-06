@@ -285,6 +285,7 @@ function Shell() {
           disabled={chat.isGenerating}
         />
 
+        <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {view.kind === 'files' && (
           <FilesView knowledge={knowledge} projects={projectsCtl.projects} onOpenFile={setFileDetail} />
         )}
@@ -351,6 +352,7 @@ function Shell() {
             />
           </>
         )}
+        </main>
       </div>
 
       <SettingsPanel
