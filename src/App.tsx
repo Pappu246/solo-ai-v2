@@ -210,6 +210,12 @@ function Shell() {
     pickFromLibrary: () => new Promise<KnowledgeFile[]>(resolve => setPicker({ resolve })),
     cancelUpload: knowledge.cancelUpload,
     progress: knowledge.progress,
+    files: knowledge.files,
+    retryProcessing: async (fileId) => {
+      const f = knowledge.files.find(x => x.id === fileId);
+      if (!f) throw new Error('File not found');
+      await knowledge.retryProcessing(f);
+    },
   }), [chat.activeConversation, chat.activeProjectId, knowledge, toast]);
 
   const sendMessage = useCallback((text: string, attachments?: Attachment[]) => {
