@@ -231,7 +231,7 @@ function Shell() {
 
   if (authLoading) {
     return (
-      <div className="h-screen bg-bg flex items-center justify-center" aria-busy="true" aria-label="Loading Solo AI">
+      <div className="h-screen flex items-center justify-center" aria-busy="true" aria-label="Loading Solo AI">
         <Logo size={40} className="animate-pulse" />
       </div>
     );
@@ -250,8 +250,11 @@ function Shell() {
   const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
   const composerHint = activeModelName ? `Using ${activeModelName}` : chatProject ? `In ${chatProject.name} · Auto picks the best model` : 'Auto picks the best model for each message';
 
+  // The shell must not paint an opaque background: the ambient glow layer
+  // lives behind it (body::before, z -1) and every frosted surface above
+  // blurs it. z-10 keeps the whole app above that glow layer.
   return (
-    <div className="flex h-screen overflow-hidden bg-bg text-fg">
+    <div className="relative z-10 flex h-screen overflow-hidden text-fg">
       <Sidebar
         conversations={chat.conversations}
         status={chat.conversationsStatus}

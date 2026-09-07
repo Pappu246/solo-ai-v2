@@ -85,7 +85,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 rounded-xl glass border border-border shadow-lg p-1 z-50 animate-scale-in">
+                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 rounded-xl glass border border-border float-shadow p-1 z-50 animate-scale-in">
                     <MenuItem icon={<Settings2 className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onEdit(); }}>Settings</MenuItem>
                     <MenuItem icon={project.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); archive(); }}>
                       {project.archived ? 'Restore' : 'Archive'}

@@ -51,7 +51,7 @@ export function EmptyState({ onSuggestion, userName }: Props) {
               key={s.label}
               type="button"
               onClick={() => onSuggestion(s.text)}
-              className="group flex items-start gap-3 rounded-xl glass border border-border p-3.5 transition-all duration-200 ease-[var(--ease-soft)] text-left hover:-translate-y-0.5 hover:border-accent/35 hover:shadow-md"
+              className="group glass-card flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200 ease-[var(--ease-soft)] hover:-translate-y-1 hover:border-accent/60 hover:ring-1 hover:ring-accent/45 hover:shadow-[0_2px_6px_rgb(0_0_0/0.2),0_16px_32px_rgb(0_0_0/0.35)] dark:hover:shadow-[0_2px_6px_rgb(0_0_0/0.55),0_20px_44px_rgb(0_0_0/0.65)]"
             >
               <s.icon className="w-4 h-4 text-fg-muted mt-0.5 shrink-0 group-hover:text-accent transition-colors" />
               <span className="min-w-0">

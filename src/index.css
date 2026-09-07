@@ -163,17 +163,26 @@ body {
   text-rendering: optimizeLegibility;
 }
 
-/* Ambient cinematic glow: a faint wash of the accent color from the top. */
-html.dark body::before {
+/* Ambient cinematic glow: a faint wash of the accent color from the top
+   (very subtle in light, full-strength in dark). It is painted at the very
+   back of body's stacking context (z-index: -1, i.e. above the body
+   background but below every in-flow descendant), and the app shell above it
+   is transparent — so frosted surfaces have a real gradient behind them to
+   blur instead of a flat color. Before, the shell painted an opaque
+   background over this layer and backdrop-filter was a no-op. */
+body::before {
   content: '';
   position: fixed;
   inset: 0;
-  z-index: 0;
+  z-index: -1;
   pointer-events: none;
   background:
     radial-gradient(60rem 34rem at 50% -12%, rgb(var(--accent) / var(--glow-strength)), transparent 65%),
     radial-gradient(48rem 30rem at 110% 115%, rgb(var(--accent) / calc(var(--glow-strength) * 0.5)), transparent 60%);
 }
+/* `body` keeps its own stacking context so the glow layer painted inside it
+   stays behind the app content while the pseudo-element's negative z-index
+   still keeps the wash above the body background. */
 html body { position: relative; z-index: 1; }
 
 #root { height: 100%; }
@@ -199,6 +208,73 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
     -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
     backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
     border-color: rgb(var(--glass-edge));
+  }
+
+  /* Sidebar glass: a denser frosted slab so the glow keeps some color behind
+     it — #111622 at 88% + blur(15px) in dark, an equivalent white glass in
+     light. (No backdrop-filter below a transparent shell = flat color.) */
+  .glass-sidebar {
+    background: rgb(255 255 255 / 0.8);
+    -webkit-backdrop-filter: blur(15px) saturate(1.35);
+    backdrop-filter: blur(15px) saturate(1.35);
+    border-color: rgb(0 0 0 / 0.07);
+  }
+  .dark .glass-sidebar {
+    background: rgb(17 22 34 / 0.88);
+    -webkit-backdrop-filter: blur(15px) saturate(1.25);
+    backdrop-filter: blur(15px) saturate(1.25);
+    border-color: rgb(255 255 255 / 0.08);
+  }
+
+  /* Suggestion cards: brighter frosted chips (dark: ~9% white over the glow)
+     with a resting shadow; hover lift, deeper shadow and amber glow edge are
+     handled by the hover utilities on the card itself. */
+  .glass-card {
+    background: rgb(255 255 255 / 0.78);
+    -webkit-backdrop-filter: blur(15px) saturate(1.35);
+    backdrop-filter: blur(15px) saturate(1.35);
+    border-color: rgb(0 0 0 / 0.08);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.08), inset 0 1px 0 rgb(255 255 255 / 0.85);
+  }
+  .dark .glass-card {
+    background: rgb(255 255 255 / 0.09);
+    -webkit-backdrop-filter: blur(15px) saturate(1.3);
+    backdrop-filter: blur(15px) saturate(1.3);
+    border-color: rgb(255 255 255 / 0.12);
+    box-shadow: 0 2px 6px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.1);
+  }
+
+  /* Floating layers (dialogs, model selector, dropdowns, toasts, auth cards):
+     an inner hairline top highlight plus two shadow bands — a tight contact
+     band and a broad ambient band. Theme-flipped so depth reads in both. */
+  .float-shadow {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.7),
+      0 1px 2px rgb(0 0 0 / 0.06),
+      0 12px 32px rgb(0 0 0 / 0.16);
+  }
+  .dark .float-shadow {
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.09),
+      0 2px 6px rgb(0 0 0 / 0.45),
+      0 16px 40px rgb(0 0 0 / 0.55);
+  }
+
+  /* Sidebar rows: on hover the row lifts 1px with an amber glow edge and a
+     soft shadow instead of only swapping its background. */
+  .row-glow {
+    transition:
+      background-color var(--motion-fast) var(--ease-soft),
+      color var(--motion-fast) var(--ease-soft),
+      box-shadow var(--motion-fast) var(--ease-soft),
+      transform var(--motion-fast) var(--ease-soft);
+  }
+  .row-glow:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 0 1px rgb(var(--accent) / 0.3), 0 1px 2px rgb(0 0 0 / 0.1);
+  }
+  .dark .row-glow:hover {
+    box-shadow: 0 0 0 1px rgb(var(--accent) / 0.4), 0 2px 6px rgb(0 0 0 / 0.4);
   }
 
   /* Safe-area padding that never shrinks below the given base. */

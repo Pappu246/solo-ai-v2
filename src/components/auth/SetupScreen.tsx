@@ -3,8 +3,8 @@ import { Logo } from '../ui';
 /** Shown instead of a blank page when the browser-safe Supabase config is missing. */
 export function SetupScreen() {
   return (
-    <main className="min-h-screen bg-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-md rounded-2xl glass border border-border p-6 shadow-lg">
+    <main className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md rounded-2xl glass border border-border float-shadow p-6">
         <div className="flex items-center gap-3">
           <Logo size={32} />
           <h1 className="text-lg font-semibold text-fg">Solo AI needs configuration</h1>
