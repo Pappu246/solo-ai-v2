@@ -86,7 +86,7 @@ export function Dialog({ open, onClose, title, description, children, footer, si
           aria-describedby={description ? descId : undefined}
           tabIndex={-1}
           className={cn(
-            'w-full glass border border-border shadow-lg outline-none animate-scale-in flex flex-col',
+            'w-full glass border border-border float-shadow outline-none animate-scale-in flex flex-col',
             'rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh]',
             width, className,
           )}

@@ -247,7 +247,7 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => { onOpenSettings(); onCloseMobile(); }}
-          className="w-full flex items-center gap-2.5 h-10 px-2.5 rounded-lg hover:bg-surface-2 transition-colors text-left"
+          className="row-glow w-full flex items-center gap-2.5 h-10 px-2.5 rounded-lg hover:bg-surface-2 text-left"
         >
           <span className="w-7 h-7 rounded-full bg-surface-3 text-fg-muted text-xs font-semibold flex items-center justify-center uppercase shrink-0">
             {userEmail?.[0] ?? '?'}
@@ -295,7 +295,7 @@ export function Sidebar({
         // `inert` keeps the closed mobile drawer out of the tab order.
         {...({ inert: hidden ? '' : undefined } as Record<string, unknown>)}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[280px] glass border-r border-border overflow-hidden transition-[transform,width] duration-200 ease-[var(--ease-soft)] shadow-lg',
+          'fixed inset-y-0 left-0 z-50 w-[280px] glass-sidebar border-r overflow-hidden transition-[transform,width] duration-200 ease-[var(--ease-soft)] shadow-lg',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:translate-x-0 md:shrink-0 md:shadow-none',
           collapsed ? 'md:w-[68px]' : 'md:w-[272px]',
@@ -339,7 +339,7 @@ function NavButton({ icon, active, onClick, children }: { icon: React.ReactNode;
       type="button"
       onClick={onClick}
       aria-current={active ? 'page' : undefined}
-      className={cn('w-full flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-sm transition-colors text-left', active ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-2/70')}
+      className={cn('row-glow w-full flex items-center gap-2.5 h-8 px-2.5 rounded-lg text-sm text-left', active ? 'bg-surface-2 text-fg' : 'text-fg-muted hover:text-fg hover:bg-surface-2/70')}
     >
       <span className="text-fg-muted shrink-0">{icon}</span>
       <span className="truncate">{children}</span>
@@ -389,7 +389,14 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
   }
 
   return (
-    <li className={cn('group relative flex items-center rounded-lg', isActive ? 'bg-surface-2' : 'hover:bg-surface-2/70', menuOpen && 'bg-surface-2/70')}>
+    <li className={cn(
+      'group row-glow relative flex items-center rounded-lg',
+      isActive ? 'bg-surface-2' : 'hover:bg-surface-2/70',
+      // row-glow lifts the row with a transform, which makes it a stacking
+      // context — the open menu's own z-index can no longer escape above
+      // later rows, so raise the row itself while its menu is open.
+      menuOpen && 'bg-surface-2/70 z-30',
+    )}>
       <button
         type="button"
         onClick={() => onSelect(c)}
@@ -408,7 +415,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
         {menuOpen && (
-          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl glass border border-border shadow-lg p-1 z-50 animate-scale-in">
+          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl glass border border-border float-shadow p-1 z-50 animate-scale-in">
             <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>Rename</MenuItem>
             {!c.archived && (
               <MenuItem icon={c.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onPin(c.id, !c.pinned); }}>

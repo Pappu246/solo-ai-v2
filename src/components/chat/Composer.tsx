@@ -239,8 +239,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     >
       <div className="max-w-3xl mx-auto">
         <div className={cn(
-          'rounded-2xl glass border shadow-sm transition-colors',
-          dragging ? 'border-accent bg-accent/5' : 'border-border focus-within:border-border-strong',
+          // Focus: 1px muted-gold border + a soft 3px accent ring — no harsh
+          // solid border swap, so the glass edge reads as depth, not outline.
+          'rounded-2xl glass border shadow-sm transition-[border-color,box-shadow,background-color]',
+          dragging ? 'border-accent bg-accent/5' : 'border-border focus-within:border-accent/45 focus-within:ring-[3px] focus-within:ring-accent/15',
         )}>
           {attachments.length > 0 && (
             <div className="flex flex-wrap gap-1.5 px-3 pt-3">

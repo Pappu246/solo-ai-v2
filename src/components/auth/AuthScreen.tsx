@@ -39,7 +39,7 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
   const switchMode = () => { setMode(m => (m === 'signin' ? 'signup' : 'signin')); setError(null); };
 
   return (
-    <main className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-y-auto">
+    <main className="min-h-screen flex items-center justify-center p-4 relative overflow-y-auto">
       {/* Ambient glow behind the card. */}
       <div
         aria-hidden
@@ -60,7 +60,7 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
           <p className="mt-1 text-sm text-fg-muted">Your AI workspace</p>
         </div>
 
-        <div className="rounded-2xl glass border border-border p-6 shadow-lg">
+        <div className="rounded-2xl glass border border-border float-shadow p-6">
           {confirmationSent ? (
             <div className="text-center py-2">
               <MailCheck className="w-8 h-8 text-success mx-auto" />
