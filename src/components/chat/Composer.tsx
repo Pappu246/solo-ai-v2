@@ -397,7 +397,7 @@ function AttachmentChip({ attachment, progress, onRemove, onRetry }: {
         <FileText className="w-4 h-4 text-fg-muted shrink-0" aria-hidden />
       )}
       <span className="truncate max-w-[120px]">{attachment.name}</span>
-      <span className="text-fg-subtle shrink-0 tabular-nums" aria-live="polite">{statusLabel}</span>
+      <span className="text-fg-muted shrink-0 tabular-nums" aria-live="polite">{statusLabel}</span>
       {failed && (
         <button
           type="button"

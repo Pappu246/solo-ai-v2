@@ -78,7 +78,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
                 className={cn('inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150', filter === f.id ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg')}
               >
                 {f.label}
-                <span className={cn('tabular-nums', filter === f.id ? 'text-fg-subtle' : 'text-fg-subtle/70')}>{counts[f.id]}</span>
+                <span className={cn('tabular-nums', filter === f.id ? 'text-fg-subtle' : 'text-fg-subtle/80')}>{counts[f.id]}</span>
               </button>
             ))}
           </div>

@@ -59,7 +59,7 @@ export const Message = memo(function Message({
             </div>
             <div className="flex items-center gap-1 pr-8">
               {isFirstInGroup && (
-                <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle/90">
+                <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">
                   {formatMessageTime(message.created_at)}
                 </time>
               )}
@@ -101,7 +101,7 @@ export const Message = memo(function Message({
       </div>
       <div className="flex items-center gap-1 pl-[38px]">
         {isFirstInGroup && (
-          <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle/90 mr-0.5">
+          <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">
             {formatMessageTime(message.created_at)}
           </time>
         )}

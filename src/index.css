@@ -29,13 +29,13 @@
   --overlay: 0 0 0;
 
   /* Borders */
-  --border: 231 228 223;
-  --border-strong: 210 206 200;
+  --border: 138 132 123;
+  --border-strong: 117 111 102;
 
   /* Text */
   --fg: 28 26 24;
   --fg-muted: 87 82 76;
-  --fg-subtle: 146 140 131;
+  --fg-subtle: 117 111 102;
 
   /* Status */
   --danger: 185 28 28;
@@ -94,12 +94,12 @@
   --surface-3: 43 38 33;
   --overlay: 0 0 0;
 
-  --border: 39 35 30;
-  --border-strong: 60 53 45;
+  --border: 122 111 97;
+  --border-strong: 133 122 106;
 
   --fg: 240 236 229;
   --fg-muted: 170 163 152;
-  --fg-subtle: 118 111 101;
+  --fg-subtle: 154 145 132;
 
   --danger: 240 110 105;
   --success: 122 202 140;
@@ -319,7 +319,7 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
 :root:not(.dark) .hljs-keyword, :root:not(.dark) .hljs-selector-tag, :root:not(.dark) .hljs-built_in, :root:not(.dark) .hljs-type, :root:not(.dark) .hljs-literal { color: #9c6410; }
-:root:not(.dark) .hljs-string, :root:not(.dark) .hljs-attr, :root:not(.dark) .hljs-addition, :root:not(.dark) .hljs-regexp { color: #3f8f53; }
+:root:not(.dark) .hljs-string, :root:not(.dark) .hljs-attr, :root:not(.dark) .hljs-addition, :root:not(.dark) .hljs-regexp { color: #357a47; }
 :root:not(.dark) .hljs-number, :root:not(.dark) .hljs-symbol, :root:not(.dark) .hljs-meta, :root:not(.dark) .hljs-link { color: #a65f1e; }
 :root:not(.dark) .hljs-title, :root:not(.dark) .hljs-section, :root:not(.dark) .hljs-name { color: #2f6bd8; }
-:root:not(.dark) .hljs-variable, :root:not(.dark) .hljs-attribute, :root:not(.dark) .hljs-tag, :root:not(.dark) .hljs-deletion { color: #c94f44; }
+:root:not(.dark) .hljs-variable, :root:not(.dark) .hljs-attribute, :root:not(.dark) .hljs-tag, :root:not(.dark) .hljs-deletion { color: #b54538; }

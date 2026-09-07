@@ -30,7 +30,8 @@ export function Toggle({ checked, onChange, label, description, disabled }: Togg
         className={cn(
           'relative shrink-0 w-10 h-6 rounded-full transition-colors',
           'disabled:opacity-50 disabled:cursor-not-allowed',
-          checked ? 'bg-accent' : 'bg-surface-3 border border-border-strong',
+          // The track keeps 3:1 against the white knob in both themes.
+          checked ? 'bg-accent' : 'bg-fg-subtle dark:bg-surface-3 border border-border-strong',
         )}
       >
         <span
