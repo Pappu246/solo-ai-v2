@@ -33,10 +33,11 @@ const FILE_ROW = {
   updated_at: '2026-01-01T00:00:00.000Z',
 };
 
-async function openSettings(page: Page) {
+async function openSettings(page: Page, section = 'General') {
   await page.getByRole('button', { name: /settings/i }).first().click();
   const dialog = page.getByRole('dialog', { name: 'Settings' });
   await expect(dialog).toBeVisible();
+  if (section !== 'General') await dialog.getByRole('button', { name: section, exact: true }).click();
   return dialog;
 }
 
@@ -57,7 +58,7 @@ test.describe('cinematic theme defaults', () => {
 
   test('Light and System themes still work; System follows the OS', async ({ page, app }) => {
     await app.open();
-    const dialog = await openSettings(page);
+    const dialog = await openSettings(page, 'Appearance');
 
     await dialog.getByRole('radio', { name: 'Light' }).click();
     await expect(page.locator('html')).not.toHaveClass(/dark/);
@@ -77,7 +78,7 @@ test.describe('cinematic theme defaults', () => {
 
   test('accent options update the accent attribute', async ({ page, app }) => {
     await app.open();
-    const dialog = await openSettings(page);
+    const dialog = await openSettings(page, 'Appearance');
     await dialog.getByRole('radio', { name: 'Blue' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue');
     await dialog.getByRole('radio', { name: 'Amber' }).click();
@@ -130,8 +131,10 @@ test.describe('nested dialogs', () => {
 
   test('file detail + delete confirm stack; Escape unwraps one at a time', async ({ page, app }) => {
     await app.open();
-    await page.getByRole('navigation', { name: 'Chats' }).getByRole('button', { name: 'Files' }).click();
-    await page.getByRole('main').getByRole('button', { name: /design-notes\.md/ }).click();
+    await page.getByRole('button', { name: 'Files', exact: true }).click();
+    const fileRow = page.getByRole('main').getByRole('button', { name: /design-notes\.md/ });
+    await expect(fileRow).toBeVisible();
+    await fileRow.click();
 
     const detail = page.getByRole('dialog', { name: 'design-notes.md' });
     await expect(detail).toBeVisible();
@@ -158,8 +161,11 @@ test.describe('nested dialogs', () => {
 test.describe('mobile layout', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('sidebar is a drawer; send control keeps a 44px touch target', async ({ page, app }) => {
-    await app.open();
+  test('sidebar is a drawer; send control keeps a 44px touch target', async ({ page }) => {
+    // On mobile the closed drawer is inert, so wait on the always-visible
+    // topbar instead of the shared app.open() (which expects the chat list).
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
     const backdrop = page.locator('div[aria-hidden="true"].fixed.inset-0');
     await expect(backdrop).toHaveCount(0);
 
@@ -181,7 +187,7 @@ test.describe('mobile layout', () => {
 test.describe('desktop icon rail', () => {
   test('collapsing shows a rail with 44px targets; expand restores the panel', async ({ page, app }) => {
     await app.open();
-    await page.keyboard.press('Control+b');
+    await page.getByRole('button', { name: 'Collapse sidebar' }).click();
     const rail = page.getByRole('navigation', { name: 'Sidebar rail' });
     await expect(rail).toBeVisible();
 
