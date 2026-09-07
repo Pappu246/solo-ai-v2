@@ -321,6 +321,7 @@ function Shell() {
                 messages={chat.messages}
                 loading={chat.messagesStatus === 'loading'}
                 isGenerating={chat.isGenerating}
+                userInitial={(user.email ?? 'you').split('@')[0].slice(0, 1)}
                 streamingContent={chat.streamingContent}
                 streamingModel={chat.streamingModel}
                 error={chat.error}
