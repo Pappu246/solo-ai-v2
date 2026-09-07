@@ -262,6 +262,7 @@ function Shell() {
         onCloseMobile={() => setMobileSidebarOpen(false)}
         collapsed={sidebarCollapsed}
         onCollapse={() => toggleSidebar(true)}
+        onExpand={() => toggleSidebar(false)}
         userEmail={user.email}
         projects={projectsCtl.projects}
         view={view}
