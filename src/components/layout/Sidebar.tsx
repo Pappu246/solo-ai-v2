@@ -46,8 +46,6 @@ interface SidebarProps {
 
 export type SidebarView = { kind: 'chat' } | { kind: 'files' } | { kind: 'memory' } | { kind: 'project'; id: string };
 
-const RAIL_SIZE = 'w-11 h-11';
-
 export function Sidebar({
   conversations, status, activeId, onSelect, onNewChat, onRename, onPin, onArchive, onDeleteRequest,
   onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, onExpand, userEmail,
@@ -268,19 +266,19 @@ export function Sidebar({
   const rail = (
     <div className="flex flex-col items-center h-full pt-safe pb-safe" role="navigation" aria-label="Sidebar rail">
       <Logo size={26} className="mb-3" />
-      <IconButton label="New chat" onClick={onNewChat} className={RAIL_SIZE}><SquarePen className="w-[18px] h-[18px]" /></IconButton>
+      <IconButton label="New chat" onClick={onNewChat} size="lg"><SquarePen className="w-[18px] h-[18px]" /></IconButton>
       {onOpenSearch && (
-        <IconButton label="Search everything" onClick={onOpenSearch} className={RAIL_SIZE}><Search className="w-[18px] h-[18px]" /></IconButton>
+        <IconButton label="Search everything" onClick={onOpenSearch} size="lg"><Search className="w-[18px] h-[18px]" /></IconButton>
       )}
       {onOpenFiles && (
-        <IconButton label="Files" active={view.kind === 'files'} onClick={onOpenFiles} className={RAIL_SIZE}><FileText className="w-[18px] h-[18px]" /></IconButton>
+        <IconButton label="Files" active={view.kind === 'files'} onClick={onOpenFiles} size="lg"><FileText className="w-[18px] h-[18px]" /></IconButton>
       )}
       {onOpenMemory && (
-        <IconButton label="Memory" active={view.kind === 'memory'} onClick={onOpenMemory} className={RAIL_SIZE}><Brain className="w-[18px] h-[18px]" /></IconButton>
+        <IconButton label="Memory" active={view.kind === 'memory'} onClick={onOpenMemory} size="lg"><Brain className="w-[18px] h-[18px]" /></IconButton>
       )}
       <div className="flex-1" />
-      <IconButton label="Expand sidebar" onClick={onExpand} className={RAIL_SIZE}><PanelLeftOpen className="w-[18px] h-[18px]" /></IconButton>
-      <IconButton label="Settings" onClick={onOpenSettings} className={cn(RAIL_SIZE, 'mb-1')}><Settings className="w-[18px] h-[18px]" /></IconButton>
+      <IconButton label="Expand sidebar" onClick={onExpand} size="lg"><PanelLeftOpen className="w-[18px] h-[18px]" /></IconButton>
+      <IconButton label="Settings" onClick={onOpenSettings} size="lg" className="mb-1"><Settings className="w-[18px] h-[18px]" /></IconButton>
     </div>
   );
 

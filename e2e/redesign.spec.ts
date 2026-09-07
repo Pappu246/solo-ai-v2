@@ -161,9 +161,10 @@ test.describe('nested dialogs', () => {
 test.describe('mobile layout', () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test('sidebar is a drawer; send control keeps a 44px touch target', async ({ page }) => {
-    // On mobile the closed drawer is inert, so wait on the always-visible
-    // topbar instead of the shared app.open() (which expects the chat list).
+  test('sidebar is a drawer; send control keeps a 44px touch target', async ({ page, app }) => {
+    // app pulls in the in-browser mock backend. On mobile the closed drawer
+    // is inert, so wait on the always-visible topbar instead of app.open()
+    // (which expects the chat list to be present).
     await page.goto('/');
     await expect(page.getByRole('button', { name: 'Open menu' })).toBeVisible();
     const backdrop = page.locator('div[aria-hidden="true"].fixed.inset-0');
@@ -177,10 +178,9 @@ test.describe('mobile layout', () => {
     await page.mouse.click(350, 420);
     await expect(backdrop).toHaveCount(0);
 
-    const send = page.getByRole('button', { name: 'Send message' });
-    const box = (await send.boundingBox())!;
-    expect(box.width).toBeGreaterThanOrEqual(44);
-    expect(box.height).toBeGreaterThanOrEqual(44);
+    const sendBox = (await app.sendButton.boundingBox())!;
+    expect(sendBox.width).toBeGreaterThanOrEqual(44);
+    expect(sendBox.height).toBeGreaterThanOrEqual(44);
   });
 });
 
@@ -222,9 +222,10 @@ test.describe('safe areas', () => {
 });
 
 test.describe('reduced motion', () => {
-  test('animations collapse to near-zero duration', async ({ page }) => {
+  test('animations collapse to near-zero duration', async ({ page, app }) => {
     await page.emulateMedia({ reducedMotion: 'reduce' });
     await page.goto('/');
+    await expect(app.sendButton).toBeVisible();
     const block = page.locator('.animate-rise-in');
     await expect(block).toBeVisible();
     const duration = await block.evaluate(el => getComputedStyle(el).animationDuration);
