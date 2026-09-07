@@ -210,6 +210,12 @@ function Shell() {
     pickFromLibrary: () => new Promise<KnowledgeFile[]>(resolve => setPicker({ resolve })),
     cancelUpload: knowledge.cancelUpload,
     progress: knowledge.progress,
+    files: knowledge.files,
+    retryProcessing: async (fileId) => {
+      const f = knowledge.files.find(x => x.id === fileId);
+      if (!f) throw new Error('File not found');
+      await knowledge.retryProcessing(f);
+    },
   }), [chat.activeConversation, chat.activeProjectId, knowledge, toast]);
 
   const sendMessage = useCallback((text: string, attachments?: Attachment[]) => {
@@ -262,6 +268,7 @@ function Shell() {
         onCloseMobile={() => setMobileSidebarOpen(false)}
         collapsed={sidebarCollapsed}
         onCollapse={() => toggleSidebar(true)}
+        onExpand={() => toggleSidebar(false)}
         userEmail={user.email}
         projects={projectsCtl.projects}
         view={view}
@@ -320,6 +327,7 @@ function Shell() {
                 messages={chat.messages}
                 loading={chat.messagesStatus === 'loading'}
                 isGenerating={chat.isGenerating}
+                userInitial={(user.email ?? 'you').split('@')[0].slice(0, 1)}
                 streamingContent={chat.streamingContent}
                 streamingModel={chat.streamingModel}
                 error={chat.error}

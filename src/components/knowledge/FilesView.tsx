@@ -60,7 +60,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
         <header className="mb-5">
-          <h2 className="text-xl font-semibold tracking-tight text-fg">Files</h2>
+          <h2 className="font-display text-2xl tracking-tight text-fg">Files</h2>
           <p className="text-sm text-fg-muted mt-1">Upload documents once, then attach them to chats or add them to a project. Solo only reads the parts that are relevant to your question.</p>
         </header>
 
@@ -75,10 +75,10 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
                 role="tab"
                 aria-selected={filter === f.id}
                 onClick={() => setFilter(f.id)}
-                className={cn('inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors', filter === f.id ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
+                className={cn('inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150', filter === f.id ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg')}
               >
                 {f.label}
-                <span className={cn('tabular-nums', filter === f.id ? 'text-fg-subtle' : 'text-fg-subtle/70')}>{counts[f.id]}</span>
+                <span className={cn('tabular-nums', filter === f.id ? 'text-fg-subtle' : 'text-fg-subtle/80')}>{counts[f.id]}</span>
               </button>
             ))}
           </div>
@@ -95,7 +95,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
           </label>
         </div>
 
-        <div className="mt-3 rounded-xl border border-border bg-surface px-2">
+        <div className="mt-3 rounded-xl glass border border-border px-2 shadow-sm">
           {knowledge.status === 'loading' && knowledge.files.length === 0 && (
             <div className="flex items-center justify-center py-10 text-fg-subtle"><Spinner /></div>
           )}

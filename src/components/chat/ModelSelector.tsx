@@ -52,7 +52,7 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
         <div
           role="listbox"
           aria-label="Model"
-          className="absolute right-0 top-full mt-1.5 w-72 max-h-[70vh] overflow-y-auto rounded-xl border border-border bg-surface shadow-lg p-1.5 z-40 animate-scale-in"
+          className="absolute right-0 top-full mt-1.5 w-72 max-h-[70vh] overflow-y-auto rounded-xl glass border border-border shadow-lg p-1.5 z-40 animate-scale-in"
         >
           <Option
             selected={!selected}

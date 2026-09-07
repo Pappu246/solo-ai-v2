@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   SquarePen, Search, Settings, Pin, PinOff, Pencil, Archive, ArchiveRestore, Trash2,
-  MoreHorizontal, X, PanelLeftClose, ChevronDown, ChevronRight, FolderKanban, FileText, Brain, Plus, FolderInput,
+  MoreHorizontal, X, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, FolderKanban, FileText, Brain, Plus, FolderInput,
 } from 'lucide-react';
 import type { Conversation, Project } from '../../types';
 import type { LoadStatus } from '../../hooks/useChat';
@@ -24,9 +24,11 @@ interface SidebarProps {
   /** Mobile drawer open state. */
   mobileOpen: boolean;
   onCloseMobile: () => void;
-  /** Desktop collapsed state. */
+  /** Desktop collapsed state (collapsed = icon rail). */
   collapsed: boolean;
   onCollapse: () => void;
+  /** Restore the full panel from the icon rail. */
+  onExpand: () => void;
   userEmail?: string;
   // ── Phase 2 ──
   projects?: Project[];
@@ -46,12 +48,13 @@ export type SidebarView = { kind: 'chat' } | { kind: 'files' } | { kind: 'memory
 
 export function Sidebar({
   conversations, status, activeId, onSelect, onNewChat, onRename, onPin, onArchive, onDeleteRequest,
-  onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, userEmail,
+  onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, onExpand, userEmail,
   projects = [], view = { kind: 'chat' }, onOpenProject, onNewProject, onOpenFiles, onOpenMemory, onOpenSearch, onMoveToProject,
 }: SidebarProps) {
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [showProjects, setShowProjects] = useState(true);
+  const [pinnedOpen, setPinnedOpen] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   const isDesktop = useIsDesktop();
 
@@ -201,9 +204,22 @@ export function Sidebar({
         )}
 
         {pinned.length > 0 && (
-          <Section label="Pinned">
-            {pinned.map(c => <ConversationItem key={c.id} conversation={c} {...itemProps} />)}
-          </Section>
+          <div className="mt-2 first:mt-0">
+            <button
+              type="button"
+              onClick={() => setPinnedOpen(v => !v)}
+              aria-expanded={pinnedOpen}
+              className="w-full flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg-muted"
+            >
+              {pinnedOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+              <span>Pinned</span>
+            </button>
+            {pinnedOpen && (
+              <ul className="space-y-0.5 mt-0.5">
+                {pinned.map(c => <ConversationItem key={c.id} conversation={c} {...itemProps} />)}
+              </ul>
+            )}
+          </div>
         )}
         {recent.length > 0 && (
           <Section label={pinned.length ? 'Recent' : undefined}>
@@ -246,24 +262,50 @@ export function Sidebar({
     </div>
   );
 
-  const hidden = isDesktop ? collapsed : !mobileOpen;
+  /** Collapsed desktop state: a quiet icon rail instead of empty space. */
+  const rail = (
+    <div className="flex flex-col items-center h-full pt-safe pb-safe" role="navigation" aria-label="Sidebar rail">
+      <Logo size={26} className="mb-3" />
+      <IconButton label="New chat" onClick={onNewChat} size="lg"><SquarePen className="w-[18px] h-[18px]" /></IconButton>
+      {onOpenSearch && (
+        <IconButton label="Search everything" onClick={onOpenSearch} size="lg"><Search className="w-[18px] h-[18px]" /></IconButton>
+      )}
+      {onOpenFiles && (
+        <IconButton label="Files" active={view.kind === 'files'} onClick={onOpenFiles} size="lg"><FileText className="w-[18px] h-[18px]" /></IconButton>
+      )}
+      {onOpenMemory && (
+        <IconButton label="Memory" active={view.kind === 'memory'} onClick={onOpenMemory} size="lg"><Brain className="w-[18px] h-[18px]" /></IconButton>
+      )}
+      <div className="flex-1" />
+      <IconButton label="Expand sidebar" onClick={onExpand} size="lg"><PanelLeftOpen className="w-[18px] h-[18px]" /></IconButton>
+      <IconButton label="Settings" onClick={onOpenSettings} size="lg" className="mb-1"><Settings className="w-[18px] h-[18px]" /></IconButton>
+    </div>
+  );
+
+  // On mobile the whole aside is a drawer; on desktop it is always present
+  // (either the full panel or the icon rail), so only the closed drawer is inert.
+  const hidden = !isDesktop && !mobileOpen;
 
   return (
     <>
-      {mobileOpen && !isDesktop && <div className="fixed inset-0 z-40 bg-overlay/50 animate-fade-in" onClick={onCloseMobile} aria-hidden />}
+      {mobileOpen && !isDesktop && <div className="fixed inset-0 z-40 bg-overlay/60 backdrop-blur-sm animate-fade-in" onClick={onCloseMobile} aria-hidden />}
       <aside
         aria-label="Sidebar"
         aria-hidden={hidden}
-        // `inert` keeps off-screen/collapsed content out of the tab order.
+        // `inert` keeps the closed mobile drawer out of the tab order.
         {...({ inert: hidden ? '' : undefined } as Record<string, unknown>)}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[280px] bg-surface border-r border-border overflow-hidden transition-[transform,width] duration-200',
+          'fixed inset-y-0 left-0 z-50 w-[280px] glass border-r border-border overflow-hidden transition-[transform,width] duration-200 ease-[var(--ease-soft)] shadow-lg',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
-          'md:static md:z-auto md:translate-x-0 md:shrink-0',
-          collapsed ? 'md:w-0 md:border-r-0' : 'md:w-[272px]',
+          'md:static md:z-auto md:translate-x-0 md:shrink-0 md:shadow-none',
+          collapsed ? 'md:w-[68px]' : 'md:w-[272px]',
         )}
       >
-        <div className="w-[280px] md:w-[272px] h-full">{content}</div>
+        {isDesktop && collapsed ? (
+          <div className="w-[68px] h-full">{rail}</div>
+        ) : (
+          <div className="w-[280px] md:w-[272px] h-full">{content}</div>
+        )}
       </aside>
     </>
   );
@@ -315,11 +357,11 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
 
   useEffect(() => {
     if (!menuOpen) return;
-    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); };
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); };
+    const onDown = (e: MouseEvent) => { if (!menuRef.current?.contains(e.target as Node)) setMenuOpen(false); }
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setMenuOpen(false); }
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
-    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); }
   }, [menuOpen]);
   useEffect(() => { if (!menuOpen) setMoveOpen(false); }, [menuOpen]);
   const currentProject = projectName?.(c.project_id) ?? null;
@@ -366,7 +408,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
         {menuOpen && (
-          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-border bg-surface shadow-lg p-1 z-50 animate-scale-in">
+          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl glass border border-border shadow-lg p-1 z-50 animate-scale-in">
             <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>Rename</MenuItem>
             {!c.archived && (
               <MenuItem icon={c.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onPin(c.id, !c.pinned); }}>

@@ -39,15 +39,28 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
   const switchMode = () => { setMode(m => (m === 'signin' ? 'signup' : 'signin')); setError(null); };
 
   return (
-    <main className="min-h-screen bg-bg flex items-center justify-center p-4">
-      <div className="w-full max-w-sm animate-fade-up">
+    <main className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-y-auto">
+      {/* Ambient glow behind the card. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[34rem] h-[30rem] rounded-full"
+        style={{ background: 'radial-gradient(closest-side, rgb(var(--accent) / 0.12), transparent 70%)' }}
+      />
+      <div className="w-full max-w-sm animate-rise-in relative">
         <div className="flex flex-col items-center text-center mb-8">
-          <Logo size={44} />
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-fg">Solo AI</h1>
+          <div className="relative">
+            <span
+              aria-hidden
+              className="absolute inset-0 -m-4 rounded-full opacity-90"
+              style={{ background: 'radial-gradient(closest-side, rgb(var(--accent) / 0.4), transparent 72%)' }}
+            />
+            <Logo size={44} className="relative" />
+          </div>
+          <h1 className="mt-4 font-display text-3xl tracking-tight text-fg">Solo AI</h1>
           <p className="mt-1 text-sm text-fg-muted">Your AI workspace</p>
         </div>
 
-        <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="rounded-2xl glass border border-border p-6 shadow-lg">
           {confirmationSent ? (
             <div className="text-center py-2">
               <MailCheck className="w-8 h-8 text-success mx-auto" />

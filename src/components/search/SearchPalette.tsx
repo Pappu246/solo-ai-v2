@@ -109,7 +109,7 @@ export function SearchPalette({ open, onClose, onOpenResult }: Props) {
                       data-index={index}
                       onMouseEnter={() => setActive(index)}
                       onClick={() => choose(r)}
-                      className={cn('w-full flex items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors', selected ? 'bg-surface-2' : 'hover:bg-surface-2/60')}
+                      className={cn('w-full flex items-start gap-3 rounded-lg px-2.5 py-2 text-left transition-colors', selected ? 'bg-accent/12 ring-1 ring-accent/25' : 'hover:bg-surface-2/60')}
                     >
                       <Icon className="w-4 h-4 text-fg-muted mt-0.5 shrink-0" aria-hidden />
                       <span className="flex-1 min-w-0">

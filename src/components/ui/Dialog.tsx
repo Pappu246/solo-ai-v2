@@ -20,8 +20,14 @@ interface DialogProps {
 const FOCUSABLE = 'a[href],button:not([disabled]),textarea,input,select,[tabindex]:not([tabindex="-1"])';
 
 /**
- * Accessible modal dialog: portal, focus trap, Esc to close, restores focus,
- * click-outside to close, scroll lock.
+ * Open dialogs, innermost last. Escape only closes the topmost one and the
+ * body stays scroll-locked while any dialog below is still open.
+ */
+const openDialogs: HTMLElement[] = [];
+
+/**
+ * Accessible modal dialog: portal, focus trap, Esc to close (topmost only),
+ * restores focus, click-outside to close, scroll lock.
  */
 export function Dialog({ open, onClose, title, description, children, footer, size = 'md', hideHeader, className }: DialogProps) {
   const panelRef = useRef<HTMLDivElement>(null);
@@ -32,16 +38,20 @@ export function Dialog({ open, onClose, title, description, children, footer, si
     if (!open) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     const panel = panelRef.current;
+    if (!panel) return;
+    openDialogs.push(panel);
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
 
     // Focus the first focusable element (or the panel itself).
-    const first = panel?.querySelector<HTMLElement>(FOCUSABLE);
-    (first ?? panel)?.focus();
+    const first = panel.querySelector<HTMLElement>(FOCUSABLE);
+    (first ?? panel).focus();
 
     const onKey = (e: KeyboardEvent) => {
+      // A dialog stacked on top owns Escape and Tab.
+      if (openDialogs[openDialogs.length - 1] !== panel) return;
       if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
-      if (e.key !== 'Tab' || !panel) return;
+      if (e.key !== 'Tab') return;
       const nodes = Array.from(panel.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(n => n.offsetParent !== null);
       if (!nodes.length) return;
       const firstNode = nodes[0], lastNode = nodes[nodes.length - 1];
@@ -51,7 +61,10 @@ export function Dialog({ open, onClose, title, description, children, footer, si
     document.addEventListener('keydown', onKey);
     return () => {
       document.removeEventListener('keydown', onKey);
-      document.body.style.overflow = prevOverflow;
+      const idx = openDialogs.indexOf(panel);
+      if (idx >= 0) openDialogs.splice(idx, 1);
+      // A dialog below is still open: keep the scroll lock, it restores on close.
+      if (openDialogs.length === 0) document.body.style.overflow = prevOverflow;
       previouslyFocused?.focus?.();
     };
   }, [open, onClose]);
@@ -65,19 +78,21 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-overlay/50 animate-fade-in"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descId : undefined}
-        tabIndex={-1}
-        className={cn(
-          'w-full bg-surface border border-border shadow-lg outline-none animate-scale-in flex flex-col',
-          'rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh]',
-          width, className,
-        )}
-      >
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={description ? descId : undefined}
+          tabIndex={-1}
+          className={cn(
+            'w-full glass border border-border shadow-lg outline-none animate-scale-in flex flex-col',
+            'rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh]',
+            width, className,
+          )}
+        >
+          {/* Grab handle for the mobile bottom-sheet form. */}
+          <span aria-hidden className="sm:hidden mx-auto mt-2 h-1 w-10 rounded-full bg-border-strong/70" />
         {!hideHeader && (
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
             <div className="min-w-0">

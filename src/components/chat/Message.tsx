@@ -3,6 +3,8 @@ import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as Ima
 import type { Message as MessageType, Attachment, KnowledgeSource } from '../../types';
 import { Markdown } from './Markdown';
 import { IconButton, Button } from '../ui';
+import { AssistantAvatar, UserAvatar } from './Avatar';
+import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
 
@@ -13,6 +15,9 @@ interface MessageProps {
   showModelBadge?: boolean;
   ttsEnabled?: boolean;
   ttsRate?: number;
+  /** First of its consecutive same-role run: carries avatar + timestamp. */
+  isFirstInGroup: boolean;
+  userInitial?: string;
   onRegenerate?: () => void;
   onEdit?: (id: string, content: string) => void;
   /** Phase 2: save an excerpt of this reply as a memory. */
@@ -22,14 +27,15 @@ interface MessageProps {
 }
 
 export const Message = memo(function Message({
-  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1, onRegenerate, onEdit, onRemember, onOpenSource,
+  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1,
+  isFirstInGroup, userInitial = 'Y', onRegenerate, onEdit, onRemember, onOpenSource,
 }: MessageProps) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
 
   if (isUser) {
     return (
-      <div className="group flex flex-col items-end gap-1.5" data-role="user">
+      <div className="group flex flex-col items-end gap-1" data-role="user">
         {message.attachments && message.attachments.length > 0 && (
           <div className="flex flex-wrap justify-end gap-1.5 max-w-[85%]">
             {message.attachments.map(a => <AttachmentPill key={a.id} attachment={a} />)}
@@ -43,18 +49,28 @@ export const Message = memo(function Message({
           />
         ) : (
           <>
-            {message.content && (
-              <div className="max-w-[85%] rounded-2xl rounded-br-md bg-surface-2 border border-border px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap break-words">
-                {message.content}
-              </div>
-            )}
-            <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-              <CopyButton text={message.content} />
-              {onEdit && (
-                <IconButton label="Edit message" size="sm" disabled={disabled} onClick={() => setEditing(true)}>
-                  <Pencil className="w-3.5 h-3.5" />
-                </IconButton>
+            <div className="flex items-end gap-2 max-w-[85%]">
+              {message.content && (
+                <div className="rounded-2xl rounded-br-md bg-gradient-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap break-words">
+                  {message.content}
+                </div>
               )}
+              {isFirstInGroup && <UserAvatar initial={userInitial} className="mb-0.5" />}
+            </div>
+            <div className="flex items-center gap-1 pr-8">
+              {isFirstInGroup && (
+                <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">
+                  {formatMessageTime(message.created_at)}
+                </time>
+              )}
+              <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
+                <CopyButton text={message.content} />
+                {onEdit && (
+                  <IconButton label="Edit message" size="sm" disabled={disabled} onClick={() => setEditing(true)}>
+                    <Pencil className="w-3.5 h-3.5" />
+                  </IconButton>
+                )}
+              </span>
             </div>
           </>
         )}
@@ -63,38 +79,60 @@ export const Message = memo(function Message({
   }
 
   return (
-    <div className="group flex flex-col gap-1.5" data-role="assistant">
-      <div className="text-fg">
-        <Markdown content={message.content} />
+    <div className="group flex flex-col gap-1" data-role="assistant">
+      <div className="flex items-start gap-2.5">
+        {isFirstInGroup ? (
+          <AssistantAvatar className="mt-0.5" />
+        ) : (
+          <span aria-hidden className="w-7 shrink-0" />
+        )}
+        <div className="min-w-0 flex-1">
+          <div className="rounded-2xl rounded-tl-md bg-surface-2/60 border border-border px-4 py-3 shadow-sm">
+            <div className="text-fg">
+              <Markdown content={message.content} />
+            </div>
+          </div>
+          {message.sources && message.sources.length > 0 && (
+            <div className="mt-1.5">
+              <SourceList sources={message.sources} onOpen={onOpenSource} />
+            </div>
+          )}
+        </div>
       </div>
-      {message.sources && message.sources.length > 0 && <SourceList sources={message.sources} onOpen={onOpenSource} />}
-      <div className={cn(
-        'flex items-center gap-0.5 transition-opacity',
-        isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
-      )}>
-        <CopyButton text={message.content} />
-        {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
-        {onRegenerate && isLast && (
-          <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}>
-            <RefreshCw className="w-3.5 h-3.5" />
-          </IconButton>
+      <div className="flex items-center gap-1 pl-[38px]">
+        {isFirstInGroup && (
+          <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">
+            {formatMessageTime(message.created_at)}
+          </time>
         )}
-        {onRemember && (
-          <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}>
-            <Brain className="w-3.5 h-3.5" />
-          </IconButton>
-        )}
-        {showModelBadge && message.model && (
-          <span className="ml-1.5 text-[11px] text-fg-subtle truncate" title={`Answered by ${message.model_name || message.model}`}>
-            {message.model_name || message.model}
-          </span>
-        )}
+        <span className={cn(
+          'flex items-center gap-0.5 transition-opacity',
+          isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
+        )}>
+          <CopyButton text={message.content} />
+          {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
+          {onRegenerate && isLast && (
+            <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}>
+              <RefreshCw className="w-3.5 h-3.5" />
+            </IconButton>
+          )}
+          {onRemember && (
+            <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}>
+              <Brain className="w-3.5 h-3.5" />
+            </IconButton>
+          )}
+          {showModelBadge && message.model && (
+            <span className="ml-1.5 text-[11px] text-fg-subtle truncate" title={`Answered by ${message.model_name || message.model}`}>
+              {message.model_name || message.model}
+            </span>
+          )}
+        </span>
       </div>
     </div>
   );
 });
 
-// ── Pieces ─────────────────────────────────────────────────────────────────────
+// ── Pieces ────────────────────────────────────────────────────────────────────
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -138,7 +176,7 @@ function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: s
   useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(value.length, value.length); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const canSave = value.trim().length > 0 && value.trim() !== initial.trim();
   return (
-    <div className="w-full max-w-[85%] rounded-2xl border border-accent/40 bg-surface p-2">
+    <div className="w-full max-w-[85%] rounded-2xl border border-accent/40 bg-surface p-2 shadow-md">
       <textarea
         ref={ref}
         value={value}
@@ -166,7 +204,7 @@ function SourceList({ sources, onOpen }: { sources: KnowledgeSource[]; onOpen?: 
       <span className="text-[11px] text-fg-subtle">Sources:</span>
       {sources.map(s => {
         const label = `${s.file_name}${s.chunk_indexes.length ? ` · ${s.chunk_indexes.length === 1 ? 'excerpt' : 'excerpts'} ${s.chunk_indexes.map(i => i + 1).join(', ')}` : ''}`;
-        const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]';
+        const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/70 px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]';
         return onOpen ? (
           <button key={s.file_id} type="button" onClick={() => onOpen(s)} className={cn(cls, 'hover:text-fg hover:border-border-strong transition-colors')} title={label}>
             <FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span>
@@ -182,7 +220,7 @@ function SourceList({ sources, onOpen }: { sources: KnowledgeSource[]; onOpen?: 
 function AttachmentPill({ attachment }: { attachment: Attachment }) {
   const isImage = attachment.type === 'image';
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1 text-xs text-fg-muted max-w-[220px]">
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2/80 px-2 py-1 text-xs text-fg-muted max-w-[220px]">
       {isImage ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}
       <span className="truncate">{attachment.name}</span>
     </span>

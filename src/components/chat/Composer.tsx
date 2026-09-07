@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2 } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
 import type { Attachment, KnowledgeFile } from '../../types';
 import { processFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../lib/files';
 import { detectFileType, KNOWLEDGE_ACCEPT } from '../../lib/knowledge/fileTypes';
@@ -20,6 +20,10 @@ export interface KnowledgeUploader {
   cancelUpload?: (fileId: string) => boolean;
   /** Byte-level progress per file id for uploads in flight. */
   progress?: Record<string, { sent: number; total: number }>;
+  /** Live library rows, so chips can follow state changes made elsewhere. */
+  files?: KnowledgeFile[];
+  /** Re-run indexing for a file whose upload completed but processing failed. */
+  retryProcessing?: (fileId: string) => Promise<void>;
 }
 
 interface Props {
@@ -47,6 +51,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  /** Original File objects for uploads this composer started, so failures can be retried. */
+  const fileRefs = useRef(new Map<string, File>());
+  /** Not yet linked to a row id (rows are registered by the pipeline): keyed by name|size. */
+  const pendingFiles = useRef(new Map<string, File>());
+  /** Per-chip retry action, chosen when the file fails (re-upload vs re-process). */
+  const retryPlans = useRef(new Map<string, () => Promise<unknown>>());
+
   const speech = useSpeechInput(transcript => setValue(v => (v ? `${v} ${transcript}` : transcript)));
 
   useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus() }), []);
@@ -71,6 +82,9 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     onSend(value.trim(), usable.length ? usable : undefined);
     setValue('');
     setAttachments([]);
+    fileRefs.current.clear();
+    pendingFiles.current.clear();
+    retryPlans.current.clear();
     setFileError(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
   }, [canSend, onSend, value, attachments]);
@@ -82,11 +96,53 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   };
 
   const upsertAttachment = useCallback((f: KnowledgeFile) => {
+    // Link the original File to the row once the pipeline registers it, so a
+    // failed upload can be retried with the same bytes.
+    if (f.status === 'uploading' && !fileRefs.current.has(f.id)) {
+      const key = `${f.name}|${f.size}`;
+      const file = pendingFiles.current.get(key);
+      if (file) { fileRefs.current.set(f.id, file); pendingFiles.current.delete(key); }
+    }
+    // Remember how to bring a failed chip back to life.
+    if (f.status === 'failed') {
+      if (f.metadata.uploaded && knowledge?.retryProcessing) {
+        retryPlans.current.set(f.id, () => knowledge.retryProcessing!(f.id));
+      } else {
+        const file = fileRefs.current.get(f.id);
+        if (file && knowledge) {
+          retryPlans.current.set(f.id, async () => {
+            setAttachments(prev => prev.filter(a => a.id !== f.id)); // stale row; a fresh one follows
+            return knowledge.upload([file], upsertAttachment);
+          });
+        }
+      }
+    }
     setAttachments(prev => {
       const next = attachmentFromFile(f);
       return prev.some(a => a.id === next.id) ? prev.map(a => (a.id === next.id ? next : a)) : [...prev, next];
     });
-  }, []);
+  }, [knowledge]);
+
+  // Keep chips in sync with the live rows (covers re-processing retries, which
+  // update the knowledge store without going through the composer's callback).
+  const knowledgeFiles = knowledge?.files;
+  useEffect(() => {
+    if (!knowledgeFiles) return;
+    const rows = new Map(knowledgeFiles.map(f => [f.id, f]));
+    setAttachments(prev => {
+      let changed = false;
+      const next = prev.map(a => {
+        if (!a.file_id) return a;
+        const row = rows.get(a.file_id);
+        if (row && (row.status !== a.status || (row.error ?? undefined) !== a.error)) {
+          changed = true;
+          return attachmentFromFile(row);
+        }
+        return a;
+      });
+      return changed ? next : prev;
+    });
+  }, [knowledgeFiles]);
 
   const addFiles = useCallback(async (files: FileList | File[]) => {
     setFileError(null);
@@ -123,6 +179,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
       }
       if (knowledgeFiles.length && knowledge) {
         setProcessing(false);
+        knowledgeFiles.forEach(f => { pendingFiles.current.set(`${f.name}|${f.size}`, f); });
         // Runs in the background; chips update as each file moves through its lifecycle.
         knowledge.upload(knowledgeFiles, upsertAttachment)
           .then(done => {
@@ -154,7 +211,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     // Removing a chip while its file is still uploading cancels the upload too.
     const target = attachments.find(a => a.id === id);
     if (target?.file_id && target.status === 'uploading') knowledge?.cancelUpload?.(target.file_id);
+    retryPlans.current.delete(id);
     setAttachments(prev => prev.filter(a => a.id !== id));
+  };
+
+  const retryAttachment = (id: string) => {
+    const plan = retryPlans.current.get(id);
+    if (!plan) return;
+    plan().catch(() => setFileError('Could not retry that file.'));
   };
 
   const onPaste = (e: React.ClipboardEvent) => {
@@ -168,14 +232,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
   return (
     <div
-      className="px-3 pb-3 pt-1 sm:px-4 sm:pb-4"
+      className="px-3 pt-1 sm:px-4 pb-safe"
       onDragOver={e => { e.preventDefault(); setDragging(true); }}
       onDragLeave={() => setDragging(false)}
       onDrop={e => { e.preventDefault(); setDragging(false); if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files); }}
     >
       <div className="max-w-3xl mx-auto">
         <div className={cn(
-          'rounded-2xl border bg-surface shadow-sm transition-colors',
+          'rounded-2xl glass border shadow-sm transition-colors',
           dragging ? 'border-accent bg-accent/5' : 'border-border focus-within:border-border-strong',
         )}>
           {attachments.length > 0 && (
@@ -186,6 +250,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   attachment={a}
                   progress={a.file_id ? knowledge?.progress?.[a.file_id] : undefined}
                   onRemove={() => removeAttachment(a.id)}
+                  onRetry={() => retryAttachment(a.id)}
                 />
               ))}
             </div>
@@ -206,7 +271,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
           <div className="flex items-center justify-between px-2 pb-2">
             <div className="flex items-center gap-0.5">
-              <IconButton label="Attach files" size="sm" disabled={disabled || processing} onClick={() => fileInputRef.current?.click()}>
+              <IconButton label="Attach files" size="sm" disabled={disabled || processing} onClick={() => fileInputRef.current?.click()} className="w-9 h-9">
                 <Paperclip className="w-4 h-4" />
               </IconButton>
               <input
@@ -218,7 +283,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }}
               />
               {knowledge?.pickFromLibrary && (
-                <IconButton label="Attach from your files" size="sm" disabled={disabled} onClick={pickFromLibrary}>
+                <IconButton label="Attach from your files" size="sm" disabled={disabled} onClick={pickFromLibrary} className="w-9 h-9">
                   <Library className="w-4 h-4" />
                 </IconButton>
               )}
@@ -229,40 +294,46 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   active={speech.listening}
                   disabled={disabled}
                   onClick={speech.toggle}
-                  className={speech.listening ? 'text-danger bg-danger/10' : undefined}
+                  className={cn('w-9 h-9', speech.listening ? 'text-danger bg-danger/10' : undefined)}
                 >
                   {speech.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </IconButton>
               )}
             </div>
 
-            {isGenerating ? (
-              <button
-                type="button"
-                onClick={onStop}
-                aria-label="Stop generating"
-                title="Stop generating"
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-fg text-bg hover:opacity-90 transition-opacity"
-              >
-                <Square className="w-3.5 h-3.5" fill="currentColor" />
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!canSend}
-                aria-label="Send message"
-                title="Send message"
-                className="inline-flex items-center justify-center w-8 h-8 rounded-lg bg-accent text-accent-fg hover:bg-accent/90 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+            {/* One control, two states: the arrow morphs into a stop square. */}
+            <button
+              type="button"
+              onClick={isGenerating ? onStop : submit}
+              disabled={!isGenerating && !canSend}
+              aria-label={isGenerating ? 'Stop generating' : 'Send message'}
+              title={isGenerating ? 'Stop generating' : 'Send message'}
+              className="relative inline-flex items-center justify-center w-11 h-11 -m-0.5 rounded-full disabled:cursor-not-allowed"
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  'absolute inset-0 m-auto flex items-center justify-center w-9 h-9 rounded-full bg-accent text-accent-fg shadow-sm transition-all duration-200',
+                  isGenerating ? 'opacity-0 scale-50 rotate-90' : canSend ? 'opacity-100 scale-100 rotate-0' : 'opacity-40 scale-95 rotate-0',
+                )}
               >
                 <ArrowUp className="w-4 h-4" strokeWidth={2.5} />
-              </button>
-            )}
+              </span>
+              <span
+                aria-hidden
+                className={cn(
+                  'absolute inset-0 m-auto flex items-center justify-center w-9 h-9 rounded-full bg-fg text-bg shadow-md transition-all duration-200',
+                  isGenerating ? 'opacity-100 scale-100 rotate-0' : 'opacity-0 scale-50 -rotate-90 pointer-events-none',
+                )}
+              >
+                <Square className="w-3.5 h-3.5" fill="currentColor" />
+              </span>
+            </button>
           </div>
         </div>
 
         <div className="flex items-center justify-between min-h-[1.25rem] mt-1.5 px-1 text-[11px] text-fg-subtle">
-          <span className={cn(fileError && 'text-danger')}>
+          <span className={cn(fileError && 'text-danger')} aria-live="polite">
             {fileError || (speech.listening ? 'Listening…' : processing ? 'Reading files…' : pendingKnowledge ? 'Preparing files…' : hint || '')}
           </span>
           <span className="hidden sm:inline">
@@ -274,16 +345,28 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   );
 });
 
-function AttachmentChip({ attachment, progress, onRemove }: { attachment: Attachment; progress?: { sent: number; total: number }; onRemove: () => void }) {
+function AttachmentChip({ attachment, progress, onRemove, onRetry }: {
+  attachment: Attachment;
+  progress?: { sent: number; total: number };
+  onRemove: () => void;
+  onRetry: () => void;
+}) {
   const isImage = attachment.type === 'image' && attachment.base64;
   const uploading = attachment.status === 'uploading';
   const busy = uploading || attachment.status === 'processing';
   const failed = attachment.status === 'failed';
+  const ready = attachment.status === 'ready';
   const percent = uploading && progress && progress.total > 0 ? Math.min(100, Math.round((progress.sent / progress.total) * 100)) : null;
-  const statusLabel = failed ? 'Failed' : uploading ? (percent === null ? 'Uploading' : `${percent}%`) : busy ? 'Processing' : formatFileSize(attachment.size);
+  const statusLabel = failed ? 'Failed' : uploading ? (percent === null ? 'Uploading' : `${percent}%`) : busy ? 'Processing' : ready ? 'Ready' : formatFileSize(attachment.size);
   return (
     <div
-      className={cn('relative overflow-hidden flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border text-xs text-fg max-w-[220px]', failed ? 'border-danger/30 bg-danger/5' : 'border-border bg-surface-2')}
+      className={cn(
+        'relative overflow-hidden flex items-center gap-2 pl-1.5 pr-1 py-1 rounded-lg border text-xs max-w-[260px] transition-colors',
+        failed ? 'border-danger/40 bg-danger/10 text-fg'
+          : ready ? 'border-success/40 bg-success/10 text-fg'
+          : busy ? 'border-border bg-surface-2 text-fg-muted'
+          : 'border-border bg-surface-2 text-fg-muted',
+      )}
       title={failed ? attachment.error : undefined}
       data-file-status={attachment.status}
     >
@@ -301,17 +384,39 @@ function AttachmentChip({ attachment, progress, onRemove }: { attachment: Attach
       {isImage ? (
         <img src={`data:${attachment.mime_type};base64,${attachment.base64}`} alt="" className="w-6 h-6 rounded object-cover shrink-0" />
       ) : attachment.type === 'image' ? (
-        <ImageIcon className="w-4 h-4 text-fg-muted shrink-0" />
-      ) : busy ? (
-        <Loader2 className="w-4 h-4 text-fg-muted shrink-0 animate-spin-slow" aria-label={uploading ? 'Uploading' : 'Processing'} />
+        <ImageIcon className="w-4 h-4 text-fg-muted shrink-0" aria-hidden />
+      ) : uploading ? (
+        <Loader2 className="w-4 h-4 text-fg-muted shrink-0 animate-spin-slow" aria-hidden />
+      ) : attachment.status === 'processing' ? (
+        <Loader2 className="w-4 h-4 text-accent shrink-0 animate-spin-slow" aria-hidden />
       ) : failed ? (
-        <AlertCircle className="w-4 h-4 text-danger shrink-0" aria-label="Failed" />
+        <AlertCircle className="w-4 h-4 text-danger shrink-0" aria-hidden />
+      ) : ready ? (
+        <CheckCircle2 className="w-4 h-4 text-success shrink-0" aria-hidden />
       ) : (
-        <FileText className="w-4 h-4 text-fg-muted shrink-0" />
+        <FileText className="w-4 h-4 text-fg-muted shrink-0" aria-hidden />
       )}
-      <span className="truncate">{attachment.name}</span>
-      <span className="text-fg-subtle shrink-0 tabular-nums" aria-live={uploading ? 'polite' : undefined}>{statusLabel}</span>
-      <IconButton label={uploading ? `Cancel upload of ${attachment.name}` : `Remove ${attachment.name}`} size="sm" onClick={onRemove} className="w-5 h-5"><X className="w-3 h-3" /></IconButton>
+      <span className="truncate max-w-[120px]">{attachment.name}</span>
+      <span className="text-fg-muted shrink-0 tabular-nums" aria-live="polite">{statusLabel}</span>
+      {failed && (
+        <button
+          type="button"
+          onClick={onRetry}
+          aria-label={`Retry upload of ${attachment.name}`}
+          title="Retry"
+          className="inline-flex items-center justify-center w-6 h-6 rounded-md text-fg-muted hover:text-fg hover:bg-surface-3 transition-colors shrink-0"
+        >
+          <RotateCcw className="w-3 h-3" aria-hidden />
+        </button>
+      )}
+      <IconButton
+        label={uploading ? `Cancel upload of ${attachment.name}` : `Remove ${attachment.name}`}
+        size="sm"
+        onClick={onRemove}
+        className="w-6 h-6 shrink-0"
+      >
+        <X className="w-3 h-3" />
+      </IconButton>
     </div>
   );
 }

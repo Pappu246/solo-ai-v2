@@ -45,7 +45,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
               type="button"
               onClick={() => setSection(s.id)}
               aria-current={section === s.id ? 'page' : undefined}
-              className={cn('flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm whitespace-nowrap transition-colors', section === s.id ? 'bg-surface-2 text-fg font-medium' : 'text-fg-muted hover:text-fg hover:bg-surface-2/60')}
+              className={cn('flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm whitespace-nowrap transition-colors', section === s.id ? 'bg-accent/12 text-fg font-medium ring-1 ring-accent/25' : 'text-fg-muted hover:text-fg hover:bg-surface-2/60')}
             >
               {s.icon}{s.label}
             </button>
@@ -87,7 +87,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                       aria-label={a.label}
                       title={a.label}
                       onClick={() => onUpdate({ accent: a.value })}
-                      className={cn('w-7 h-7 rounded-full transition-transform', ACCENT_SWATCH[a.value], settings.accent === a.value ? 'ring-2 ring-offset-2 ring-offset-surface ring-fg scale-105' : 'opacity-70 hover:opacity-100')}
+                      className={cn('w-7 h-7 rounded-full transition-all duration-150', ACCENT_SWATCH[a.value], settings.accent === a.value ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent scale-110' : 'opacity-70 hover:opacity-100')}
                     />
                   ))}
                 </div>
@@ -194,7 +194,10 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
           role="radio"
           aria-checked={value === o.value}
           onClick={() => onChange(o.value)}
-          className={cn('inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-colors', value === o.value ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
+          className={cn(
+            'inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150',
+            value === o.value ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg',
+          )}
         >
           {o.icon}{o.label}
         </button>

@@ -6,6 +6,8 @@ import { Message } from './Message';
 import { StreamingMessage } from './StreamingMessage';
 import { ErrorCard } from './ErrorCard';
 import { Spinner } from '../ui';
+import { groupMessages } from '../../lib/chat/grouping';
+import { cn } from '../../lib/cn';
 
 interface Props {
   messages: MessageType[];
@@ -18,6 +20,8 @@ interface Props {
   showModelBadge: boolean;
   ttsEnabled: boolean;
   ttsRate: number;
+  /** First letter of the signed-in user's name/email, for the user avatar. */
+  userInitial?: string;
   onRegenerate: () => void;
   onEdit: (id: string, content: string) => void;
   onRetry: () => void;
@@ -30,7 +34,7 @@ const NEAR_BOTTOM_PX = 120;
 
 export function MessageList({
   messages, loading, isGenerating, streamingContent, streamingModel, error, canRetry,
-  showModelBadge, ttsEnabled, ttsRate, onRegenerate, onEdit, onRetry, onDismissError, onRemember, onOpenSource,
+  showModelBadge, ttsEnabled, ttsRate, userInitial, onRegenerate, onEdit, onRetry, onDismissError, onRemember, onOpenSource,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -58,32 +62,42 @@ export function MessageList({
   }, [conversationKey]);
 
   const lastAssistantIdx = (() => { for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return i; return -1; })();
+  const grouped = groupMessages(messages);
 
   return (
     <div className="relative flex-1 min-h-0">
       <div ref={containerRef} onScroll={onScroll} className="h-full overflow-y-auto">
-        <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8 space-y-6">
+        <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
           {loading && messages.length === 0 && (
             <div className="flex justify-center py-10 text-fg-subtle"><Spinner /></div>
           )}
-          {messages.map((m, i) => (
-            <Message
-              key={m.id}
-              message={m}
-              isLast={i === lastAssistantIdx && i === messages.length - 1}
-              disabled={isGenerating}
-              showModelBadge={showModelBadge}
-              ttsEnabled={ttsEnabled}
-              ttsRate={ttsRate}
-              onRegenerate={m.role === 'assistant' ? onRegenerate : undefined}
-              onEdit={m.role === 'user' ? onEdit : undefined}
-              onRemember={m.role === 'assistant' ? onRemember : undefined}
-              onOpenSource={onOpenSource}
-            />
+          {grouped.map(({ message: m, index: i, isFirstInGroup }) => (
+            <div key={m.id} className={cn(isFirstInGroup ? 'mt-7 first:mt-0' : 'mt-2')}>
+              <Message
+                message={m}
+                isLast={i === lastAssistantIdx && i === messages.length - 1}
+                isFirstInGroup={isFirstInGroup}
+                disabled={isGenerating}
+                showModelBadge={showModelBadge}
+                ttsEnabled={ttsEnabled}
+                ttsRate={ttsRate}
+                userInitial={userInitial}
+                onRegenerate={m.role === 'assistant' ? onRegenerate : undefined}
+                onEdit={m.role === 'user' ? onEdit : undefined}
+                onRemember={m.role === 'assistant' ? onRemember : undefined}
+                onOpenSource={onOpenSource}
+              />
+            </div>
           ))}
-          {isGenerating && <StreamingMessage content={streamingContent} model={streamingModel} showModelBadge={showModelBadge} />}
+          {isGenerating && (
+            <div className="mt-7">
+              <StreamingMessage content={streamingContent} model={streamingModel} showModelBadge={showModelBadge} />
+            </div>
+          )}
           {error && !isGenerating && (
-            <ErrorCard error={error} onRetry={canRetry && error.retryable ? onRetry : undefined} onDismiss={onDismissError} />
+            <div className="mt-7">
+              <ErrorCard error={error} onRetry={canRetry && error.retryable ? onRetry : undefined} onDismiss={onDismissError} />
+            </div>
           )}
           <div ref={endRef} className="h-px" />
         </div>
@@ -94,7 +108,7 @@ export function MessageList({
           type="button"
           onClick={() => { pinnedToBottom.current = true; endRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }); }}
           aria-label="Scroll to latest"
-          className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center justify-center w-8 h-8 rounded-full border border-border bg-surface shadow-md text-fg-muted hover:text-fg animate-fade-in"
+          className="absolute bottom-3 left-1/2 -translate-x-1/2 inline-flex items-center justify-center w-8 h-8 rounded-full glass border border-border shadow-md text-fg-muted hover:text-fg animate-fade-in"
         >
           <ArrowDown className="w-4 h-4" />
         </button>

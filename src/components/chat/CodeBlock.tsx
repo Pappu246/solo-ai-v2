@@ -18,6 +18,7 @@ interface CodeBlockProps {
   live?: boolean;
 }
 
+/** A code panel built from the dedicated code tokens: near-black body in dark, warm paper in light. */
 export function CodeBlock({ code, language, live }: CodeBlockProps) {
   const [html, setHtml] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -34,7 +35,7 @@ export function CodeBlock({ code, language, live }: CodeBlockProps) {
         setHtml(result.value);
       } catch { setHtml(null); }
     }).catch(() => setHtml(null));
-    return () => { cancelled = true; };
+    return () => { cancelled = true; }
   }, [code, language, live]);
 
   const copy = async () => {
@@ -46,13 +47,15 @@ export function CodeBlock({ code, language, live }: CodeBlockProps) {
   };
 
   return (
-    <div className="my-3 rounded-xl border border-border bg-surface overflow-hidden text-[0.9em]">
-      <div className="flex items-center justify-between px-3.5 h-9 border-b border-border bg-surface-2/60">
+    <div className="relative my-3 rounded-xl overflow-hidden text-[0.9em] border border-[rgb(var(--code-border))] bg-[rgb(var(--code-bg))] shadow-sm">
+      {/* Gold hairline across the top edge. */}
+      <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
+      <div className="flex items-center justify-between gap-3 px-3.5 h-9 border-b border-[rgb(var(--code-border))] bg-[rgb(var(--code-header))]">
         <span className="text-[11px] font-medium text-fg-muted font-mono lowercase">{language || 'text'}</span>
         <button
           type="button"
           onClick={copy}
-          className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium rounded px-1.5 py-0.5 transition-colors', copied ? 'text-success' : 'text-fg-muted hover:text-fg')}
+          className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-1.5 py-0.5 transition-colors hover:bg-[rgb(var(--code-bg))]', copied ? 'text-success' : 'text-fg-muted hover:text-fg')}
           aria-label={copied ? 'Copied' : 'Copy code'}
         >
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
