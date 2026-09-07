@@ -33,7 +33,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
   const Icon = item.tone === 'success' ? CheckCircle2 : item.tone === 'error' ? AlertCircle : Info;
   const iconTone = item.tone === 'success' ? 'text-success' : item.tone === 'error' ? 'text-danger' : 'text-accent';
   return (
-    <div role={item.tone === 'error' ? 'alert' : 'status'} className={cn('pointer-events-auto flex items-start gap-3 rounded-xl border border-border bg-surface shadow-lg p-3.5 animate-fade-up')}>
+    <div role={item.tone === 'error' ? 'alert' : 'status'} className={cn('pointer-events-auto flex items-start gap-3 rounded-xl glass border border-border shadow-lg p-3.5 animate-fade-up')}>
       <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', iconTone)} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-fg">{item.title}</p>

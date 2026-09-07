@@ -410,7 +410,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
           <MoreHorizontal className="w-3.5 h-3.5" />
         </IconButton>
         {menuOpen && (
-          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl border border-border bg-surface shadow-lg p-1 z-50 animate-scale-in">
+          <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl glass border border-border shadow-lg p-1 z-50 animate-scale-in">
             <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>Rename</MenuItem>
             {!c.archived && (
               <MenuItem icon={c.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onPin(c.id, !c.pinned); }}>

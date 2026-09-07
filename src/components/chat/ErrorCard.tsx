@@ -13,7 +13,7 @@ interface Props {
 export function ErrorCard({ error, onRetry, onDismiss }: Props) {
   const [open, setOpen] = useState(false);
   return (
-    <div role="alert" className="rounded-xl border border-danger/25 bg-danger/5 p-4">
+    <div role="alert" className="rounded-xl border border-danger/25 bg-danger/5 backdrop-blur-md p-4">
       <div className="flex items-start gap-3">
         <AlertCircle className="w-4 h-4 text-danger mt-0.5 shrink-0" />
         <div className="flex-1 min-w-0">

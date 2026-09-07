@@ -65,19 +65,21 @@ export function Dialog({ open, onClose, title, description, children, footer, si
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-overlay/50 animate-fade-in"
       onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        aria-describedby={description ? descId : undefined}
-        tabIndex={-1}
-        className={cn(
-          'w-full bg-surface border border-border shadow-lg outline-none animate-scale-in flex flex-col',
-          'rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh]',
-          width, className,
-        )}
-      >
+        <div
+          ref={panelRef}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          aria-describedby={description ? descId : undefined}
+          tabIndex={-1}
+          className={cn(
+            'w-full glass border border-border shadow-lg outline-none animate-scale-in flex flex-col',
+            'rounded-t-2xl sm:rounded-2xl max-h-[92vh] sm:max-h-[85vh]',
+            width, className,
+          )}
+        >
+          {/* Grab handle for the mobile bottom-sheet form. */}
+          <span aria-hidden className="sm:hidden mx-auto mt-2 h-1 w-10 rounded-full bg-border-strong/70" />
         {!hideHeader && (
           <div className="flex items-start justify-between gap-4 px-5 pt-5 pb-3">
             <div className="min-w-0">

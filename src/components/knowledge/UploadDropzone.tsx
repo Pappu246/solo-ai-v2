@@ -34,7 +34,7 @@ export function UploadDropzone({ onFiles, disabled, compact, hint }: Props) {
         className={cn(
           'w-full rounded-xl border border-dashed transition-colors text-left',
           compact ? 'px-3 py-2.5 flex items-center gap-3' : 'px-4 py-6 flex flex-col items-center text-center gap-1.5',
-          dragging ? 'border-accent bg-accent/5' : 'border-border-strong hover:border-fg-subtle hover:bg-surface-2/60',
+          dragging ? 'border-accent bg-accent/10' : 'border-border-strong hover:border-accent/60 hover:bg-accent/5',
           'disabled:opacity-50 disabled:cursor-not-allowed',
         )}
       >

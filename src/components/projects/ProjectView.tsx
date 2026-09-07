@@ -66,7 +66,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
         <header className="flex items-start justify-between gap-3 mb-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-semibold tracking-tight text-fg truncate">{project.name}</h2>
+              <h2 className="font-display text-2xl tracking-tight text-fg truncate">{project.name}</h2>
               {project.archived && <span className="text-[11px] font-medium uppercase tracking-wider text-fg-subtle border border-border rounded-md px-1.5 py-0.5">Archived</span>}
             </div>
             {project.description && <p className="text-sm text-fg-muted mt-1">{project.description}</p>}
@@ -85,7 +85,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
               {menuOpen && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
-                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 rounded-xl border border-border bg-surface shadow-lg p-1 z-50 animate-scale-in">
+                  <div role="menu" className="absolute right-0 top-full mt-1 w-48 rounded-xl glass border border-border shadow-lg p-1 z-50 animate-scale-in">
                     <MenuItem icon={<Settings2 className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onEdit(); }}>Settings</MenuItem>
                     <MenuItem icon={project.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); archive(); }}>
                       {project.archived ? 'Restore' : 'Archive'}
@@ -107,7 +107,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
               role="tab"
               aria-selected={tab === t.id}
               onClick={() => setTab(t.id)}
-              className={cn('inline-flex items-center gap-1.5 h-9 px-3 -mb-px border-b-2 text-sm transition-colors', tab === t.id ? 'border-fg text-fg font-medium' : 'border-transparent text-fg-muted hover:text-fg')}
+              className={cn('inline-flex items-center gap-1.5 h-9 px-3 -mb-px border-b-2 text-sm transition-colors', tab === t.id ? 'border-accent text-fg font-medium' : 'border-transparent text-fg-muted hover:text-fg')}
             >
               <t.icon className="w-3.5 h-3.5" aria-hidden />
               {t.label}
@@ -121,7 +121,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
             projectChats.length === 0 ? (
               <EmptyPanel icon={MessageSquare} title="No chats in this project yet." action={!project.archived ? <Button size="sm" variant="secondary" onClick={onNewChat}>Start the first chat</Button> : undefined} />
             ) : (
-              <ul className="rounded-xl border border-border bg-surface divide-y divide-border" aria-label="Project chats">
+              <ul className="rounded-xl glass border border-border divide-y divide-border shadow-sm" aria-label="Project chats">
                 {projectChats.map(c => (
                   <li key={c.id}>
                     <button type="button" onClick={() => onOpenConversation(c)} className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-surface-2/70 transition-colors">
@@ -138,7 +138,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
           {tab === 'files' && (
             <div className="space-y-3">
               {!project.archived && <UploadDropzone onFiles={upload} disabled={uploading} compact hint={`Added to “${project.name}” and available in all of its chats`} />}
-              <div className="rounded-xl border border-border bg-surface px-2">
+              <div className="rounded-xl glass border border-border px-2 shadow-sm">
                 <FileList files={projectFiles} onOpen={onOpenFile} showProject={false} emptyMessage="No files in this project yet." />
               </div>
             </div>
@@ -150,7 +150,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
                 <EmptyPanel icon={Brain} title="No project memories yet." description="Project memories apply only to chats inside this project." action={<Button size="sm" variant="secondary" leftIcon={<Plus className="w-3.5 h-3.5" />} onClick={onOpenMemory}>Add memory</Button>} />
               ) : (
                 <>
-                  <ul className="rounded-xl border border-border bg-surface divide-y divide-border" aria-label="Project memories">
+                  <ul className="rounded-xl glass border border-border divide-y divide-border shadow-sm" aria-label="Project memories">
                     {projectMemories.map(m => (
                       <li key={m.id} className="px-4 py-3">
                         <p className="text-sm text-fg whitespace-pre-wrap break-words">{m.content}</p>
@@ -184,7 +184,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
 
 function EmptyPanel({ icon: Icon, title, description, action }: { icon: typeof MessageSquare; title: string; description?: string; action?: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-surface flex flex-col items-center gap-2 py-10 px-6 text-center">
+    <div className="rounded-xl glass border border-border flex flex-col items-center gap-2 py-10 px-6 text-center">
       <Icon className="w-5 h-5 text-fg-subtle" aria-hidden />
       <p className="text-sm text-fg">{title}</p>
       {description && <p className="text-xs text-fg-muted max-w-sm">{description}</p>}

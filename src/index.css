@@ -208,6 +208,8 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
     padding-left: max(1rem, var(--safe-left));
     padding-right: max(1rem, var(--safe-right));
   }
+  /* Raw safe-area inset (0 on non-notched screens). */
+  .pt-env { padding-top: var(--safe-top); }
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */

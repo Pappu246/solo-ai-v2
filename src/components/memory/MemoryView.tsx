@@ -66,7 +66,7 @@ export function MemoryView({ memories, projects, projectId, onOpenConversation }
       <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
         <header className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <h2 className="text-xl font-semibold tracking-tight text-fg">Memory</h2>
+            <h2 className="font-display text-2xl tracking-tight text-fg">Memory</h2>
             <p className="text-sm text-fg-muted mt-1">
               Things you’ve asked Solo to keep in mind. Memories are only saved when you add them, and you can edit or delete any of them at any time.
             </p>
@@ -94,7 +94,7 @@ export function MemoryView({ memories, projects, projectId, onOpenConversation }
                 role="tab"
                 aria-selected={typeFilter === t}
                 onClick={() => setTypeFilter(t)}
-                className={cn('h-7 px-2.5 rounded-md text-xs font-medium whitespace-nowrap transition-colors', typeFilter === t ? 'bg-surface text-fg shadow-sm' : 'text-fg-muted hover:text-fg')}
+                className={cn('h-7 px-2.5 rounded-md text-xs font-medium whitespace-nowrap transition-all duration-150', typeFilter === t ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg')}
               >
                 {t === 'all' ? 'All types' : MEMORY_TYPES[t].label}
               </button>
@@ -103,7 +103,7 @@ export function MemoryView({ memories, projects, projectId, onOpenConversation }
         </div>
 
         {/* List */}
-        <div className="mt-3 rounded-xl border border-border bg-surface">
+        <div className="mt-3 rounded-xl glass border border-border shadow-sm">
           {memories.status === 'loading' && memories.memories.length === 0 && (
             <div className="flex items-center justify-center py-10 text-fg-subtle"><Spinner /></div>
           )}
