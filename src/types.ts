@@ -238,7 +238,7 @@ export interface UserSettings {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'system',
+  theme: 'dark',
   accent: 'amber',
   font_size: 'base',
   show_model_badges: true,

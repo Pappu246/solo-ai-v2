@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&family=JetBrains+Mono:wght@400;500&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -10,37 +10,75 @@
    raw palette values, so light/dark/accent are controlled entirely here.
    Tokens are stored as space-separated RGB channels so Tailwind can apply
    opacity modifiers (e.g. `bg-accent/10`).
+
+   The default theme is the cinematic dark/gold look: warm near-black
+   surfaces, a refined gold accent, glass panels and a quiet ambient glow.
+   Light and System remain fully supported, as do all accent options.
    ───────────────────────────────────────────────────────────────────────────── */
 
 :root {
   /* Accent (default: amber). Overridden by [data-accent]. */
-  --accent: 245 158 11;
-  --accent-fg: 20 14 4;
+  --accent: 154 94 8;
+  --accent-fg: 255 253 248;
 
   /* Surfaces */
-  --bg: 250 250 250;          /* app background */
+  --bg: 250 249 247;          /* app background */
   --surface: 255 255 255;     /* sidebar, cards, panels */
-  --surface-2: 244 244 245;   /* nested surfaces, hover */
-  --surface-3: 228 228 231;   /* pressed, code background */
+  --surface-2: 245 243 240;   /* nested surfaces, hover */
+  --surface-3: 232 229 225;   /* pressed, code background */
   --overlay: 0 0 0;
 
   /* Borders */
-  --border: 228 228 231;
-  --border-strong: 212 212 216;
+  --border: 231 228 223;
+  --border-strong: 210 206 200;
 
   /* Text */
-  --fg: 24 24 27;
-  --fg-muted: 82 82 91;
-  --fg-subtle: 161 161 170;
+  --fg: 28 26 24;
+  --fg-muted: 87 82 76;
+  --fg-subtle: 146 140 131;
 
   /* Status */
-  --danger: 220 38 38;
-  --success: 22 163 74;
-  --warning: 217 119 6;
+  --danger: 185 28 28;
+  --success: 22 128 62;
+  --warning: 180 110 12;
 
+  /* Code panels */
+  --code-bg: 247 246 244;
+  --code-header: 240 238 234;
+  --code-border: 226 223 218;
+
+  /* Glass (frosted panels: sidebar, dialogs, search) */
+  --glass: 255 255 255;
+  --glass-alpha: 0.78;
+  --glass-blur: 18px;
+  --glass-edge: 0 0 0 / 0.06;
+
+  /* Ambient glow behind the app (very subtle in light) */
+  --glow: var(--accent);
+  --glow-strength: 0.05;
+
+  /* Radius */
   --radius: 12px;
+
+  /* Typography */
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  --font-display: 'Instrument Serif', ui-serif, Georgia, 'Times New Roman', serif;
+  --tracking-tight: -0.022em;
+
+  /* Motion */
+  --motion-fast: 140ms;
+  --motion-base: 220ms;
+  --motion-slow: 340ms;
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* Safe areas (notched devices; 0 elsewhere) */
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --safe-left: env(safe-area-inset-left);
+  --safe-right: env(safe-area-inset-right);
+
   --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 12px rgb(0 0 0 / 0.08);
   --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.14);
@@ -48,45 +86,66 @@
   color-scheme: light;
 }
 
+/* ── Cinematic dark ───────────────────────────────────────────────────────── */
 .dark {
-  --bg: 12 12 13;
-  --surface: 20 20 22;
-  --surface-2: 30 30 33;
-  --surface-3: 42 42 46;
+  --bg: 11 10 10;
+  --surface: 21 19 17;
+  --surface-2: 30 27 24;
+  --surface-3: 43 38 33;
   --overlay: 0 0 0;
 
-  --border: 38 38 42;
-  --border-strong: 58 58 63;
+  --border: 39 35 30;
+  --border-strong: 60 53 45;
 
-  --fg: 236 236 238;
-  --fg-muted: 161 161 170;
-  --fg-subtle: 113 113 122;
+  --fg: 240 236 229;
+  --fg-muted: 170 163 152;
+  --fg-subtle: 118 111 101;
 
-  --danger: 248 113 113;
-  --success: 74 222 128;
-  --warning: 251 191 36;
+  --danger: 240 110 105;
+  --success: 122 202 140;
+  --warning: 226 179 90;
 
-  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
-  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.45);
-  --shadow-lg: 0 12px 32px rgb(0 0 0 / 0.6);
+  --code-bg: 8 7 6;
+  --code-header: 17 15 13;
+  --code-border: 45 40 34;
+
+  --glass: 24 21 18;
+  --glass-alpha: 0.68;
+  --glass-blur: 22px;
+  --glass-edge: 255 255 255 / 0.07;
+
+  --glow-strength: 0.16;
+
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
+  --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5);
+  --shadow-lg: 0 16px 48px rgb(0 0 0 / 0.6);
 
   color-scheme: dark;
 }
 
-/* Accent variants */
-[data-accent='amber']   { --accent: 245 158 11;  --accent-fg: 20 14 4; }
-[data-accent='blue']    { --accent: 59 130 246;  --accent-fg: 255 255 255; }
-[data-accent='violet']  { --accent: 139 92 246;  --accent-fg: 255 255 255; }
-[data-accent='emerald'] { --accent: 16 185 129;  --accent-fg: 4 24 16; }
-[data-accent='rose']    { --accent: 244 63 94;   --accent-fg: 255 255 255; }
-[data-accent='cyan']    { --accent: 6 182 212;   --accent-fg: 4 20 24; }
+/* Accent variants (light) */
+[data-accent='amber']   { --accent: 154 94 8;    --accent-fg: 255 253 248; }
+[data-accent='blue']    { --accent: 37 99 235;   --accent-fg: 255 255 255; }
+[data-accent='violet']  { --accent: 124 58 237;  --accent-fg: 255 255 255; }
+[data-accent='emerald'] { --accent: 5 122 85;    --accent-fg: 255 255 255; }
+[data-accent='rose']    { --accent: 225 29 72;   --accent-fg: 255 255 255; }
+[data-accent='cyan']    { --accent: 8 116 142;   --accent-fg: 255 255 255; }
+
+/* Accent variants (dark): brighter for contrast on near-black surfaces.
+   Amber becomes a refined cinematic gold — the signature of the dark theme. */
+.dark[data-accent='amber']   { --accent: 222 178 84;  --accent-fg: 24 17 6; }
+.dark[data-accent='blue']    { --accent: 96 165 250;  --accent-fg: 7 15 28; }
+.dark[data-accent='violet']  { --accent: 167 139 250; --accent-fg: 19 10 29; }
+.dark[data-accent='emerald'] { --accent: 52 211 153;  --accent-fg: 5 26 18; }
+.dark[data-accent='rose']    { --accent: 251 113 133; --accent-fg: 28 7 12; }
+.dark[data-accent='cyan']    { --accent: 34 211 238;  --accent-fg: 6 22 25; }
 
 /* Font size preference */
 [data-font-size='sm']   { font-size: 15px; }
 [data-font-size='base'] { font-size: 16px; }
 [data-font-size='lg']   { font-size: 17px; }
 
-/* ── Base ─────────────────────────────────────────────────────────────────── */
+/* ── Base ────────────────────────────────────────────────────────────────── */
 
 html {
   height: 100%;
@@ -104,16 +163,51 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Ambient cinematic glow: a faint wash of the accent color from the top. */
+html.dark body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 34rem at 50% -12%, rgb(var(--accent) / var(--glow-strength)), transparent 65%),
+    radial-gradient(48rem 30rem at 110% 115%, rgb(var(--accent) / calc(var(--glow-strength) * 0.5)), transparent 60%);
+}
+html body { position: relative; z-index: 1; }
+
 #root { height: 100%; }
 
 pre, code, kbd, samp { font-family: var(--font-mono); }
 
-::selection { background: rgb(var(--accent) / 0.25); }
+.font-display { font-family: var(--font-display); letter-spacing: var(--tracking-tight); }
+
+::selection { background: rgb(var(--accent) / 0.28); }
 
 /* Focus rings: visible for keyboard users only */
 :focus-visible {
   outline: 2px solid rgb(var(--accent));
   outline-offset: 2px;
+}
+
+/* ── Components ───────────────────────────────────────────────────────────── */
+
+@layer components {
+  /* Frosted glass panel. */
+  .glass {
+    background: rgb(var(--glass) / var(--glass-alpha));
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+    backdrop-filter: blur(var(--glass-blur)) saturate(1.25);
+    border-color: rgb(var(--glass-edge));
+  }
+
+  /* Safe-area padding that never shrinks below the given base. */
+  .pt-safe { padding-top: max(0.875rem, var(--safe-top)); }
+  .pb-safe { padding-bottom: max(1rem, var(--safe-bottom)); }
+  .px-safe {
+    padding-left: max(1rem, var(--safe-left));
+    padding-right: max(1rem, var(--safe-right));
+  }
 }
 
 /* ── Scrollbar ────────────────────────────────────────────────────────────── */
@@ -130,13 +224,16 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
 @keyframes fade-in   { from { opacity: 0; } to { opacity: 1; } }
 @keyframes fade-up   { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @keyframes scale-in  { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes rise-in   { from { opacity: 0; transform: translateY(14px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes blink     { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 @keyframes bounce-3  { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-4px); } }
 @keyframes spin      { to { transform: rotate(360deg); } }
+@keyframes shimmer   { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 
-.animate-fade-in  { animation: fade-in 0.15s ease both; }
-.animate-fade-up  { animation: fade-up 0.2s ease both; }
-.animate-scale-in { animation: scale-in 0.15s ease both; }
+.animate-fade-in  { animation: fade-in var(--motion-fast) var(--ease-soft) both; }
+.animate-fade-up  { animation: fade-up var(--motion-base) var(--ease-soft) both; }
+.animate-scale-in { animation: scale-in var(--motion-fast) var(--ease-soft) both; }
+.animate-rise-in  { animation: rise-in var(--motion-slow) var(--ease-soft) both; }
 .animate-spin-slow { animation: spin 0.8s linear infinite; }
 
 .typing-cursor {
@@ -185,13 +282,20 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
 .prose-chat a:hover { opacity: 0.85; }
 .prose-chat strong { font-weight: 600; color: rgb(var(--fg)); }
 .prose-chat blockquote {
-  margin: 0.8em 0; padding: 0.2em 0 0.2em 1em;
-  border-left: 3px solid rgb(var(--border-strong)); color: rgb(var(--fg-muted));
+  margin: 0.8em 0;
+  padding: 0.65em 1em;
+  border-left: 2px solid rgb(var(--accent));
+  border-radius: 0 8px 8px 0;
+  background: rgb(var(--accent) / 0.06);
+  color: rgb(var(--fg-muted));
 }
+.prose-chat blockquote p { margin: 0.3em 0; }
 .prose-chat hr { border: 0; border-top: 1px solid rgb(var(--border)); margin: 1.2em 0; }
 .prose-chat code:not(pre code) {
   font-size: 0.875em; padding: 0.15em 0.4em; border-radius: 6px;
-  background: rgb(var(--surface-3) / 0.7); color: rgb(var(--fg));
+  background: rgb(var(--accent) / 0.09);
+  border: 1px solid rgb(var(--accent) / 0.16);
+  color: rgb(var(--fg));
 }
 .prose-chat table {
   width: 100%; border-collapse: collapse; margin: 0.8em 0; font-size: 0.92em;
@@ -202,18 +306,18 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
 .prose-chat img { max-width: 100%; border-radius: 8px; }
 .prose-chat input[type='checkbox'] { margin-right: 0.4em; }
 
-/* ── Code highlighting (theme-aware, minimal palette) ─────────────────────── */
+/* ── Code highlighting (theme-aware, cinematic palette) ───────────────────── */
 .hljs { color: rgb(var(--fg)); background: transparent; }
 .hljs-comment, .hljs-quote { color: rgb(var(--fg-subtle)); font-style: italic; }
-.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type, .hljs-literal { color: #c678dd; }
-.hljs-string, .hljs-attr, .hljs-template-variable, .hljs-addition, .hljs-regexp { color: #98c379; }
-.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-meta, .hljs-link { color: #d19a66; }
-.hljs-title, .hljs-section, .hljs-name, .hljs-function .hljs-title { color: #61afef; }
-.hljs-variable, .hljs-attribute, .hljs-tag, .hljs-deletion, .hljs-selector-class, .hljs-selector-id { color: #e06c75; }
+.hljs-keyword, .hljs-selector-tag, .hljs-built_in, .hljs-type, .hljs-literal { color: #deb254; }
+.hljs-string, .hljs-attr, .hljs-template-variable, .hljs-addition, .hljs-regexp { color: #9cd0a0; }
+.hljs-number, .hljs-symbol, .hljs-bullet, .hljs-meta, .hljs-link { color: #e0a87a; }
+.hljs-title, .hljs-section, .hljs-name, .hljs-function .hljs-title { color: #8fc2e8; }
+.hljs-variable, .hljs-attribute, .hljs-tag, .hljs-deletion, .hljs-selector-class, .hljs-selector-id { color: #e38a82; }
 .hljs-emphasis { font-style: italic; }
 .hljs-strong { font-weight: 600; }
-:root:not(.dark) .hljs-keyword, :root:not(.dark) .hljs-selector-tag, :root:not(.dark) .hljs-built_in, :root:not(.dark) .hljs-type, :root:not(.dark) .hljs-literal { color: #a626a4; }
-:root:not(.dark) .hljs-string, :root:not(.dark) .hljs-attr, :root:not(.dark) .hljs-addition, :root:not(.dark) .hljs-regexp { color: #50a14f; }
-:root:not(.dark) .hljs-number, :root:not(.dark) .hljs-symbol, :root:not(.dark) .hljs-meta, :root:not(.dark) .hljs-link { color: #986801; }
-:root:not(.dark) .hljs-title, :root:not(.dark) .hljs-section, :root:not(.dark) .hljs-name { color: #4078f2; }
-:root:not(.dark) .hljs-variable, :root:not(.dark) .hljs-attribute, :root:not(.dark) .hljs-tag, :root:not(.dark) .hljs-deletion { color: #e45649; }
+:root:not(.dark) .hljs-keyword, :root:not(.dark) .hljs-selector-tag, :root:not(.dark) .hljs-built_in, :root:not(.dark) .hljs-type, :root:not(.dark) .hljs-literal { color: #9c6410; }
+:root:not(.dark) .hljs-string, :root:not(.dark) .hljs-attr, :root:not(.dark) .hljs-addition, :root:not(.dark) .hljs-regexp { color: #3f8f53; }
+:root:not(.dark) .hljs-number, :root:not(.dark) .hljs-symbol, :root:not(.dark) .hljs-meta, :root:not(.dark) .hljs-link { color: #a65f1e; }
+:root:not(.dark) .hljs-title, :root:not(.dark) .hljs-section, :root:not(.dark) .hljs-name { color: #2f6bd8; }
+:root:not(.dark) .hljs-variable, :root:not(.dark) .hljs-attribute, :root:not(.dark) .hljs-tag, :root:not(.dark) .hljs-deletion { color: #c94f44; }

@@ -65,5 +65,5 @@ export function applyTheme(settings: UserSettings) {
   root.setAttribute('data-accent', settings.accent);
   root.setAttribute('data-font-size', settings.font_size);
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', effective === 'dark' ? '#0c0c0d' : '#fafafa');
+  if (meta) meta.setAttribute('content', effective === 'dark' ? '#0b0a0a' : '#faf9f7');
 }
