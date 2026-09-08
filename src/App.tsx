@@ -278,7 +278,7 @@ function Shell() {
           title={topbarTitle}
           models={chat.availableModels}
           selectedModel={chat.selectedModel}
-          onSelectModel={chat.setSelectedModel}
+          onSelectModel={chat.selectModel}
           sidebarCollapsed={sidebarCollapsed}
           onOpenSidebar={() => toggleSidebar(false)}
           onOpenMobileSidebar={() => setMobileSidebarOpen(true)}

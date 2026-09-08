@@ -74,8 +74,13 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
   const [interrupted, setInterrupted] = useState(false);
 
   const [availableModels, setAvailableModels] = useState<AIModel[]>([]);
-  /** Explicit model id, or null for Auto. Seeded from settings. */
+  /** Explicit model id for the open chat, or null for Auto. */
   const [selectedModel, setSelectedModel] = useState<string | null>(settings.preferred_model);
+  /**
+   * Model picked while no conversation was open yet (blank new chat). Applied
+   * when that chat is created, so the very first reply already uses it.
+   */
+  const pendingModelRef = useRef<string | null>(null);
 
   /** Project a *new* chat will be created in (set when the user opens a project). */
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
@@ -103,8 +108,13 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     activeProjectRef.current = id;
     setActiveProjectId(id);
   }, []);
-  // Keep the model selection in sync when the user changes the preference in Settings.
-  useEffect(() => { setSelectedModel(settings.preferred_model); }, [settings.preferred_model]);
+  // The global preference only steers chats without an explicit per-chat
+  // choice (and blank chats where the user hasn't picked anything yet).
+  const preferredModel = settings.preferred_model;
+  useEffect(() => {
+    if (activeRef.current?.model_id || pendingModelRef.current) return;
+    setSelectedModel(preferredModel);
+  }, [preferredModel]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -151,6 +161,10 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setInterrupted(false);
     setActiveSync(conversation);
     setMessagesSync([]);
+    // Restore this chat's own model choice; chats without one follow the
+    // global preference. A blank chat always starts from the preference.
+    pendingModelRef.current = null;
+    setSelectedModel(conversation?.model_id ?? preferredModel);
     // Follow the opened chat's project so the next "New chat" lands beside it.
     if (conversation) setActiveProject(conversation.project_id ?? null);
     if (!conversation) { setMessagesStatus('idle'); return; }
@@ -163,7 +177,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
       setError(toFriendlyError(e));
       setMessagesStatus('error');
     }
-  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject]);
+  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject, preferredModel]);
 
   /** Start a blank chat. Pass a project id to start it inside that project. */
   const startNewChat = useCallback((projectId?: string | null) => {
@@ -173,8 +187,11 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setActiveSync(null);
     setMessagesSync([]);
     setMessagesStatus('idle');
+    // A blank chat starts from the global preference (Auto by default).
+    pendingModelRef.current = null;
+    setSelectedModel(preferredModel);
     if (projectId !== undefined) setActiveProject(projectId);
-  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject]);
+  }, [stopGeneration, setActiveSync, setMessagesSync, setActiveProject, preferredModel]);
 
   // ── Conversation mutations ─────────────────────────────────────────────────
   // Every mutation follows the same contract: apply optimistically to the list
@@ -252,6 +269,24 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
   const moveConversation = useCallback(async (id: string, projectId: string | null) => {
     await mutateConversation(id, { project_id: projectId });
   }, [mutateConversation]);
+
+  /**
+   * Pick the model for the open chat (null = Auto). The choice is persisted on
+   * the conversation, so reopening the chat (here or on another device) shows
+   * the same model. On a blank chat the choice is remembered and applied when
+   * the chat is created. A failed write keeps the local choice — it is a
+   * preference, not content, and must never block or alarm mid-chat.
+   */
+  const selectModel = useCallback((id: string | null) => {
+    setSelectedModel(id);
+    const conversation = activeRef.current;
+    if (!conversation) { pendingModelRef.current = id; return; }
+    if ((conversation.model_id ?? null) === id) return;
+    patchLocal(conversation.id, { model_id: id });
+    conversationsApi.update(conversation.id, { model_id: id })
+      .then(stored => { patchLocal(conversation.id, { model_id: stored.model_id ?? null, updated_at: stored.updated_at }); })
+      .catch(() => { /* keep the local choice; the next successful write wins */ });
+  }, [patchLocal]);
 
   const deleteConversation = useCallback(async (id: string) => {
     const snapshot = conversations;
@@ -351,7 +386,10 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     let conversation = activeRef.current;
     if (!conversation) {
       try {
-        conversation = await conversationsApi.create(user.id, settings.auto_title ? deriveTitle(text) : NEW_CHAT_TITLE, activeProjectRef.current);
+        // The model picked before this chat existed becomes its saved choice.
+        const modelId = pendingModelRef.current;
+        conversation = await conversationsApi.create(user.id, settings.auto_title ? deriveTitle(text) : NEW_CHAT_TITLE, activeProjectRef.current, modelId);
+        pendingModelRef.current = null;
       } catch (e) { setError(toFriendlyError(e)); return; }
       // Newest chat tops the "Recent" section — pinned chats stay above it, as after a reload.
       setConversations(prev => sortConversations([conversation!, ...prev]));
@@ -455,7 +493,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     // data
     conversations, conversationsStatus,
     activeConversation, messages, messagesStatus,
-    availableModels, selectedModel, setSelectedModel,
+    availableModels, selectedModel, selectModel,
     // Phase 2: project scope for new chats
     activeProjectId, setActiveProject, moveConversation,
     // generation state
