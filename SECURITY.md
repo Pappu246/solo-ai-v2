@@ -65,6 +65,28 @@ as applied by the migration chain (last writer wins per policy name):
   are the single exception by design: they are short-lived (60 s), scoped to
   one object, and only issued to the owner.
 
+## Rendering assistant output
+
+Model replies are untrusted input and are never injected as raw HTML:
+
+- Markdown is rendered by react-markdown with `skipHtml`; raw HTML in a reply
+  is stripped, and links get `rel="noopener noreferrer nofollow"`.
+- **Math** (`$…$`, `$$…$$`, plus `\(…\)`/`\[…\]` normalized first) renders
+  through KaTeX (`rehype-katex`) with `trust` disabled, so LaTeX cannot embed
+  URLs (`\href`, `\includegraphics`, `\url` are refused by KaTeX itself) and
+  invalid formulas render as red source instead of throwing.
+- **SVG** (fenced ```svg blocks and block-level `<svg>` in the reply) renders
+  as a graphic only after passing `src/lib/svgSanitize.ts`, a strict
+  allowlist: unknown elements are unwrapped, active-content elements
+  (`<script>`, `<foreignObject>`, `<style>`, SMIL animation, `<image>`, …)
+  are removed with their subtree, all `on*` handlers and `style` attributes
+  are dropped, and the only URLs that survive are in-document fragments
+  (`#id`, `url(#gradient)`). Input that is not well-formed XML falls back to a
+  plain code block. The sanitized, inert markup is the only thing ever passed
+  to `dangerouslySetInnerHTML`.
+- Currency-looking dollar pairs ("$5 and $10") are escaped before math
+  parsing so prices stay text instead of becoming a formula.
+
 ## Production checklist
 
 - Keep `.env`, `.env.local`, and provider credentials out of Git.

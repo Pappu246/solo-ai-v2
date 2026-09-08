@@ -383,6 +383,9 @@ pre, code, kbd, samp { font-family: var(--font-mono); }
 .prose-chat th { background: rgb(var(--surface-2)); font-weight: 600; }
 .prose-chat img { max-width: 100%; border-radius: 8px; }
 .prose-chat input[type='checkbox'] { margin-right: 0.4em; }
+/* Math (KaTeX): long display equations scroll instead of breaking the layout. */
+.prose-chat .katex-display { overflow-x: auto; overflow-y: hidden; padding: 2px 0; margin: 0.8em 0; }
+.prose-chat .katex { font-size: 1.05em; }
 
 /* ── Code highlighting (theme-aware, cinematic palette) ───────────────────── */
 .hljs { color: rgb(var(--fg)); background: transparent; }

@@ -44,11 +44,11 @@ export const conversationsApi = {
     return (data ?? []).map(normalizeConversation);
   },
 
-  async create(userId: string, title = 'New chat', projectId: string | null = null): Promise<Conversation> {
+  async create(userId: string, title = 'New chat', projectId: string | null = null, modelId: string | null = null): Promise<Conversation> {
     const id = crypto.randomUUID();
     const { data, error } = await supabase
       .from('conversations')
-      .insert({ id, title, user_id: userId, pinned: false, ...(projectId ? { project_id: projectId } : {}) })
+      .insert({ id, title, user_id: userId, pinned: false, ...(projectId ? { project_id: projectId } : {}), ...(modelId ? { model_id: modelId } : {}) })
       .select()
       .single();
     throwIf(error, 'Creating chat');

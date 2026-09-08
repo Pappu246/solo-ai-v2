@@ -1,7 +1,13 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex, { type Options as KatexOptions } from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 import { CodeBlock } from './CodeBlock';
+import { SvgFigure } from './SvgFigure';
+import { isSvgSource } from '../../lib/svgSanitize';
+import { normalizeMathDelimiters, splitMarkdownSegments } from '../../lib/markdown';
 
 interface MarkdownProps {
   content: string;
@@ -25,6 +31,9 @@ function buildComponents(live?: boolean): Components {
       const props = (child && typeof child === 'object' && 'props' in child ? child.props : {}) as { className?: string; children?: ReactNode };
       const language = /language-([\w+-]+)/.exec(props.className || '')?.[1];
       const code = extractText(props.children).replace(/\n$/, '');
+      // An SVG document in a fenced block renders as a sanitized graphic,
+      // not as source code.
+      if (isSvgSource(code, language)) return <SvgFigure code={code} language={language} live={live} />;
       return <CodeBlock code={code} language={language} live={live} />;
     },
     a({ href, children }) {
@@ -36,13 +45,37 @@ function buildComponents(live?: boolean): Components {
 const liveComponents = buildComponents(true);
 const staticComponents = buildComponents(false);
 
-/** GFM markdown renderer for assistant output. Raw HTML is never rendered. */
+const remarkPlugins = [remarkGfm, remarkMath];
+// rehype-katex never throws on bad LaTeX (it renders the source in red);
+// `strict: false` additionally silences non-fatal warnings mid-stream, and
+// `trust` stays off so KaTeX features that take URLs are disabled.
+const katexPlugin: [typeof rehypeKatex, KatexOptions] = [rehypeKatex, { strict: false, errorColor: '#f87171' }];
+const rehypePlugins = [katexPlugin];
+
+/**
+ * GFM + math + SVG renderer for assistant output.
+ *
+ * Math: `$…$` inline and `$$…$$` display formulas (plus `\(`…`\)` / `\[`…`\]`,
+ * normalized first) render via KaTeX.
+ *
+ * SVG: fenced ```svg blocks and block-level `<svg>` regions render as
+ * graphics — always through the strict allowlist sanitizer. All other raw
+ * HTML is never rendered (`skipHtml`).
+ */
 export const Markdown = memo(function Markdown({ content, live }: MarkdownProps) {
+  const segments = useMemo(() => splitMarkdownSegments(content), [content]);
+  const components = live ? liveComponents : staticComponents;
   return (
     <div className="prose-chat text-[0.95rem]">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} components={live ? liveComponents : staticComponents} skipHtml>
-        {content}
-      </ReactMarkdown>
+      {segments.map((segment, i) => (
+        segment.kind === 'svg'
+          ? <SvgFigure key={i} code={segment.text} live={live} />
+          : (
+            <ReactMarkdown key={i} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components} skipHtml>
+              {normalizeMathDelimiters(segment.text)}
+            </ReactMarkdown>
+          )
+      ))}
     </div>
   );
 });
