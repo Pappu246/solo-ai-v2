@@ -12,6 +12,38 @@ describe('Markdown', () => {
     expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
   });
 
+  it('renders a multi-column table with proper thead/tbody structure for polished styling', () => {
+    const { container } = render(
+      <Markdown content={'| Name | Age | Role |\n|------|-----|------|\n| Alice | 30 | Engineer |\n| Bob | 25 | Designer |\n| Carol | 35 | Manager |'} />
+    );
+    const table = container.querySelector('table');
+    expect(table).not.toBeNull();
+
+    // Table sits inside the prose-chat wrapper so CSS rules apply.
+    const wrapper = container.querySelector('.prose-chat');
+    expect(wrapper).not.toBeNull();
+    expect(wrapper!.contains(table!)).toBe(true);
+
+    // Proper thead/tbody structure (needed for :nth-child, th, tbody selectors).
+    const thead = table!.querySelector('thead');
+    const tbody = table!.querySelector('tbody');
+    expect(thead).not.toBeNull();
+    expect(tbody).not.toBeNull();
+
+    // Header row has the right number of th cells.
+    expect(thead!.querySelectorAll('th')).toHaveLength(3);
+    // Body has all data rows.
+    expect(tbody!.querySelectorAll('tr')).toHaveLength(3);
+    // Each body row has 3 cells.
+    for (const tr of tbody!.querySelectorAll('tr')) {
+      expect(tr.querySelectorAll('td')).toHaveLength(3);
+    }
+    // Last body row is identifiable so CSS can strip its bottom border.
+    const lastRow = tbody!.querySelector('tr:last-child');
+    expect(lastRow).not.toBeNull();
+    expect(lastRow!.querySelectorAll('td')[0].textContent).toBe('Carol');
+  });
+
   it('renders fenced code blocks with a language label and copy button', () => {
     render(<Markdown content={'```ts\nconst x = 1;\n```'} />);
     expect(screen.getByText('ts')).toBeInTheDocument();
