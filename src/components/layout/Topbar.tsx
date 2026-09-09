@@ -16,7 +16,7 @@ interface TopbarProps {
 
 export function Topbar({ title, models, selectedModel, onSelectModel, sidebarCollapsed, onOpenSidebar, onOpenMobileSidebar, disabled }: TopbarProps) {
   return (
-    <header className="flex items-center justify-between min-h-14 pt-env px-2 sm:px-3 shrink-0 glass border-b border-border">
+    <header className="relative z-30 flex items-center justify-between min-h-14 pt-env px-2 sm:px-3 shrink-0 glass border-b border-border">
       <div className="flex items-center gap-1 min-w-0">
         <IconButton label="Open menu" onClick={onOpenMobileSidebar} className="md:hidden"><Menu className="w-5 h-5" /></IconButton>
         {sidebarCollapsed && (
