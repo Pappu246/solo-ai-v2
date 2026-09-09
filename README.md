@@ -27,6 +27,14 @@ SOLO AI brings different AI providers into one clean chat interface with saved c
 - **Projects** — group chats, files and memories; project instructions are sent with every chat inside the project. Create, rename, archive, delete (chats and files are detached, not deleted). Projects live in the existing sidebar.
 - **Global search** — `⌘/Ctrl+K` searches chats, messages, projects, files and memories (Postgres full-text search, grouped results, per-group *more*, keyboard navigation). Results only ever include the signed-in user's data.
 
+### Smart Image Search
+
+- **Automatic visual detection** — when a user's message would benefit from images (e.g., "show me golden retrievers", "wallpaper of mountains"), the system automatically triggers an image search. A fast-path heuristic skips obviously non-visual queries (math, code, greetings) without an AI call; borderline cases use a lightweight model call to decide.
+- **Provider abstraction** — image search uses a clean `ImageSearchProvider` interface with a Google Custom Search Engine (CSE) implementation. The provider can be swapped (Bing, DuckDuckGo, etc.) without touching the decision logic or UI.
+- **Server-side only** — Google CSE API keys are stored as Edge Function secrets and never reach the browser. Results are filtered for quality (no broken URLs, extremely low resolution, or duplicates) and cached for 30 minutes to stay within the free-tier quota (100 queries/day).
+- **Streaming integration** — image search results are delivered via new SSE event types (`event: image_search`) alongside the existing text stream. The search runs in parallel with text generation so it never delays the response.
+- **Graceful degradation** — if image search is not configured, fails, or times out, the text response continues normally. The feature is entirely optional.
+
 ## Tech Stack
 
 - React 18
@@ -63,10 +71,17 @@ src/
 └── types.ts
 
 supabase/
-├── functions/chat/
-│   ├── index.ts          request validation, auth, rate limit, Phase 2 context, SSE response
-│   ├── providers.ts      model catalog + aliases, provider fallback, stream guards, safe errors
-│   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
+├── functions/
+│   ├── chat/
+│   │   ├── index.ts          request validation, auth, rate limit, Phase 2 context, image search integration, SSE response
+│   │   ├── providers.ts      model catalog + aliases, provider fallback, stream guards, safe errors
+│   │   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
+│   └── image-search/
+│       ├── index.ts          standalone image search endpoint (POST /functions/v1/image-search)
+│       ├── providers.ts      ImageSearchProvider interface + Google CSE implementation, result filtering
+│       ├── decision.ts       smart decision logic (heuristic + model-based), query extraction
+│       ├── cache.ts          TTL-based in-memory cache (30 min, max 200 entries)
+│       └── search-events.ts  shared SSE event types for image search (used by chat + image-search functions)
 ├── migrations/
 └── config.toml
 
@@ -162,6 +177,15 @@ GROQ_API_KEY
 DEEPSEEK_API_KEY
 APP_ORIGIN
 ```
+
+For the Smart Image Search feature (optional), also add:
+
+```text
+GOOGLE_CSE_API_KEY        # Google Custom Search JSON API key
+GOOGLE_CSE_ENGINE_ID      # Custom Search Engine ID (cx parameter)
+```
+
+Get credentials from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (API key) and [Programmable Search Engine](https://programmablesearchengine.google.com/) (engine ID). The free tier includes 100 image search queries per day.
 
 ### 5. Start the app
 

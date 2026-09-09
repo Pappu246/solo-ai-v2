@@ -10,7 +10,6 @@ import {
   resolveModel,
   statusForCode,
   streamWithFallback,
-  toSSEBody,
   userMessage,
   type Attempt,
   type FailureCode,
@@ -18,6 +17,10 @@ import {
   type Message,
   type ModelSpec,
 } from "./providers.ts";
+import { decideImageSearch } from "../image-search/decision.ts";
+import { createImageSearchProvider, filterResults, type ImageResult, type EnvReader } from "../image-search/providers.ts";
+import { imageSearchCache } from "../image-search/cache.ts";
+import { sseImageSearchEvent, type ImageSearchEvent } from "../image-search/search-events.ts";
 
 const origins = (Deno.env.get("APP_ORIGIN") || "").split(",").map(v => v.trim()).filter(Boolean);
 const cors = (req: Request) => {
@@ -181,6 +184,74 @@ function category(text: string) {
   return ranked[0][1] > 0 ? ranked[0][0] : "conversation";
 }
 
+// ── Image Search Execution ──────────────────────────────────────────────────
+
+interface ImageSearchResult {
+  images: ImageResult[];
+  error?: string;
+}
+
+async function executeImageSearch(queries: string[], requestId: string): Promise<ImageSearchResult> {
+  const env: EnvReader = (name) => Deno.env.get(name);
+  const provider = createImageSearchProvider(env);
+
+  if (!provider) {
+    return { images: [], error: "Image search not configured" };
+  }
+
+  const allResults: ImageResult[] = [];
+  let anyFailed = false;
+
+  for (const query of queries.slice(0, 3)) {
+    const cacheKey = `search:${query.toLowerCase().trim()}`;
+    const cached = imageSearchCache.get(cacheKey);
+
+    if (cached) {
+      allResults.push(...cached.results);
+      log(requestId, "image_search_cache_hit", { query });
+      continue;
+    }
+
+    try {
+      const results = await Promise.race([
+        provider.search(query),
+        new Promise<ImageResult[]>((_, reject) =>
+          setTimeout(() => reject(new Error("timeout")), 8000)
+        ),
+      ]);
+
+      const filtered = filterResults(results);
+      allResults.push(...filtered);
+
+      imageSearchCache.set(cacheKey, {
+        query,
+        results: filtered,
+        timestamp: Date.now(),
+      });
+
+      log(requestId, "image_search_completed", { query, resultCount: filtered.length });
+    } catch (error) {
+      anyFailed = true;
+      log(requestId, "image_search_failed", { query, error: String(error) });
+      // Continue with other queries
+    }
+  }
+
+  // Deduplicate by URL
+  const seen = new Set<string>();
+  const deduplicated = allResults.filter(r => {
+    if (seen.has(r.url)) return false;
+    seen.add(r.url);
+    return true;
+  }).slice(0, 10);
+
+  if (deduplicated.length === 0 && anyFailed) {
+    return { images: [], error: "Image search failed" };
+  }
+
+  return { images: deduplicated };
+}
+
 Deno.serve(async req => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
   const requestId = crypto.randomUUID();
@@ -242,6 +313,35 @@ Deno.serve(async req => {
     const candidates = fallbackChain(model, images.length > 0);
     const attempts: Attempt[] = [];
 
+    // ── Image Search Decision ────────────────────────────────────────────────
+    // Analyze the last user message to decide if image search should trigger.
+    // This runs before the text stream starts, and the search executes in
+    // parallel with text generation.
+    const lastUserMessage = messages.filter(m => m.role === "user").pop();
+    const imageSearchEnabled = lastUserMessage && !images.length; // Only if no user-provided images
+    let imageSearchDecision: Awaited<ReturnType<typeof decideImageSearch>> | null = null;
+
+    if (imageSearchEnabled && lastUserMessage) {
+      const env: EnvReader = (name) => Deno.env.get(name);
+      try {
+        imageSearchDecision = await decideImageSearch(lastUserMessage.content, {
+          env,
+          fetchImpl: fetch,
+          timeoutMs: 3000, // Short timeout for decision
+        });
+        if (imageSearchDecision.shouldSearch) {
+          log(requestId, "image_search_triggered", {
+            queries: imageSearchDecision.queries,
+            confidence: imageSearchDecision.confidence,
+            reason: imageSearchDecision.reason,
+          });
+        }
+      } catch (error) {
+        log(requestId, "image_search_decision_failed", { error: String(error) });
+        // Continue without image search
+      }
+    }
+
     let stream;
     try {
       const result = await streamWithFallback(candidates, payload, images, {
@@ -261,8 +361,84 @@ Deno.serve(async req => {
     const used = stream.model;
     if (attempts.length) log(requestId, "fallback_used", { model: used.id, provider: used.provider, skipped: attempts.length });
 
-    const bodyStream = toSSEBody(stream.events, requestId, outcome => {
-      log(requestId, outcome.code ? "stream_finished_with_error" : "stream_finished", { model: used.id, provider: used.provider, code: outcome.code, chars: outcome.chars });
+    // ── Combined Stream with Image Search ────────────────────────────────────
+    // If image search was triggered, we emit events alongside the text stream.
+    // The image search runs in parallel and emits results after text completes.
+    const encoder = new TextEncoder();
+
+    async function* combinedStream() {
+      // Emit image search "started" event if triggered
+      if (imageSearchDecision?.shouldSearch) {
+        const startedEvent: ImageSearchEvent = {
+          type: "started",
+          queries: imageSearchDecision.queries,
+        };
+        yield encoder.encode(sseImageSearchEvent(startedEvent));
+
+        // Fire image search in parallel with text stream
+        const imageSearchPromise = executeImageSearch(imageSearchDecision.queries, requestId);
+
+        // Yield text events as they arrive
+        for await (const event of stream.events) {
+          if (event.type === "delta") {
+            yield encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: event.text } }] })}\n\n`);
+          } else if (event.type === "done") {
+            // Wait for image search to complete before finishing
+            const results = await imageSearchPromise;
+            if (results.error) {
+              const errorEvent: ImageSearchEvent = { type: "error", message: results.error };
+              yield encoder.encode(sseImageSearchEvent(errorEvent));
+            } else if (results.images.length > 0) {
+              const resultsEvent: ImageSearchEvent = { type: "results", images: results.images };
+              yield encoder.encode(sseImageSearchEvent(resultsEvent));
+            }
+            yield encoder.encode("data: [DONE]\n\n");
+            return;
+          } else if (event.type === "error") {
+            yield encoder.encode(`event: error\ndata: ${JSON.stringify({ error: event.code, code: event.code, request_id: requestId })}\n\n`);
+            return;
+          }
+        }
+
+        // If we get here, the stream ended without a "done" event
+        const results = await imageSearchPromise.catch(() => ({ images: [], error: "Image search failed" }));
+        if (results.error) {
+          const errorEvent: ImageSearchEvent = { type: "error", message: results.error };
+          yield encoder.encode(sseImageSearchEvent(errorEvent));
+        } else if (results.images.length > 0) {
+          const resultsEvent: ImageSearchEvent = { type: "results", images: results.images };
+          yield encoder.encode(sseImageSearchEvent(resultsEvent));
+        }
+      } else {
+        // No image search, just yield text events
+        for await (const event of stream.events) {
+          if (event.type === "delta") {
+            yield encoder.encode(`data: ${JSON.stringify({ choices: [{ delta: { content: event.text } }] })}\n\n`);
+          } else if (event.type === "done") {
+            yield encoder.encode("data: [DONE]\n\n");
+            return;
+          } else if (event.type === "error") {
+            yield encoder.encode(`event: error\ndata: ${JSON.stringify({ error: event.code, code: event.code, request_id: requestId })}\n\n`);
+            return;
+          }
+        }
+      }
+    }
+
+    const bodyStream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        try {
+          for await (const chunk of combinedStream()) {
+            controller.enqueue(chunk);
+          }
+        } catch (error) {
+          if (!isAbortError(error)) {
+            log(requestId, "stream_error", { error: String(error) });
+          }
+        } finally {
+          controller.close();
+        }
+      },
     });
 
     return new Response(bodyStream, {
