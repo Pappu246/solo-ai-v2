@@ -38,7 +38,10 @@ export class TTLCache<T> {
 
   /** Store a value in the cache with the configured TTL. */
   set(key: string, value: T): void {
-    // Evict oldest entries if at capacity
+    // Replace an existing entry without consuming an additional cache slot.
+    if (this.cache.has(key)) this.cache.delete(key);
+
+    // Evict before insertion so the cache never grows beyond maxSize.
     if (this.cache.size >= this.maxSize) {
       this.evictOldest();
     }
@@ -64,42 +67,36 @@ export class TTLCache<T> {
     this.cache.clear();
   }
 
-  /** Number of entries currently in the cache (including possibly expired ones). */
+  /** Number of entries currently in the cache. */
   get size(): number {
     return this.cache.size;
   }
 
-  /** Evict expired entries and, if still over capacity, the oldest entries. */
+  /** Evict expired entries and, if still at capacity, the oldest entries. */
   private evictOldest(): void {
     const now = Date.now();
 
-    // First pass: remove expired entries
+    // First pass: remove expired entries.
     for (const [key, entry] of this.cache) {
       if (now > entry.expiresAt) {
         this.cache.delete(key);
       }
     }
 
-    // If still over capacity, remove oldest entries
-    if (this.cache.size > this.maxSize) {
-      const entries = Array.from(this.cache.entries())
-        .sort((a, b) => a[1].expiresAt - b[1].expiresAt);
-
-      const toRemove = entries.length - this.maxSize;
-      for (let i = 0; i < toRemove; i++) {
-        this.cache.delete(entries[i][0]);
+    // If still at capacity, remove the entry expiring soonest.
+    if (this.cache.size >= this.maxSize) {
+      let oldestKey: string | undefined;
+      let oldestExpiry = Number.POSITIVE_INFINITY;
+      for (const [key, entry] of this.cache) {
+        if (entry.expiresAt < oldestExpiry) {
+          oldestExpiry = entry.expiresAt;
+          oldestKey = key;
+        }
       }
+      if (oldestKey !== undefined) this.cache.delete(oldestKey);
     }
   }
 }
-
-// ── Singleton Cache Instance ────────────────────────────────────────────────
-
-/** Default cache instance: 30 min TTL, max 200 entries. */
-export const imageSearchCache = new TTLCache<ImageSearchResult[]>(
-  30 * 60 * 1000, // 30 minutes
-  200,             // max 200 queries cached
-);
 
 /** Shape of cached search results. */
 export interface ImageSearchResult {
@@ -115,3 +112,9 @@ export interface ImageSearchResult {
   }>;
   timestamp: number;
 }
+
+// Default cache instance: 30 min TTL, max 200 queries cached.
+export const imageSearchCache = new TTLCache<ImageSearchResult>(
+  30 * 60 * 1000,
+  200,
+);
