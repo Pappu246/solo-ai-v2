@@ -1,10 +1,11 @@
-name: Deploy Supabase Chat Function
+name: Deploy Supabase AI Functions
 
 on:
   push:
     branches: [main]
     paths:
       - "supabase/functions/chat/**"
+      - "supabase/functions/image-search/**"
       - "supabase/config.toml"
       - ".github/workflows/deploy-supabase-chat.yml"
   workflow_dispatch:
@@ -32,3 +33,6 @@ jobs:
 
       - name: Deploy chat Edge Function
         run: supabase functions deploy chat --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Deploy image-search Edge Function
+        run: supabase functions deploy image-search --project-ref "$SUPABASE_PROJECT_ID"
