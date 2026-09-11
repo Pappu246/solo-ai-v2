@@ -1,6 +1,6 @@
 import { decideImageSearch } from "./decision.ts";
 import { filterResults } from "./providers.ts";
-const env=(_n:string)=>undefined;const failFetch=async(_u:string,_i?:RequestInit)=>new Response("",{status:500});
+const env=(n:string)=>{void n;return undefined};const failFetch=async(u:string,i?:RequestInit)=>{void u;void i;return new Response("",{status:500})};
 Deno.test("Logic Gates visual query triggers",async()=>{const r=await decideImageSearch("Explain AND OR NOT NAND NOR XOR XNOR with circuit diagrams and truth tables. Automatically include relevant images/diagrams.",{env,fetchImpl:failFetch});if(!r.shouldSearch||r.queries.length===0)throw new Error("visual query did not trigger")});
 Deno.test("TCP vs UDP visual query triggers",async()=>{const r=await decideImageSearch("Compare TCP vs UDP with a diagram and visual explanation.",{env,fetchImpl:failFetch});if(!r.shouldSearch)throw new Error("TCP vs UDP did not trigger")});
 Deno.test("ordinary math does not trigger",async()=>{const r=await decideImageSearch("What is 17 × 29?",{env,fetchImpl:failFetch});if(r.shouldSearch)throw new Error("math triggered image search")});
