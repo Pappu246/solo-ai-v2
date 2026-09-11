@@ -85,6 +85,17 @@ export const Message = memo(function Message({
   );
 });
 
+function getImageSrc(image: ImageSearchImage): string {
+  const source = image.thumbnail || image.url;
+  try {
+    const parsed = new URL(source);
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return `https://images.weserv.nl/?url=${encodeURIComponent(source)}&w=720&h=540&fit=cover&output=webp`;
+    }
+  } catch { /* fall through to the original value */ }
+  return source;
+}
+
 function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const visible = images.filter(image => !failed.has(image.url));
@@ -96,7 +107,7 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
         {visible.map(image => (
           <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
             <img
-              src={image.thumbnail || image.url}
+              src={getImageSrc(image)}
               alt={image.title}
               loading="lazy"
               referrerPolicy="no-referrer"
