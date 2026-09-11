@@ -89,9 +89,6 @@ function getImageSrc(image: ImageSearchImage): string {
   const source = image.thumbnail || image.url;
   try {
     const parsed = new URL(source);
-    // Route remote images through a lightweight public image proxy. This avoids
-    // the common case where source hosts reject browser hotlinking/referrers.
-    // The original URL is still used as the link target.
     if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
       return `https://images.weserv.nl/?url=${encodeURIComponent(source)}&w=720&h=540&fit=cover&output=webp`;
     }
@@ -146,7 +143,7 @@ function SpeakButton({ text, rate }: { text: string; rate: number }) {
     timer.current = window.setInterval(() => { if (!isSpeaking()) { setSpeaking(false); if (timer.current) window.clearInterval(timer.current); } }, 400);
   }, [speaking, text, rate]);
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-  return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
+  return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking} onClick={toggle}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
 }
 
 function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
