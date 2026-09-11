@@ -1,7 +1,6 @@
 /**
  * Persistence layer for conversations and messages.
  * All reads/writes go through Supabase with RLS enforcing ownership.
- * IDs are generated client-side so optimistic UI rows and DB rows match.
  */
 import { supabase } from '../supabase';
 import { AppError } from '../errors';
@@ -11,14 +10,8 @@ function throwIf(error: { message: string; code?: string } | null, context: stri
   if (error) throw new AppError(`${context} failed`, undefined, `${error.code ? `[${error.code}] ` : ''}${error.message}`);
 }
 
-/** PostgREST code for "expected exactly one row" — i.e. the update matched nothing. */
 const NO_ROW = 'PGRST116';
 
-/**
- * A write that matched no row: the chat was deleted (possibly on another
- * device) or belongs to someone else. RLS hides other users' rows entirely,
- * so both cases surface identically — as no row, never as another's data.
- */
 export class ConversationNotFoundError extends AppError {
   constructor(detail?: string) {
     super('This chat no longer exists or you don’t have access to it.', 404, detail, 'not_found');
@@ -34,33 +27,18 @@ export type ConversationPatch = Partial<Pick<Conversation, 'title' | 'pinned' | 
 
 export const conversationsApi = {
   async list(userId: string): Promise<Conversation[]> {
-    const { data, error } = await supabase
-      .from('conversations')
-      .select('*')
-      .eq('user_id', userId)
-      .order('pinned', { ascending: false })
-      .order('updated_at', { ascending: false });
+    const { data, error } = await supabase.from('conversations').select('*').eq('user_id', userId).order('pinned', { ascending: false }).order('updated_at', { ascending: false });
     throwIf(error, 'Loading chats');
     return (data ?? []).map(normalizeConversation);
   },
 
   async create(userId: string, title = 'New chat', projectId: string | null = null, modelId: string | null = null): Promise<Conversation> {
     const id = crypto.randomUUID();
-    const { data, error } = await supabase
-      .from('conversations')
-      .insert({ id, title, user_id: userId, pinned: false, ...(projectId ? { project_id: projectId } : {}), ...(modelId ? { model_id: modelId } : {}) })
-      .select()
-      .single();
+    const { data, error } = await supabase.from('conversations').insert({ id, title, user_id: userId, pinned: false, ...(projectId ? { project_id: projectId } : {}), ...(modelId ? { model_id: modelId } : {}) }).select().single();
     throwIf(error, 'Creating chat');
     return normalizeConversation(data);
   },
 
-  /**
-   * Persist a rename / pin / archive / move and return the row as stored.
-   * The returned `updated_at` (bumped by the database trigger) is what decides
-   * sidebar order after a reload, so callers reconcile local state with it.
-   * Throws `ConversationNotFoundError` when no row was updated.
-   */
   async update(id: string, patch: ConversationPatch): Promise<Conversation> {
     const { data, error } = await supabase.from('conversations').update(patch).eq('id', id).select().single();
     if (error?.code === NO_ROW) throw new ConversationNotFoundError(`[${error.code}] ${error.message}`);
@@ -68,7 +46,6 @@ export const conversationsApi = {
     return normalizeConversation(data);
   },
 
-  /** Bump updated_at so the chat rises to the top of the list. */
   async touch(id: string): Promise<void> {
     const { error } = await supabase.from('conversations').update({ updated_at: new Date().toISOString() }).eq('id', id);
     throwIf(error, 'Updating chat');
@@ -80,7 +57,6 @@ export const conversationsApi = {
   },
 };
 
-/** Strip base64 image payloads before persisting attachments. */
 export function toStoredAttachments(attachments?: Attachment[] | null): Omit<Attachment, 'base64'>[] | null {
   if (!attachments?.length) return null;
   return attachments.map(({ base64: _omit, ...rest }) => { void _omit; return rest; });
@@ -88,11 +64,7 @@ export function toStoredAttachments(attachments?: Attachment[] | null): Omit<Att
 
 export const messagesApi = {
   async list(conversationId: string): Promise<Message[]> {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', conversationId)
-      .order('created_at', { ascending: true });
+    const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true });
     throwIf(error, 'Loading messages');
     return (data ?? []) as Message[];
   },
@@ -109,6 +81,7 @@ export const messagesApi = {
       category: message.category ?? null,
       attachments: toStoredAttachments(message.attachments),
       ...(message.sources?.length ? { sources: message.sources } : {}),
+      ...(message.images?.length ? { images: message.images } : {}),
       created_at: message.created_at,
     });
     throwIf(error, 'Saving message');
