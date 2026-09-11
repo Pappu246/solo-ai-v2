@@ -1,5 +1,14 @@
-import { assert, assertEquals, assertStringIncludes } from "https://deno.land/std@0.224.0/assert/mod.ts";
 import { decideImageSearch, extractSearchQueries, quickHeuristicCheck } from "./decision.ts";
+
+function assert(condition: unknown, message = "expected truthy"): asserts condition {
+  if (!condition) throw new Error(message);
+}
+function assertEquals<T>(actual: T, expected: T, message = "values differ"): void {
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error(`${message}: ${JSON.stringify(actual)} !== ${JSON.stringify(expected)}`);
+}
+function assertIncludes(actual: string, expected: string): void {
+  if (!actual.includes(expected)) throw new Error(`expected ${actual} to include ${expected}`);
+}
 
 const env = (_name: string) => undefined;
 const fetchImpl = async (_input: string, _init?: RequestInit) => new Response("", { status: 500 });
@@ -10,8 +19,8 @@ Deno.test("logic gate visual prompt triggers search with focused queries", async
   const result = await decideImageSearch(prompt, { env, fetchImpl });
   assert(result.shouldSearch);
   assertEquals(result.queries.length, 3);
-  assertStringIncludes(result.queries[0].toLowerCase(), "logic gates");
-  assertStringIncludes(result.queries[0].toLowerCase(), "circuit diagrams");
+  assertIncludes(result.queries[0].toLowerCase(), "logic gates");
+  assertIncludes(result.queries[0].toLowerCase(), "circuit diagrams");
   assert(!result.queries.some(q => q.toLowerCase() === "the explanation"));
 });
 
