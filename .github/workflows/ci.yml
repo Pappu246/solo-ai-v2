@@ -27,7 +27,6 @@ jobs:
         run: npm run check
       - name: Type-check end-to-end specs
         run: npx tsc -p e2e/tsconfig.json
-
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
@@ -57,7 +56,6 @@ jobs:
             playwright-report
             test-results
           retention-days: 7
-
   edge-functions:
     name: Edge function (Deno)
     runs-on: ubuntu-latest
@@ -73,7 +71,7 @@ jobs:
           deno-version: v2.x
       - name: Deno version
         run: deno --version
-      - name: Type-check edge functions
-        run: deno check supabase/functions/chat/index.ts supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-proxy/index.ts
+      - name: Type-check dependency modules
+        run: deno check supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-proxy/index.ts
       - name: Test edge functions
         run: deno test supabase/functions/chat/context.test.ts supabase/functions/chat/providers_test.ts supabase/functions/image-search/decision_test.ts supabase/functions/image-search/providers_test.ts supabase/functions/image-search/final_regression_test.ts supabase/functions/image-proxy/index_test.ts
