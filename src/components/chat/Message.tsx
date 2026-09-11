@@ -85,6 +85,20 @@ export const Message = memo(function Message({
   );
 });
 
+function getImageSrc(image: ImageSearchImage): string {
+  const source = image.thumbnail || image.url;
+  try {
+    const parsed = new URL(source);
+    // Route remote images through a lightweight public image proxy. This avoids
+    // the common case where source hosts reject browser hotlinking/referrers.
+    // The original URL is still used as the link target.
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+      return `https://images.weserv.nl/?url=${encodeURIComponent(source)}&w=720&h=540&fit=cover&output=webp`;
+    }
+  } catch { /* fall through to the original value */ }
+  return source;
+}
+
 function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
   const [failed, setFailed] = useState<Set<string>>(new Set());
   const visible = images.filter(image => !failed.has(image.url));
@@ -96,7 +110,7 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
         {visible.map(image => (
           <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
             <img
-              src={image.thumbnail || image.url}
+              src={getImageSrc(image)}
               alt={image.title}
               loading="lazy"
               referrerPolicy="no-referrer"
@@ -132,7 +146,7 @@ function SpeakButton({ text, rate }: { text: string; rate: number }) {
     timer.current = window.setInterval(() => { if (!isSpeaking()) { setSpeaking(false); if (timer.current) window.clearInterval(timer.current); } }, 400);
   }, [speaking, text, rate]);
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-  return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking} onClick={toggle}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
+  return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
 }
 
 function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
