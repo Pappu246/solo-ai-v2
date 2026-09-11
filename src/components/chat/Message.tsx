@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon, Brain } from 'lucide-react';
-import type { Message as MessageType, Attachment, KnowledgeSource } from '../../types';
+import type { Message as MessageType, Attachment, KnowledgeSource, ImageSearchImage } from '../../types';
 import { Markdown } from './Markdown';
 import { IconButton, Button } from '../ui';
 import { AssistantAvatar, UserAvatar } from './Avatar';
@@ -15,14 +15,11 @@ interface MessageProps {
   showModelBadge?: boolean;
   ttsEnabled?: boolean;
   ttsRate?: number;
-  /** First of its consecutive same-role run: carries avatar + timestamp. */
   isFirstInGroup: boolean;
   userInitial?: string;
   onRegenerate?: () => void;
   onEdit?: (id: string, content: string) => void;
-  /** Phase 2: save an excerpt of this reply as a memory. */
   onRemember?: (content: string) => void;
-  /** Phase 2: open a source file referenced by this reply. */
   onOpenSource?: (source: KnowledgeSource) => void;
 }
 
@@ -42,34 +39,18 @@ export const Message = memo(function Message({
           </div>
         )}
         {editing && onEdit ? (
-          <EditBox
-            initial={message.content}
-            onCancel={() => setEditing(false)}
-            onSave={text => { setEditing(false); onEdit(message.id, text); }}
-          />
+          <EditBox initial={message.content} onCancel={() => setEditing(false)} onSave={text => { setEditing(false); onEdit(message.id, text); }} />
         ) : (
           <>
             <div className="flex items-end gap-2 max-w-[85%]">
-              {message.content && (
-                <div className="rounded-2xl rounded-br-md bg-gradient-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap break-words">
-                  {message.content}
-                </div>
-              )}
+              {message.content && <div className="rounded-2xl rounded-br-md bg-gradient-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap break-words">{message.content}</div>}
               {isFirstInGroup && <UserAvatar initial={userInitial} className="mb-0.5" />}
             </div>
             <div className="flex items-center gap-1 pr-8">
-              {isFirstInGroup && (
-                <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">
-                  {formatMessageTime(message.created_at)}
-                </time>
-              )}
+              {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">{formatMessageTime(message.created_at)}</time>}
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <CopyButton text={message.content} />
-                {onEdit && (
-                  <IconButton label="Edit message" size="sm" disabled={disabled} onClick={() => setEditing(true)}>
-                    <Pencil className="w-3.5 h-3.5" />
-                  </IconButton>
-                )}
+                {onEdit && <IconButton label="Edit message" size="sm" disabled={disabled} onClick={() => setEditing(true)}><Pencil className="w-3.5 h-3.5" /></IconButton>}
               </span>
             </div>
           </>
@@ -81,148 +62,97 @@ export const Message = memo(function Message({
   return (
     <div className="group flex flex-col gap-1" data-role="assistant">
       <div className="flex items-start gap-2.5">
-        {isFirstInGroup ? (
-          <AssistantAvatar className="mt-0.5" />
-        ) : (
-          <span aria-hidden className="w-7 shrink-0" />
-        )}
+        {isFirstInGroup ? <AssistantAvatar className="mt-0.5" /> : <span aria-hidden className="w-7 shrink-0" />}
         <div className="min-w-0 flex-1">
           <div className="rounded-2xl rounded-tl-md bg-surface-2/60 border border-border px-4 py-3 shadow-sm">
-            <div className="text-fg">
-              <Markdown content={message.content} />
-            </div>
+            <div className="text-fg"><Markdown content={message.content} /></div>
+            {message.images && message.images.length > 0 && <ImageSearchGallery images={message.images} />}
           </div>
-          {message.sources && message.sources.length > 0 && (
-            <div className="mt-1.5">
-              <SourceList sources={message.sources} onOpen={onOpenSource} />
-            </div>
-          )}
+          {message.sources && message.sources.length > 0 && <div className="mt-1.5"><SourceList sources={message.sources} onOpen={onOpenSource} /></div>}
         </div>
       </div>
       <div className="flex items-center gap-1 pl-[38px]">
-        {isFirstInGroup && (
-          <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">
-            {formatMessageTime(message.created_at)}
-          </time>
-        )}
-        <span className={cn(
-          'flex items-center gap-0.5 transition-opacity',
-          isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100',
-        )}>
+        {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
+        <span className={cn('flex items-center gap-0.5 transition-opacity', isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
           <CopyButton text={message.content} />
           {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
-          {onRegenerate && isLast && (
-            <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}>
-              <RefreshCw className="w-3.5 h-3.5" />
-            </IconButton>
-          )}
-          {onRemember && (
-            <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}>
-              <Brain className="w-3.5 h-3.5" />
-            </IconButton>
-          )}
-          {showModelBadge && message.model && (
-            <span className="ml-1.5 text-[11px] text-fg-subtle truncate" title={`Answered by ${message.model_name || message.model}`}>
-              {message.model_name || message.model}
-            </span>
-          )}
+          {onRegenerate && isLast && <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}><RefreshCw className="w-3.5 h-3.5" /></IconButton>}
+          {onRemember && <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}><Brain className="w-3.5 h-3.5" /></IconButton>}
+          {showModelBadge && message.model && <span className="ml-1.5 text-[11px] text-fg-subtle truncate" title={`Answered by ${message.model_name || message.model}`}>{message.model_name || message.model}</span>}
         </span>
       </div>
     </div>
   );
 });
 
-// ── Pieces ────────────────────────────────────────────────────────────────────
+function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
+  const [failed, setFailed] = useState<Set<string>>(new Set());
+  const visible = images.filter(image => !failed.has(image.url));
+  if (!visible.length) return null;
+  return (
+    <section className="mt-3" aria-label="Image search results">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted"><ImageIcon className="h-3.5 w-3.5" />Images</div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+        {visible.map(image => (
+          <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
+            <img
+              src={image.thumbnail || image.url}
+              alt={image.title}
+              loading="lazy"
+              referrerPolicy="no-referrer"
+              className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover/image:scale-[1.02]"
+              onError={() => setFailed(prev => new Set(prev).add(image.url))}
+            />
+            <div className="px-2 py-1.5 text-[11px] text-fg-muted">
+              <div className="truncate font-medium text-fg" title={image.title}>{image.title}</div>
+              <div className="truncate">{image.sourceName}</div>
+            </div>
+          </a>
+        ))}
+      </div>
+    </section>
+  );
+}
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   const copy = useCallback(async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
-    catch { /* clipboard unavailable */ }
+    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { /* clipboard unavailable */ }
   }, [text]);
-  return (
-    <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>
-      {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
-    </IconButton>
-  );
+  return <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}</IconButton>;
 }
 
 function SpeakButton({ text, rate }: { text: string; rate: number }) {
   const [speaking, setSpeaking] = useState(false);
   const timer = useRef<number | null>(null);
-
   useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
-
   const toggle = useCallback(() => {
     if (speaking) { stopSpeaking(); setSpeaking(false); if (timer.current) window.clearInterval(timer.current); return; }
-    speak(text, rate);
-    setSpeaking(true);
-    timer.current = window.setInterval(() => {
-      if (!isSpeaking()) { setSpeaking(false); if (timer.current) window.clearInterval(timer.current); }
-    }, 400);
+    speak(text, rate); setSpeaking(true);
+    timer.current = window.setInterval(() => { if (!isSpeaking()) { setSpeaking(false); if (timer.current) window.clearInterval(timer.current); } }, 400);
   }, [speaking, text, rate]);
-
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
-  return (
-    <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking} onClick={toggle}>
-      {speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}
-    </IconButton>
-  );
+  return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking} onClick={toggle}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
 }
 
 function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(value.length, value.length); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(value.length, value.length); }, []);
   const canSave = value.trim().length > 0 && value.trim() !== initial.trim();
   return (
     <div className="w-full max-w-[85%] rounded-2xl border border-accent/40 bg-surface p-2 shadow-md">
-      <textarea
-        ref={ref}
-        value={value}
-        onChange={e => setValue(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === 'Escape') onCancel();
-          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canSave) onSave(value);
-        }}
-        rows={Math.min(8, Math.max(2, value.split('\n').length))}
-        className="w-full bg-transparent resize-none outline-none text-[0.95rem] text-fg px-2 py-1"
-        aria-label="Edit your message"
-      />
-      <div className="flex items-center justify-end gap-2 mt-1">
-        <Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button>
-        <Button size="sm" variant="primary" disabled={!canSave} onClick={() => onSave(value)}>Save & resend</Button>
-      </div>
+      <textarea ref={ref} value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canSave) onSave(value); }} rows={Math.min(8, Math.max(2, value.split('\n').length))} className="w-full bg-transparent resize-none outline-none text-[0.95rem] text-fg px-2 py-1" aria-label="Edit your message" />
+      <div className="flex items-center justify-end gap-2 mt-1"><Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button><Button size="sm" variant="primary" disabled={!canSave} onClick={() => onSave(value)}>Save & resend</Button></div>
     </div>
   );
 }
 
-/** Files whose excerpts were given to the model for this reply. */
 function SourceList({ sources, onOpen }: { sources: KnowledgeSource[]; onOpen?: (s: KnowledgeSource) => void }) {
-  return (
-    <div className="flex flex-wrap items-center gap-1.5" aria-label="Sources">
-      <span className="text-[11px] text-fg-subtle">Sources:</span>
-      {sources.map(s => {
-        const label = `${s.file_name}${s.chunk_indexes.length ? ` · ${s.chunk_indexes.length === 1 ? 'excerpt' : 'excerpts'} ${s.chunk_indexes.map(i => i + 1).join(', ')}` : ''}`;
-        const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/70 px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]';
-        return onOpen ? (
-          <button key={s.file_id} type="button" onClick={() => onOpen(s)} className={cn(cls, 'hover:text-fg hover:border-border-strong transition-colors')} title={label}>
-            <FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span>
-          </button>
-        ) : (
-          <span key={s.file_id} className={cls} title={label}><FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span></span>
-        );
-      })}
-    </div>
-  );
+  return <div className="flex flex-wrap items-center gap-1.5" aria-label="Sources"><span className="text-[11px] text-fg-subtle">Sources:</span>{sources.map(s => { const label = `${s.file_name}${s.chunk_indexes.length ? ` · ${s.chunk_indexes.length === 1 ? 'excerpt' : 'excerpts'} ${s.chunk_indexes.map(i => i + 1).join(', ')}` : ''}`; const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/70 px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]'; return onOpen ? <button key={s.file_id} type="button" onClick={() => onOpen(s)} className={cn(cls, 'hover:text-fg hover:border-border-strong transition-colors')} title={label}><FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span></button> : <span key={s.file_id} className={cls} title={label}><FileText className="w-3 h-3 shrink-0" aria-hidden /><span className="truncate">{label}</span></span>; })}</div>;
 }
 
 function AttachmentPill({ attachment }: { attachment: Attachment }) {
   const isImage = attachment.type === 'image';
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2/80 px-2 py-1 text-xs text-fg-muted max-w-[220px]">
-      {isImage ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}
-      <span className="truncate">{attachment.name}</span>
-    </span>
-  );
+  return <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2/80 px-2 py-1 text-xs text-fg-muted max-w-[220px]">{isImage ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}<span className="truncate">{attachment.name}</span></span>;
 }

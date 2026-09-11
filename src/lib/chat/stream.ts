@@ -5,7 +5,7 @@
  */
 import { supabase, CHAT_FUNCTION_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase';
 import { AppError } from '../errors';
-import type { AIModel, Attachment, ChatContext, ChatMessage, ModelInfo } from '../../types';
+import type { AIModel, Attachment, ChatContext, ChatMessage, ModelInfo, ImageSearchImage } from '../../types';
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -38,21 +38,18 @@ export interface StreamHandle {
   model: ModelInfo;
   /** Async iterator over content deltas. */
   deltas: AsyncGenerator<string, void, void>;
+  /** Smart Image Search results received while consuming the stream. */
+  images: ImageSearchImage[];
 }
 
 /**
  * Parse the chat Edge Function's SSE stream into content deltas.
- *
- * The server speaks a small, explicit protocol:
- *   `data: {"choices":[{"delta":{"content":"…"}}]}`  – a content delta
- *   `event: error` + `data: {error, code, request_id}` – a structured failure
- *   `data: [DONE]`                                   – the response completed
- *
- * `[DONE]` is only written for a clean completion, so a stream that stops
- * early throws `stream_incomplete` *after* the deltas it already yielded —
- * the caller keeps the partial answer and can surface a useful error.
+ * Image-search events are consumed separately and collected into `onImageSearch`.
  */
-export async function* parseSSE(body: ReadableStream<Uint8Array>): AsyncGenerator<string, void, void> {
+export async function* parseSSE(
+  body: ReadableStream<Uint8Array>,
+  onImageSearch?: (event: { type: 'started' | 'results' | 'error'; queries?: string[]; images?: ImageSearchImage[]; message?: string }) => void,
+): AsyncGenerator<string, void, void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = '';
@@ -67,15 +64,16 @@ export async function* parseSSE(body: ReadableStream<Uint8Array>): AsyncGenerato
       for (const frame of frames) {
         const parsed = readFrame(frame);
         if (!parsed) continue;
+        if (parsed.kind === 'image_search') { onImageSearch?.(parsed.event); continue; }
         if (parsed.kind === 'delta') { yield parsed.text; continue; }
         if (parsed.kind === 'done') { completed = true; break; }
         throw toStreamError(parsed.payload);
       }
     }
-    // Flush a trailing frame that was not followed by a blank line.
     if (!completed) {
       const tail = readFrame(buffer);
-      if (tail?.kind === 'delta') yield tail.text;
+      if (tail?.kind === 'image_search') onImageSearch?.(tail.event);
+      else if (tail?.kind === 'delta') yield tail.text;
       else if (tail?.kind === 'done') completed = true;
       else if (tail?.kind === 'error') throw toStreamError(tail.payload);
     }
@@ -97,7 +95,8 @@ interface ServerErrorPayload { error?: unknown; code?: unknown; request_id?: unk
 type Frame =
   | { kind: 'delta'; text: string }
   | { kind: 'done' }
-  | { kind: 'error'; payload: ServerErrorPayload };
+  | { kind: 'error'; payload: ServerErrorPayload }
+  | { kind: 'image_search'; event: { type: 'started' | 'results' | 'error'; queries?: string[]; images?: ImageSearchImage[]; message?: string } };
 
 /** Decode one SSE frame (`event:` + one or more `data:` lines). */
 function readFrame(frame: string): Frame | null {
@@ -117,6 +116,16 @@ function readFrame(frame: string): Frame | null {
     if (!value || typeof value !== 'object') return null;
     parsed = value as Record<string, unknown>;
   } catch {
+    return null;
+  }
+  if (event === 'image_search') {
+    const type = parsed.type;
+    if (type === 'started' && Array.isArray(parsed.queries)) return { kind: 'image_search', event: { type: 'started', queries: parsed.queries.filter((q): q is string => typeof q === 'string') } };
+    if (type === 'results' && Array.isArray(parsed.images)) {
+      const images = parsed.images.filter((x): x is ImageSearchImage => Boolean(x && typeof x === 'object' && typeof (x as Record<string, unknown>).url === 'string' && typeof (x as Record<string, unknown>).thumbnail === 'string' && typeof (x as Record<string, unknown>).title === 'string' && typeof (x as Record<string, unknown>).sourceUrl === 'string' && typeof (x as Record<string, unknown>).sourceName === 'string')) as ImageSearchImage[];
+      return { kind: 'image_search', event: { type: 'results', images } };
+    }
+    if (type === 'error' && typeof parsed.message === 'string') return { kind: 'image_search', event: { type: 'error', message: parsed.message } };
     return null;
   }
   if (event === 'error' || (parsed.error !== undefined && parsed.error !== null)) return { kind: 'error', payload: parsed as ServerErrorPayload };
@@ -186,7 +195,6 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
   });
 
   if (!res.ok) {
-    // The server returns a safe envelope: { error, code, request_id }.
     let message = `Request failed (${res.status})`;
     let code: string | undefined;
     let requestId: string | undefined;
@@ -206,5 +214,9 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
     name: res.headers.get('X-Model-Name') || '',
     category: res.headers.get('X-Route-Category') || 'conversation',
   };
-  return { model, deltas: parseSSE(res.body) };
+  const imageResults: ImageSearchImage[] = [];
+  const deltas = parseSSE(res.body, event => {
+    if (event.type === 'results' && event.images?.length) imageResults.push(...event.images);
+  });
+  return { model, deltas, images: imageResults };
 }

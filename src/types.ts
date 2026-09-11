@@ -16,6 +16,17 @@ export interface Conversation {
 
 export type MessageRole = 'user' | 'assistant' | 'system';
 
+/** A web image returned by Solo AI's Smart Image Search. */
+export interface ImageSearchImage {
+  url: string;
+  thumbnail: string;
+  title: string;
+  sourceUrl: string;
+  sourceName: string;
+  width?: number;
+  height?: number;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -27,6 +38,8 @@ export interface Message {
   attachments?: Attachment[] | null;
   /** Phase 2: knowledge sources that were provided to the model for this reply. */
   sources?: KnowledgeSource[] | null;
+  /** Smart Image Search results attached to this assistant reply. */
+  images?: ImageSearchImage[] | null;
   tokens_used?: number | null;
   reaction?: 'like' | 'dislike' | null;
   created_at: string;
@@ -98,7 +111,7 @@ export interface Project {
   user_id: string;
   name: string;
   description: string;
-  /** Project-specific instructions sent to the model for chats in this project. */
+  /** Project-specific instructions sent to the model for chats in the project. */
   instructions: string;
   archived: boolean;
   created_at: string;
