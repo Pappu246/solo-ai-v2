@@ -39,6 +39,12 @@ function buildComponents(live?: boolean): Components {
     a({ href, children }) {
       return <a href={href} target="_blank" rel="noopener noreferrer nofollow">{children}</a>;
     },
+    img({ src, alt }) {
+      // Never render model-generated placeholder/relative image paths. Smart
+      // Image Search results are rendered separately by ImageSearchGallery.
+      if (!src || !/^https?:\/\//i.test(src)) return null;
+      return <img src={src} alt={alt || ''} loading="lazy" referrerPolicy="no-referrer" className="max-w-full rounded-lg" />;
+    },
   };
 }
 
