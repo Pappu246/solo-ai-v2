@@ -7,6 +7,7 @@ import { AssistantAvatar, UserAvatar } from './Avatar';
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
+import { SUPABASE_URL } from '../../lib/supabase';
 
 interface MessageProps {
   message: MessageType;
@@ -89,11 +90,14 @@ function getImageSrc(image: ImageSearchImage): string {
   const source = image.thumbnail || image.url;
   try {
     const parsed = new URL(source);
-    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
-      return `https://images.weserv.nl/?url=${encodeURIComponent(source)}&w=720&h=540&fit=cover&output=webp`;
+    const host = parsed.hostname.toLowerCase();
+    const allowedProxyHost = host === 'gstatic.com' || host.endsWith('.gstatic.com') || host === 'googleusercontent.com' || host.endsWith('.googleusercontent.com');
+    if (SUPABASE_URL && parsed.protocol === 'https:' && allowedProxyHost) {
+      return `${SUPABASE_URL}/functions/v1/image-proxy?url=${encodeURIComponent(source)}`;
     }
-  } catch { /* fall through to the original value */ }
-  return source;
+    if (parsed.protocol === 'http:' || parsed.protocol === 'https:') return source;
+  } catch { /* fall through */ }
+  return '';
 }
 
 function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
@@ -104,22 +108,26 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
     <section className="mt-3" aria-label="Image search results">
       <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-fg-muted"><ImageIcon className="h-3.5 w-3.5" />Images</div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {visible.map(image => (
-          <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
-            <img
-              src={getImageSrc(image)}
-              alt={image.title}
-              loading="lazy"
-              referrerPolicy="no-referrer"
-              className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover/image:scale-[1.02]"
-              onError={() => setFailed(prev => new Set(prev).add(image.url))}
-            />
-            <div className="px-2 py-1.5 text-[11px] text-fg-muted">
-              <div className="truncate font-medium text-fg" title={image.title}>{image.title}</div>
-              <div className="truncate">{image.sourceName}</div>
-            </div>
-          </a>
-        ))}
+        {visible.map(image => {
+          const src = getImageSrc(image);
+          if (!src) return null;
+          return (
+            <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
+              <img
+                src={src}
+                alt={image.title}
+                loading="lazy"
+                referrerPolicy="no-referrer"
+                className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover/image:scale-[1.02]"
+                onError={() => setFailed(prev => new Set(prev).add(image.url))}
+              />
+              <div className="px-2 py-1.5 text-[11px] text-fg-muted">
+                <div className="truncate font-medium text-fg" title={image.title}>{image.title}</div>
+                <div className="truncate">{image.sourceName}</div>
+              </div>
+            </a>
+          );
+        })}
       </div>
     </section>
   );
