@@ -1,0 +1,8 @@
+import { decideImageSearch } from "./decision.ts";
+import { filterResults } from "./providers.ts";
+const env=(_n:string)=>undefined;const failFetch=async(_u:string,_i?:RequestInit)=>new Response("",{status:500});
+Deno.test("Logic Gates visual query triggers",async()=>{const r=await decideImageSearch("Explain AND OR NOT NAND NOR XOR XNOR with circuit diagrams and truth tables. Automatically include relevant images/diagrams.",{env,fetchImpl:failFetch});if(!r.shouldSearch||r.queries.length===0)throw new Error("visual query did not trigger")});
+Deno.test("TCP vs UDP visual query triggers",async()=>{const r=await decideImageSearch("Compare TCP vs UDP with a diagram and visual explanation.",{env,fetchImpl:failFetch});if(!r.shouldSearch)throw new Error("TCP vs UDP did not trigger")});
+Deno.test("ordinary math does not trigger",async()=>{const r=await decideImageSearch("What is 17 × 29?",{env,fetchImpl:failFetch});if(r.shouldSearch)throw new Error("math triggered image search")});
+Deno.test("valid thumbnail survives normalization",()=>{const r=filterResults([{url:"https://example.com/a.png",thumbnail:"https://encrypted-tbn0.gstatic.com/images?q=x",title:"diagram",sourceUrl:"https://example.com",sourceName:"example.com",width:640,height:480}]);if(r.length!==1)throw new Error("thumbnail removed")});
+Deno.test("malformed thumbnail is removed",()=>{const r=filterResults([{url:"https://example.com/a.png",thumbnail:"bad",title:"diagram",sourceUrl:"https://example.com",sourceName:"example.com"}]);if(r.length!==0)throw new Error("malformed thumbnail survived")});
