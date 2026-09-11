@@ -1,82 +1,39 @@
 name: CI
-
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-permissions:
-  contents: read
-
+  push: { branches: [main] }
+  pull_request: { branches: [main] }
+permissions: { contents: read }
 jobs:
   validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install
-        run: npm ci
-      - name: Validate (typecheck, lint, unit tests, build)
-        run: npm run check
-      - name: Type-check end-to-end specs
-        run: npx tsc -p e2e/tsconfig.json
-
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run check
+      - run: npx tsc -p e2e/tsconfig.json
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install
-        run: npm ci
-      - name: Install Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run end-to-end tests
-        # The suite mocks the whole Supabase HTTP surface in-browser; the VITE_*
-        # values come from playwright.config.ts and no secrets are required.
-        run: npm run test:e2e
-        env:
-          CI: true
-      - name: Upload report on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: playwright-report
-          path: |
-            playwright-report
-            test-results
-          retention-days: 7
-
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+        env: { CI: true }
   edge-functions:
     name: Edge function (Deno)
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      # The Edge Function is Deno-only: never resolve the app's package.json.
-      DENO_NO_PACKAGE_JSON: 1
+    env: { DENO_NO_PACKAGE_JSON: 1 }
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Deno
-        uses: denoland/setup-deno@v2
-        with:
-          deno-version: v2.x
-      - name: Deno version
-        run: deno --version
-      - name: Type-check provider layer
-        run: deno check supabase/functions/chat/providers.ts supabase/functions/chat/providers_test.ts
-      - name: Test provider layer
-        run: deno test supabase/functions/chat/providers_test.ts
+      - uses: actions/checkout@v4
+      - uses: denoland/setup-deno@v2
+        with: { deno-version: v2.x }
+      - run: deno check supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-proxy/index.ts
+      - run: deno test supabase/functions/chat/context.test.ts supabase/functions/image-search/decision_test.ts supabase/functions/image-search/final_regression_test.ts supabase/functions/image-proxy/index_test.ts
