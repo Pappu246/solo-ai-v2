@@ -1,1 +1,0 @@
-Image-search observability is best-effort and bounded. Authenticated browser thumbnail smoke tests remain required after deployment.
