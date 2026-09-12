@@ -1,7 +1,8 @@
 /**
- * Image Search Diagnostics - Developer-only observability for tracing image search
- * across request ID, decision, queries, provider, SSE, frontend parsing, gallery,
- * and proxy stages.
+ * Frontend Image Search Diagnostics - Developer-only observability
+ *
+ * Traces image search across request ID, decision, queries, provider, SSE, 
+ * frontend parsing, gallery, and proxy stages.
  *
  * Disabled by default. Enable with VITE_IMAGE_SEARCH_DEBUG=true environment variable.
  * Never exposes API keys, tokens, full prompts, provider bodies, or secret URLs.
@@ -96,9 +97,17 @@ const isDebugEnabled = (): boolean => {
 };
 
 const diagnosticsStore = new Map<string, Partial<ImageSearchDiagnostics>>();
+const MAX_STORED_DIAGNOSTICS = 50; // Bounded memory usage
 
 export function initDiagnostics(requestId: string): void {
   if (!isDebugEnabled()) return;
+  
+  // Cleanup old diagnostics if store grows too large
+  if (diagnosticsStore.size >= MAX_STORED_DIAGNOSTICS) {
+    const firstKey = diagnosticsStore.keys().next().value;
+    if (firstKey) diagnosticsStore.delete(firstKey);
+  }
+
   diagnosticsStore.set(requestId, {
     requestId,
     timestamp: new Date().toISOString(),
@@ -201,7 +210,7 @@ export function recordSSEError(requestId: string, error: string): void {
   if (!isDebugEnabled()) return;
   const diag = diagnosticsStore.get(requestId);
   if (!diag || !diag.sse) return;
-  diag.sse.errors.push(error);
+  diag.sse.errors.push(error.slice(0, 200));
 }
 
 export function recordFrontendEvent(
@@ -260,10 +269,11 @@ export function recordImageLoad(requestId: string, url: string, success: boolean
   if (!isDebugEnabled()) return;
   const diag = diagnosticsStore.get(requestId);
   if (!diag || !diag.imageLoads) return;
+  const sanitized = sanitizeUrl(url);
   if (success) {
-    diag.imageLoads.success.push(sanitizeUrl(url));
+    diag.imageLoads.success.push(sanitized);
   } else {
-    diag.imageLoads.failed.push(sanitizeUrl(url));
+    diag.imageLoads.failed.push(sanitized);
   }
   diag.imageLoads.timestamp = new Date().toISOString();
 }
@@ -272,6 +282,24 @@ export function getDiagnostics(requestId: string): ImageSearchDiagnostics | null
   if (!isDebugEnabled()) return null;
   const diag = diagnosticsStore.get(requestId);
   return (diag as unknown as ImageSearchDiagnostics) || null;
+}
+
+export function logDiagnostics(requestId: string): void {
+  if (!isDebugEnabled()) return;
+  const diag = getDiagnostics(requestId);
+  if (!diag) return;
+  console.group(`📊 Image Search Diagnostics [${requestId}]`);
+  console.table(diag);
+  console.log('Decision:', diag.decision);
+  console.log('Queries:', diag.queries);
+  console.log('Provider:', diag.provider);
+  console.log('SSE:', diag.sse);
+  console.log('Frontend:', diag.frontend);
+  console.log('Message:', diag.message);
+  console.log('Gallery:', diag.gallery);
+  console.log('Proxy:', diag.proxy);
+  console.log('Image Loads:', diag.imageLoads);
+  console.groupEnd();
 }
 
 export function clearDiagnostics(requestId: string): void {

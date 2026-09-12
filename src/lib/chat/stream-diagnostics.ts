@@ -9,6 +9,7 @@ import {
   recordFrontendEvent,
   recordSSEEvent,
   recordImageLoad,
+  logDiagnostics,
 } from './image-diagnostics';
 
 const isDebugEnabled = (): boolean => {
@@ -44,6 +45,11 @@ export function logImageLoadResult(requestId: string, url: string, success: bool
   } else {
     console.debug(`[image-search] ${requestId}: image load failed`, { url: sanitizeUrl(url) });
   }
+}
+
+export function logDiagnosticsForRequest(requestId: string): void {
+  if (!isDebugEnabled()) return;
+  logDiagnostics(requestId);
 }
 
 function sanitizeUrl(url: string): string {

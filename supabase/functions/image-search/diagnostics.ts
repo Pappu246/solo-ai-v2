@@ -52,7 +52,7 @@ export function initBackendDiagnostics(requestId: string): void {
   // Cleanup old diagnostics if store grows too large
   if (diagnosticsStore.size >= MAX_STORED_DIAGNOSTICS) {
     const firstKey = diagnosticsStore.keys().next().value;
-    diagnosticsStore.delete(firstKey);
+    if (firstKey) diagnosticsStore.delete(firstKey);
   }
 
   diagnosticsStore.set(requestId, {
