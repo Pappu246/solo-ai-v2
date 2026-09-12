@@ -15,7 +15,6 @@ async function collect(gen: AsyncGenerator<string>) {
   return out;
 }
 
-/** Collect deltas *and* the error that ended the stream (if any). */
 async function collectPartial(gen: AsyncGenerator<string>) {
   const out: string[] = [];
   let error: AppError | null = null;
@@ -25,6 +24,15 @@ async function collectPartial(gen: AsyncGenerator<string>) {
 }
 
 const delta = (text: string) => `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`;
+
+const image = (overrides: Record<string, unknown> = {}) => ({
+  url: 'https://cdn.example.com/full.jpg',
+  thumbnail: 'https://encrypted-tbn0.gstatic.com/images?q=test',
+  title: 'Golden retriever puppy',
+  sourceUrl: 'https://example.com/photo',
+  sourceName: 'example.com',
+  ...overrides,
+});
 
 describe('extractDelta', () => {
   it('extracts OpenAI-style content deltas', () => {
@@ -57,6 +65,31 @@ describe('parseSSE', () => {
     const a = bytes.slice(0, 40), b = bytes.slice(40);
     const stream = new ReadableStream<Uint8Array>({ start(c) { c.enqueue(a); c.enqueue(b); c.close(); } });
     expect((await collect(parseSSE(stream))).join('')).toBe('नमस्ते');
+  });
+  it('extracts real image results from image_search SSE events', async () => {
+    const received: Array<{ type: string; images?: unknown[] }> = [];
+    const out = await collect(parseSSE(streamOf([
+      'event: image_search\ndata: {"type":"started","queries":["golden retriever puppies"]}\n\n',
+      delta('Here are the photos.'),
+      `event: image_search\ndata: ${JSON.stringify({ type: 'results', images: [image(), image({ url: 'https://cdn.example.com/full-2.jpg' })] })}\n\n`,
+      'data: [DONE]\n\n',
+    ]), event => { if (event.type === 'results') received.push(event); }));
+    expect(out).toEqual(['Here are the photos.']);
+    expect(received).toHaveLength(1);
+    expect(received[0].images).toHaveLength(2);
+    expect(received[0].images?.[0]).toMatchObject({
+      url: 'https://cdn.example.com/full.jpg',
+      thumbnail: 'https://encrypted-tbn0.gstatic.com/images?q=test',
+    });
+  });
+  it('passes structurally valid image results through for downstream gallery validation', async () => {
+    const received: Array<unknown> = [];
+    await collect(parseSSE(streamOf([
+      `event: image_search\ndata: ${JSON.stringify({ type: 'results', images: [image({ thumbnail: '' }), image()] })}\n\n`,
+      'data: [DONE]\n\n',
+    ]), event => { if (event.type === 'results') received.push(...(event.images ?? [])); }));
+    expect(received).toHaveLength(2);
+    expect(received[0]).toMatchObject({ thumbnail: '' });
   });
 });
 
