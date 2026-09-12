@@ -1,2 +1,8 @@
 [functions.chat]
 verify_jwt = true
+
+[functions.image-search]
+verify_jwt = true
+
+[functions.image-proxy]
+verify_jwt = false
