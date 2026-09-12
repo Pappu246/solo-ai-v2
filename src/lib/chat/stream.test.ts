@@ -15,7 +15,6 @@ async function collect(gen: AsyncGenerator<string>) {
   return out;
 }
 
-/** Collect deltas *and* the error that ended the stream (if any). */
 async function collectPartial(gen: AsyncGenerator<string>) {
   const out: string[] = [];
   let error: AppError | null = null;
