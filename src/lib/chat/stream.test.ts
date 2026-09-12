@@ -83,13 +83,14 @@ describe('parseSSE', () => {
       thumbnail: 'https://encrypted-tbn0.gstatic.com/images?q=test',
     });
   });
-  it('rejects results with missing thumbnail URLs instead of creating broken gallery entries', async () => {
+  it('passes structurally valid image results through for downstream gallery validation', async () => {
     const received: Array<unknown> = [];
     await collect(parseSSE(streamOf([
       `event: image_search\ndata: ${JSON.stringify({ type: 'results', images: [image({ thumbnail: '' }), image()] })}\n\n`,
       'data: [DONE]\n\n',
     ]), event => { if (event.type === 'results') received.push(...(event.images ?? [])); }));
-    expect(received).toHaveLength(1);
+    expect(received).toHaveLength(2);
+    expect(received[0]).toMatchObject({ thumbnail: '' });
   });
 });
 
