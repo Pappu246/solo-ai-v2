@@ -18,7 +18,7 @@ jobs:
     name: Public production smoke
     if: >
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success')
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && vars.PRODUCTION_SMOKE_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
