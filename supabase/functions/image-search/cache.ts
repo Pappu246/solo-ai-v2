@@ -1,10 +1,10 @@
 /**
- * Simple TTL-based in-memory cache for image search results.
+ * Simple TTL-based cache for image search results.
  *
  * Google CSE free tier is 100 queries/day, so caching is critical.
- * We cache by query string with a configurable TTL (default 30 minutes).
+ * We cache by normalized query key with a configurable TTL (default 30 minutes).
  *
- * This is an in-memory LRU cache — it does not persist across cold starts,
+ * This is an in-memory cache — it does not persist across cold starts,
  * but that's acceptable for a search cache (worst case: one extra API call).
  */
 
@@ -13,8 +13,23 @@ interface CacheEntry<T> {
   expiresAt: number;
 }
 
+export interface CacheFetchResult<T> {
+  value: T;
+  cached: boolean;
+  coalesced: boolean;
+}
+
+/**
+ * Normalize cache keys so equivalent queries share cache entries:
+ * case, repeated whitespace and Unicode compatibility forms are ignored.
+ */
+export function normalizeCacheKey(key: string): string {
+  return key.normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export class TTLCache<T> {
   private readonly cache = new Map<string, CacheEntry<T>>();
+  private readonly inFlight = new Map<string, Promise<T>>();
   private readonly ttlMs: number;
   private readonly maxSize: number;
 
@@ -25,11 +40,12 @@ export class TTLCache<T> {
 
   /** Get a cached value, or undefined if not present or expired. */
   get(key: string): T | undefined {
-    const entry = this.cache.get(key);
+    const normalizedKey = normalizeCacheKey(key);
+    const entry = this.cache.get(normalizedKey);
     if (!entry) return undefined;
 
     if (Date.now() > entry.expiresAt) {
-      this.cache.delete(key);
+      this.cache.delete(normalizedKey);
       return undefined;
     }
 
@@ -38,18 +54,51 @@ export class TTLCache<T> {
 
   /** Store a value in the cache with the configured TTL. */
   set(key: string, value: T): void {
+    const normalizedKey = normalizeCacheKey(key);
+
     // Replace an existing entry without consuming an additional cache slot.
-    if (this.cache.has(key)) this.cache.delete(key);
+    if (this.cache.has(normalizedKey)) this.cache.delete(normalizedKey);
 
     // Evict before insertion so the cache never grows beyond maxSize.
     if (this.cache.size >= this.maxSize) {
       this.evictOldest();
     }
 
-    this.cache.set(key, {
+    this.cache.set(normalizedKey, {
       value,
       expiresAt: Date.now() + this.ttlMs,
     });
+  }
+
+  /**
+   * Read a cached value or run one shared loader for concurrent cache misses.
+   * All concurrent callers for the same normalized key await the same promise.
+   */
+  async getOrSet(key: string, loader: () => Promise<T>): Promise<CacheFetchResult<T>> {
+    const normalizedKey = normalizeCacheKey(key);
+
+    const cached = this.get(normalizedKey);
+    if (cached !== undefined) {
+      return { value: cached, cached: true, coalesced: false };
+    }
+
+    const existing = this.inFlight.get(normalizedKey);
+    if (existing) {
+      return { value: await existing, cached: false, coalesced: true };
+    }
+
+    const pending = Promise.resolve()
+      .then(loader)
+      .then(value => {
+        this.set(normalizedKey, value);
+        return value;
+      })
+      .finally(() => {
+        this.inFlight.delete(normalizedKey);
+      });
+
+    this.inFlight.set(normalizedKey, pending);
+    return { value: await pending, cached: false, coalesced: false };
   }
 
   /** Check if a key is cached and not expired. */
@@ -59,7 +108,7 @@ export class TTLCache<T> {
 
   /** Remove a specific key. */
   delete(key: string): void {
-    this.cache.delete(key);
+    this.cache.delete(normalizeCacheKey(key));
   }
 
   /** Clear the entire cache. */
@@ -67,12 +116,12 @@ export class TTLCache<T> {
     this.cache.clear();
   }
 
-  /** Number of entries currently in the cache. */
+  /** Number of cached entries currently stored. */
   get size(): number {
     return this.cache.size;
   }
 
-  /** Evict expired entries and, if still at capacity, the oldest entries. */
+  /** Evict expired entries and, if still at capacity, the entry expiring soonest. */
   private evictOldest(): void {
     const now = Date.now();
 
@@ -87,12 +136,14 @@ export class TTLCache<T> {
     if (this.cache.size >= this.maxSize) {
       let oldestKey: string | undefined;
       let oldestExpiry = Number.POSITIVE_INFINITY;
+
       for (const [key, entry] of this.cache) {
         if (entry.expiresAt < oldestExpiry) {
           oldestExpiry = entry.expiresAt;
           oldestKey = key;
         }
       }
+
       if (oldestKey !== undefined) this.cache.delete(oldestKey);
     }
   }

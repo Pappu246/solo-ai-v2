@@ -135,48 +135,49 @@ Deno.serve(async req => {
       }, 503, requestId);
     }
 
-    // Execute searches (with caching)
+    // Execute searches (with cache hits and in-flight request coalescing)
     const allResults: ImageResult[] = [];
     const executedQueries: string[] = [];
     let anyCached = false;
 
     for (const query of queries) {
-      const cacheKey = `search:${query.toLowerCase().trim()}`;
-      const cached = imageSearchCache.get(cacheKey);
+      const cacheKey = `search:${query}`;
 
-      if (cached) {
-        allResults.push(...cached.results);
-        executedQueries.push(query);
-        anyCached = true;
-        log(requestId, "cache_hit", { query });
-        continue;
-      }
-
-      // Execute search with timeout
       try {
-        const results = await Promise.race([
-          provider.search(query),
-          new Promise<ImageResult[]>((_, reject) =>
-            setTimeout(() => reject(new Error("Search timeout")), 8000)
-          ),
-        ]);
+        const outcome = await imageSearchCache.getOrSet(cacheKey, async () => {
+          // Execute search with timeout. Concurrent requests for the same
+          // normalized key share this single provider call.
+          const results = await Promise.race([
+            provider.search(query),
+            new Promise<ImageResult[]>((_, reject) =>
+              setTimeout(() => reject(new Error("Search timeout")), 8000)
+            ),
+          ]);
 
-        const filtered = filterResults(results);
-        allResults.push(...filtered);
+          return {
+            query,
+            results: filterResults(results),
+            timestamp: Date.now(),
+          } satisfies ImageSearchResult;
+        });
 
-        // Cache the results
-        const cacheEntry: ImageSearchResult = {
-          query,
-          results: filtered,
-          timestamp: Date.now(),
-        };
-        imageSearchCache.set(cacheKey, cacheEntry);
-
+        allResults.push(...outcome.value.results);
         executedQueries.push(query);
-        log(requestId, "search_completed", { query, resultCount: filtered.length });
+        anyCached ||= outcome.cached || outcome.coalesced;
+
+        const event = outcome.cached
+          ? "cache_hit"
+          : outcome.coalesced
+            ? "cache_coalesced"
+            : "search_completed";
+
+        log(requestId, event, {
+          query,
+          resultCount: outcome.value.results.length,
+        });
       } catch (error) {
         log(requestId, "search_failed", { query, error: String(error) });
-        // Continue with other queries even if one fails
+        // Continue with other queries even if one fails.
       }
     }
 
