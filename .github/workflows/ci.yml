@@ -13,6 +13,7 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run check
+      - run: node --check scripts/production-smoke.mjs
       - run: npx tsc -p e2e/tsconfig.json
   e2e:
     name: End-to-end (Playwright)
