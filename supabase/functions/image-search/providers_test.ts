@@ -14,7 +14,7 @@ import {
   type FetchLike,
   type ImageResult,
 } from "./providers.ts";
-import { TTLCache } from "./cache.ts";
+import { TTLCache, normalizeCacheKey } from "./cache.ts";
 import {
   decideImageSearch,
   quickHeuristicCheck,
@@ -276,6 +276,77 @@ Deno.test("cache: clear() removes all keys", () => {
   cache.set("key2", "value2");
   cache.clear();
   assertEquals(cache.size, 0);
+});
+
+Deno.test("cache: normalizes equivalent keys", () => {
+  assertEquals(
+    normalizeCacheKey("  Search:   Golden  Retriever  "),
+    "search: golden retriever",
+  );
+
+  const cache = new TTLCache<string>(1000);
+  cache.set("  Search:   Golden  Retriever  ", "value");
+  assertEquals(cache.get("search: golden retriever"), "value");
+});
+
+Deno.test("cache: coalesces concurrent misses into one loader", async () => {
+  const cache = new TTLCache<string>(60000);
+  let calls = 0;
+  let release!: (value: string) => void;
+  const gate = new Promise<string>(resolve => { release = resolve; });
+
+  const loader = async () => {
+    calls++;
+    return gate;
+  };
+
+  const first = cache.getOrSet("Search:   Cats", loader);
+  const second = cache.getOrSet("search: cats", loader);
+
+  // Both callers must share the same pending operation before it resolves.
+  release("shared-value");
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assertEquals(calls, 1);
+  assertEquals(firstResult.value, "shared-value");
+  assertEquals(secondResult.value, "shared-value");
+  assert(!firstResult.cached);
+  assert(!firstResult.coalesced);
+  assert(!secondResult.cached);
+  assert(secondResult.coalesced);
+
+  const thirdResult = await cache.getOrSet("SEARCH: cats", loader);
+  assertEquals(calls, 1);
+  assert(thirdResult.cached);
+  assert(!thirdResult.coalesced);
+});
+
+Deno.test("cache: clears failed in-flight requests so later callers can retry", async () => {
+  const cache = new TTLCache<string>(60000);
+  let calls = 0;
+
+  const failingLoader = async () => {
+    calls++;
+    throw new Error("temporary failure");
+  };
+
+  const first = cache.getOrSet("search: dogs", failingLoader);
+  const second = cache.getOrSet(" SEARCH:   DOGS ", failingLoader);
+
+  const results = await Promise.allSettled([first, second]);
+  assertEquals(calls, 1);
+  assertEquals(results.filter(r => r.status === "rejected").length, 2);
+
+  const recovered = await cache.getOrSet("search: dogs", async () => {
+    calls++;
+    return "recovered";
+  });
+
+  assertEquals(calls, 2);
+  assertEquals(recovered.value, "recovered");
+  assert(!recovered.cached);
+  assert(!recovered.coalesced);
 });
 
 // ── Decision Tests ──────────────────────────────────────────────────────────
