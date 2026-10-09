@@ -27,6 +27,15 @@ export interface ImageSearchImage {
   height?: number;
 }
 
+/** A web source cited by Solo AI's web research (Phase 5). */
+export interface WebSearchSource {
+  title: string;
+  url: string;
+  domain: string;
+  snippet?: string;
+  rank: number;
+}
+
 export interface Message {
   id: string;
   conversation_id: string;
@@ -40,6 +49,8 @@ export interface Message {
   sources?: KnowledgeSource[] | null;
   /** Smart Image Search results attached to this assistant reply. */
   images?: ImageSearchImage[] | null;
+  /** Web research sources attached to this assistant reply (Phase 5). */
+  web_sources?: WebSearchSource[] | null;
   tokens_used?: number | null;
   reaction?: 'like' | 'dislike' | null;
   created_at: string;
@@ -203,6 +214,8 @@ export interface AIModel {
   supports_tools: boolean;
   description?: string;
   tag?: string;
+  /** Phase 15: false while the server is routing around this model (provider cooldown or retired catalog entry). Missing counts as available. */
+  available?: boolean;
 }
 
 /** Model metadata attached to a streamed response. */
@@ -242,6 +255,8 @@ export interface UserSettings {
   // General
   send_on_enter: boolean;
   auto_title: boolean;
+  /** Phase 8: propose saving durable statements from your messages as memories. */
+  suggest_memories: boolean;
   // AI
   /** `null` = Auto (router picks the model). */
   preferred_model: string | null;
@@ -257,6 +272,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   show_model_badges: true,
   send_on_enter: true,
   auto_title: true,
+  suggest_memories: true,
   preferred_model: null,
   tts_enabled: true,
   tts_rate: 1,

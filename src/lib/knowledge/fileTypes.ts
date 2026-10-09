@@ -20,6 +20,7 @@ interface KindRule { kind: FileKind; mime: string; label: string }
 /** Extension → canonical kind + the MIME type we store/upload with. */
 const BY_EXTENSION: Record<string, KindRule> = {
   pdf:  { kind: 'pdf',      mime: 'application/pdf', label: 'PDF' },
+  docx: { kind: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', label: 'Word' },
   txt:  { kind: 'text',     mime: 'text/plain',      label: 'Text' },
   text: { kind: 'text',     mime: 'text/plain',      label: 'Text' },
   log:  { kind: 'text',     mime: 'text/plain',      label: 'Log' },
@@ -42,6 +43,7 @@ function code(label: string): KindRule { return { kind: 'code', mime: 'text/plai
 
 const BY_MIME: Record<string, FileKind> = {
   'application/pdf': 'pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
   'text/plain': 'text',
   'text/markdown': 'markdown',
   'text/x-markdown': 'markdown',
@@ -84,16 +86,16 @@ export function detectFileType(file: { name: string; type?: string }): DetectedF
 }
 
 export const KNOWLEDGE_ACCEPT = [
-  '.pdf', '.txt', '.text', '.log', '.md', '.markdown', '.csv', '.tsv', '.json',
+  '.pdf', '.docx', '.txt', '.text', '.log', '.md', '.markdown', '.csv', '.tsv', '.json',
   ...Object.keys(BY_EXTENSION).filter(e => BY_EXTENSION[e].kind === 'code').map(e => `.${e}`),
-  'application/pdf', 'text/plain', 'text/markdown', 'text/csv', 'application/json',
+  'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/markdown', 'text/csv', 'application/json',
 ].join(',');
 
 export function describeUnsupported(name: string): string {
   const ext = extensionOf(name);
   return ext
-    ? `.${ext} files aren’t supported yet. Use PDF, text, Markdown, CSV, JSON or code files.`
-    : 'This file type isn’t supported yet. Use PDF, text, Markdown, CSV, JSON or code files.';
+    ? `.${ext} files aren’t supported yet. Use PDF, Word, text, Markdown, CSV, JSON or code files.`
+    : 'This file type isn’t supported yet. Use PDF, Word, text, Markdown, CSV, JSON or code files.';
 }
 
 /** Human labels for the file lifecycle. */

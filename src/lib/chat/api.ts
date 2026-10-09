@@ -82,6 +82,7 @@ export const messagesApi = {
       attachments: toStoredAttachments(message.attachments),
       ...(message.sources?.length ? { sources: message.sources } : {}),
       ...(message.images?.length ? { images: message.images } : {}),
+      ...(message.web_sources?.length ? { web_sources: message.web_sources } : {}),
       created_at: message.created_at,
     });
     throwIf(error, 'Saving message');

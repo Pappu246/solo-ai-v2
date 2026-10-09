@@ -11,6 +11,14 @@
  */
 import type { ChatContext, KnowledgeFile, KnowledgeSource, Memory, Project } from '../../types';
 import { chunksApi, type RetrievedChunk } from './api';
+import {
+  chunkKey,
+  dedupeChunks,
+  enforceSourceDiversity,
+  reciprocalRankFusion,
+  rerankChunks,
+  type DenseRetriever,
+} from './hybrid';
 
 /** Total characters of file excerpts sent with one request. */
 export const KNOWLEDGE_CHAR_BUDGET = 12_000;
@@ -59,6 +67,18 @@ export interface RetrieveInput {
   attachedFileIds?: string[];
   charBudget?: number;
   maxChunks?: number;
+  /**
+   * Optional dense-retrieval adapter (Phase 4 hybrid pipeline). Unset =
+   * lexical-only, which is the production default. Failures degrade to
+   * lexical retrieval — dense is never required for basic operation.
+   */
+  denseSearch?: DenseRetriever | null;
+  /** Injection seam for offline evaluation/tests; defaults to `chunksApi.match`. */
+  lexicalSearch?: (keywords: string[], fileIds: string[], limit: number) => Promise<RetrievedChunk[]>;
+  /** Injection seam for the attached-file opening fallback; defaults to `chunksApi.listForFile`. */
+  listChunks?: (fileId: string, limit: number) => Promise<Array<{ chunk_index: number; content: string }>>;
+  /** Diversity cap per non-attached file (default 3; ignored for a single source). */
+  maxChunksPerFile?: number;
 }
 
 export interface RetrievedKnowledge {
@@ -70,6 +90,9 @@ export interface RetrievedKnowledge {
  * Select relevant chunks for `query` from `files`. Only `ready` files are
  * searched. Returns an empty result when nothing is relevant — the caller
  * must then send *no* file context rather than "all files".
+ *
+ * Pipeline: normalize → lexical → optional dense → RRF merge → rerank →
+ * source diversity / dedup → context budget (see `./hybrid.ts`).
  */
 export async function retrieveKnowledge(input: RetrieveInput): Promise<RetrievedKnowledge> {
   const ready = input.files.filter(f => f.status === 'ready');
@@ -79,31 +102,86 @@ export async function retrieveKnowledge(input: RetrieveInput): Promise<Retrieved
   const maxChunks = input.maxChunks ?? KNOWLEDGE_MAX_CHUNKS;
   const attached = new Set(input.attachedFileIds ?? []);
   const keywords = extractKeywords(input.query);
+  const fileIds = ready.map(f => f.id);
+  const candidateLimit = Math.max(maxChunks * 3, 24);
+  const lexicalSearch = input.lexicalSearch ?? ((kw, ids, limit) => chunksApi.match(kw, ids, limit));
 
-  let candidates: RetrievedChunk[] = [];
+  // Stage: lexical retrieval.
+  let lexical: RetrievedChunk[] = [];
   if (keywords.length) {
-    candidates = await chunksApi.match(keywords, ready.map(f => f.id), Math.max(maxChunks * 3, 24));
+    try {
+      lexical = await lexicalSearch(keywords, fileIds, candidateLimit);
+    } catch {
+      lexical = []; // a failed lexical query must not throw away the fallbacks below
+    }
   }
 
-  // A file the user just attached is relevant by definition: if the search
-  // found nothing in it (e.g. "summarise this"), fall back to its opening chunks.
+  // Stage: optional dense retrieval — adapter failures degrade to lexical.
+  let dense: RetrievedChunk[] = [];
+  if (input.denseSearch && keywords.length) {
+    try {
+      const hits = await input.denseSearch.search(input.query, fileIds, candidateLimit);
+      dense = hits
+        .filter(h => h.chunk && typeof h.score === 'number')
+        .map(h => ({ ...h.chunk, rank: h.score }))
+        .filter(c => ready.some(f => f.id === c.file_id)); // never escape the scope
+    } catch {
+      dense = [];
+    }
+  }
+
+  // A file the user just attached is relevant by definition: any attached
+  // file that neither stage covered (e.g. "summarise this", or a second
+  // attachment the keywords missed) falls back to its opening chunks.
   const attachedReady = ready.filter(f => attached.has(f.id));
-  if (attachedReady.length && !candidates.some(c => attached.has(c.file_id))) {
-    const openings = await Promise.all(attachedReady.map(async f => {
-      const rows = await chunksApi.listForFile(f.id, 3);
-      return rows.map<RetrievedChunk>(r => ({ file_id: f.id, file_name: f.name, chunk_index: r.chunk_index, content: r.content, rank: 0.01 }));
+  const covered = new Set([...lexical, ...dense].map(c => c.file_id));
+  const uncovered = attachedReady.filter(f => !covered.has(f.id));
+  const openingCandidates: RetrievedChunk[] = [];
+  if (uncovered.length) {
+    const listChunks = input.listChunks ?? ((fileId: string, limit: number) => chunksApi.listForFile(fileId, limit));
+    const openings = await Promise.all(uncovered.map(async f => {
+      try {
+        const rows = await listChunks(f.id, 3);
+        return rows.map<RetrievedChunk>(r => ({ file_id: f.id, file_name: f.name, chunk_index: r.chunk_index, content: r.content, rank: 0.01 }));
+      } catch {
+        return []; // a listing failure must not lose the matches we already have
+      }
     }));
-    candidates = [...openings.flat(), ...candidates];
+    openingCandidates.push(...openings.flat());
   }
-  if (!candidates.length) return { chunks: [], sources: [] };
 
-  // Rank: attached files first, then relevance, then document order.
-  const ranked = [...candidates].sort((a, b) =>
+  if (!lexical.length && !dense.length && !openingCandidates.length) return { chunks: [], sources: [] };
+
+  // Stage: merge (reciprocal rank fusion of the lexical and dense lists).
+  const byKey = new Map<string, RetrievedChunk>();
+  for (const c of [...lexical, ...dense]) if (!byKey.has(chunkKey(c))) byKey.set(chunkKey(c), c);
+  const fused = reciprocalRankFusion(
+    [{ items: lexical, weight: 1 }, { items: dense, weight: 1 }],
+    chunkKey,
+  );
+  const maxFused = Math.max(1e-12, ...fused.values());
+  const merged: RetrievedChunk[] = [...fused.entries()]
+    .map(([key, score]) => ({ ...(byKey.get(key) as RetrievedChunk), rank: score / maxFused }));
+  merged.push(...openingCandidates);
+
+  // Stage: rerank (blend fused rank with query-term coverage / phrase match).
+  const reranked = rerankChunks(input.query, merged);
+
+  // Rank: attached files first, then reranked score, then document order.
+  const ranked = [...reranked].sort((a, b) =>
     Number(attached.has(b.file_id)) - Number(attached.has(a.file_id))
     || b.rank - a.rank
     || a.chunk_index - b.chunk_index);
 
-  const selected = selectWithinBudget(ranked, budget, maxChunks, attached);
+  // Stage: source diversity + duplicate suppression (single-source corpora
+  // are exempt — a cap only matters when there is more than one source).
+  const distinctFiles = new Set(ranked.map(c => c.file_id)).size;
+  const diversified = distinctFiles > 1
+    ? enforceSourceDiversity(ranked, { maxPerFile: input.maxChunksPerFile ?? 3, attachedFileIds: attached })
+    : ranked;
+  const deduped = dedupeChunks(diversified);
+
+  const selected = selectWithinBudget(deduped, budget, maxChunks, attached);
   // Present chunks grouped by file, in document order, so the model reads coherent excerpts.
   selected.sort((a, b) => a.file_name.localeCompare(b.file_name) || a.chunk_index - b.chunk_index);
   return { chunks: selected, sources: toSources(selected) };

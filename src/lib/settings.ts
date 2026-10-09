@@ -27,6 +27,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     show_model_badges: bool(r.show_model_badges, DEFAULT_SETTINGS.show_model_badges),
     send_on_enter: bool(r.send_on_enter, DEFAULT_SETTINGS.send_on_enter),
     auto_title: bool(r.auto_title, DEFAULT_SETTINGS.auto_title),
+    suggest_memories: bool(r.suggest_memories, DEFAULT_SETTINGS.suggest_memories),
     preferred_model: typeof r.preferred_model === 'string' && r.preferred_model ? r.preferred_model : legacyModel,
     tts_enabled: bool(r.tts_enabled, DEFAULT_SETTINGS.tts_enabled),
     tts_rate: typeof r.tts_rate === 'number' && r.tts_rate >= 0.5 && r.tts_rate <= 2 ? r.tts_rate : DEFAULT_SETTINGS.tts_rate,

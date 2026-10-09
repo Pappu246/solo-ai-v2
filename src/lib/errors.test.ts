@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { toFriendlyError, friendlyAuthMessage, AppError } from './errors';
 
 describe('toFriendlyError', () => {
@@ -24,6 +24,37 @@ describe('toFriendlyError', () => {
   });
   it('never returns an empty message for unknown input', () => {
     expect(toFriendlyError(undefined).message.length).toBeGreaterThan(0);
+  });
+
+  describe('offline (Phase 11)', () => {
+    it('names the actual cause when the browser reports no connection', () => {
+      const spy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      try {
+        const e = toFriendlyError(new TypeError('Failed to fetch'));
+        expect(e.title).toBe('You’re offline');
+        expect(e.code).toBe('offline');
+        expect(e.retryable).toBe(true);
+        expect(e.message).toMatch(/reconnect/i);
+        // Also covers fetch()'s wrapped variant.
+        expect(toFriendlyError(new TypeError('fetch failed')).code).toBe('offline');
+      } finally { spy.mockRestore(); }
+    });
+
+    it('still trusts known server codes over the offline hint', () => {
+      const spy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+      try {
+        const e = toFriendlyError(new AppError('The response was interrupted.', 502, undefined, 'stream_incomplete'));
+        expect(e.title).toBe('Response interrupted');
+        expect(e.code).toBe('stream_incomplete');
+      } finally { spy.mockRestore(); }
+    });
+
+    it('keeps the ordinary connection copy while online', () => {
+      const spy = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
+      try {
+        expect(toFriendlyError(new TypeError('Failed to fetch')).title).toBe('Connection problem');
+      } finally { spy.mockRestore(); }
+    });
   });
 });
 

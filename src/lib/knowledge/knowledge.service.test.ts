@@ -286,6 +286,26 @@ describe('knowledge retrieval', () => {
     expect(res.sources[0].file_name).toBe('recipes.txt');
   });
 
+  it('covers EVERY attached file, even when other attachments matched the keywords', async () => {
+    const { revenue, recipes } = await seed();
+    const res = await retrieveKnowledge({ query: 'revenue growth', files: [revenue, recipes], attachedFileIds: [revenue.id, recipes.id] });
+    // revenue.md matches lexically; recipes.txt must still contribute its opening.
+    expect(res.chunks.some(c => c.file_id === revenue.id)).toBe(true);
+    expect(res.chunks.some(c => c.file_id === recipes.id)).toBe(true);
+    expect(res.sources.map(s => s.file_name).sort()).toEqual(['recipes.txt', 'revenue.md']);
+  });
+
+  it('keeps matched chunks when listing an attached file fails', async () => {
+    const { revenue, recipes } = await seed();
+    const res = await retrieveKnowledge({
+      query: 'revenue growth',
+      files: [revenue, recipes],
+      attachedFileIds: [revenue.id, recipes.id],
+      listChunks: async () => { throw new Error('boom'); },
+    });
+    expect(res.chunks.some(c => c.file_id === revenue.id)).toBe(true);
+  });
+
   it('respects the chunk and character budgets', async () => {
     const paragraphs = Array.from({ length: 30 }, (_, i) => `Section ${i}: the migration plan covers database migration step ${i} in detail. ${'migration '.repeat(40)}`);
     const big = await fileService.upload(textFile('migration.txt', paragraphs.join('\n\n')), { userId: ALICE.id });

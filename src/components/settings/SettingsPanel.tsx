@@ -57,6 +57,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
             <Group title="General">
               <Toggle label="Send with Enter" description="Shift+Enter inserts a new line. When off, use ⌘/Ctrl+Enter to send." checked={settings.send_on_enter} onChange={v => onUpdate({ send_on_enter: v })} />
               <Toggle label="Name chats automatically" description="Use your first message as the chat title." checked={settings.auto_title} onChange={v => onUpdate({ auto_title: v })} />
+              <Toggle label="Suggest memories" description="Offer to remember durable preferences and facts from your messages." checked={settings.suggest_memories} onChange={v => onUpdate({ suggest_memories: v })} />
               <div className="pt-4 mt-2 border-t border-border">
                 <Button size="sm" variant="ghost" onClick={onReset}>Reset all settings to defaults</Button>
               </div>

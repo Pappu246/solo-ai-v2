@@ -8,6 +8,7 @@
  */
 import type { FileKind, FileMetadata } from '../../types';
 import { normalizeText } from './chunker';
+import { DOCX_BODY_ENTRY, readDocxText, readZipEntry } from './docx';
 
 /** Maximum characters of extracted text retained per file. */
 export const MAX_EXTRACTED_CHARS = 400_000;
@@ -28,11 +29,34 @@ export async function extractText(file: Blob, kind: FileKind): Promise<Extractio
     case 'pdf': return extractPdf(file);
     case 'csv': return extractCsv(file);
     case 'json': return extractJson(file);
+    case 'docx': return extractDocx(file);
     case 'text':
     case 'markdown':
     case 'code': return extractPlain(file);
     default: throw new ExtractionError('This file type isn’t supported yet.');
   }
+}
+
+/**
+ * DOCX: unzip `word/document.xml` and read its paragraphs (Phase 9).
+ * Every failure mode maps to a clear message — never a raw ZIP/XML error.
+ */
+async function extractDocx(file: Blob): Promise<ExtractionResult> {
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(await file.arrayBuffer());
+  } catch {
+    throw new ExtractionError('This file could not be read.');
+  }
+  const entry = await readZipEntry(bytes, DOCX_BODY_ENTRY);
+  if (!entry) throw new ExtractionError('This file isn’t a valid .docx document.');
+  if (entry.error) throw new ExtractionError(entry.error);
+  const xml = new TextDecoder().decode(entry.data!);
+  const paragraphs = readDocxText(xml);
+  if (paragraphs === null) throw new ExtractionError('This .docx file’s text could not be read.');
+  const { text, truncated } = capped(paragraphs.join('\n'));
+  if (!text) throw new ExtractionError('The file is empty.');
+  return { text, metadata: { lines: paragraphs.length, truncated } };
 }
 
 async function readAsText(file: Blob): Promise<string> {

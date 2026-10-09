@@ -2,13 +2,15 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Conversation, Message, Attachment, AIModel, ModelInfo, UserSettings, ChatContext, KnowledgeSource } from '../types';
 import { conversationsApi, messagesApi, ConversationNotFoundError, type ConversationPatch } from '../lib/chat/api';
-import { streamChat, fetchModels } from '../lib/chat/stream';
+import { streamChat, fetchModels, selectWireHistory } from '../lib/chat/stream';
 import { toFriendlyError, type FriendlyError } from '../lib/errors';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
 const NEW_CHAT_TITLE = 'New chat';
-const MAX_HISTORY = 40;
+
+/** Failure codes that mean model/provider availability just changed — worth a quiet catalog refresh so the picker shows it (Phase 15). */
+const AVAILABILITY_CODES = new Set(['model_unavailable', 'providers_unavailable', 'rate_limited', 'provider_timeout']);
 
 export function deriveTitle(content: string): string {
   const oneLine = content.replace(/\s+/g, ' ').trim();
@@ -224,7 +226,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     catch (e) { setError(toFriendlyError(e)); setConversations(sortConversations(snapshot)); }
   }, [conversations, leaveActive]);
 
-  const generate = useCallback(async (conversation: Conversation, history: Message[], attachments?: Attachment[]) => {
+  const generate = useCallback(async (conversation: Conversation, history: Message[], attachments?: Attachment[], opts?: { research?: boolean; agent?: boolean }) => {
     if (!user) return;
     const controller = new AbortController();
     abortRef.current = controller;
@@ -238,8 +240,11 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     let model: ModelInfo | null = null;
     let sources: KnowledgeSource[] | undefined;
     let imageResults: Message['images'] = undefined;
+    let webResults: Message['web_sources'] = undefined;
     try {
-      const wire = history.slice(-MAX_HISTORY).map(m => ({ role: m.role, content: m.content }));
+      // Phase 10: bounded-by-count-and-size window (not a fixed tail), so
+      // long chats keep more continuity and one huge old turn can't evict the rest.
+      const wire = selectWireHistory(history);
       let context: ChatContext | undefined;
       const lastUser = [...history].reverse().find(m => m.role === 'user');
       if (resolveContextRef.current && lastUser) {
@@ -250,7 +255,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
         } catch { /* answer without extra context */ }
       }
       if (controller.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, context, signal: controller.signal });
+      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, context, research: opts?.research, agent: opts?.agent, signal: controller.signal });
       model = handle.model;
       setStreamingModel(model);
       for await (const delta of handle.deltas) {
@@ -258,10 +263,15 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
         setStreamingContent(content);
       }
       imageResults = handle.images.length ? [...handle.images] : undefined;
+      webResults = handle.webSources.length ? [...handle.webSources] : undefined;
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError' || controller.signal.aborted;
       if (!aborted) {
-        setError(toFriendlyError(e));
+        const friendly = toFriendlyError(e);
+        setError(friendly);
+        // Phase 15: this failure means the server's availability view changed —
+        // refresh the model catalog quietly so the picker reflects it.
+        if (friendly.code && AVAILABILITY_CODES.has(friendly.code)) void loadModels();
         if (content) setInterrupted(true);
       }
     } finally {
@@ -279,6 +289,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
         category: model?.category ?? null,
         sources: sources ?? null,
         images: imageResults ?? null,
+        web_sources: webResults ?? null,
         created_at: new Date().toISOString(),
       };
       if (activeRef.current?.id === conversation.id) setMessagesSync(prev => [...prev, assistant]);
@@ -294,9 +305,9 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setStreamingContent('');
     setStreamingModel(null);
     setIsGenerating(false);
-  }, [user, selectedModel, setMessagesSync]);
+  }, [user, selectedModel, setMessagesSync, loadModels]);
 
-  const sendMessage = useCallback(async (content: string, attachments?: Attachment[]) => {
+  const sendMessage = useCallback(async (content: string, attachments?: Attachment[], opts?: { research?: boolean; agent?: boolean }) => {
     const text = content.trim();
     if ((!text && !attachments?.length) || isGenerating || !user) return;
     setError(null);
@@ -333,7 +344,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     try { await messagesApi.insert({ ...userMessage, user_id: user.id }); }
     catch (e) { setError(toFriendlyError(e)); setMessagesSync(prev => prev.filter(m => m.id !== userMessage.id)); return; }
 
-    await generate(conversation, history, attachments);
+    await generate(conversation, history, attachments, opts);
   }, [isGenerating, user, settings.auto_title, patchLocal, generate, setActiveSync, setMessagesSync]);
 
   const regenerate = useCallback(async () => {

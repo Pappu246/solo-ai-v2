@@ -1,12 +1,13 @@
 import { memo, useState, useCallback, useEffect, useRef } from 'react';
-import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon, Brain } from 'lucide-react';
-import type { Message as MessageType, Attachment, KnowledgeSource, ImageSearchImage } from '../../types';
+import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon, Brain, Globe } from 'lucide-react';
+import type { Message as MessageType, Attachment, KnowledgeSource, ImageSearchImage, WebSearchSource } from '../../types';
 import { Markdown } from './Markdown';
 import { IconButton, Button } from '../ui';
 import { AssistantAvatar, UserAvatar } from './Avatar';
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
+import { safeHref } from '../../lib/url';
 import { SUPABASE_URL } from '../../lib/supabase';
 
 interface MessageProps {
@@ -70,6 +71,7 @@ export const Message = memo(function Message({
             {message.images && message.images.length > 0 && <ImageSearchGallery images={message.images} />}
           </div>
           {message.sources && message.sources.length > 0 && <div className="mt-1.5"><SourceList sources={message.sources} onOpen={onOpenSource} /></div>}
+          {message.web_sources && message.web_sources.length > 0 && <div className="mt-1.5"><WebSourceList sources={message.web_sources} /></div>}
         </div>
       </div>
       <div className="flex items-center gap-1 pl-[38px]">
@@ -112,7 +114,7 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
           const src = getImageSrc(image);
           if (!src) return null;
           return (
-            <a key={image.url} href={image.sourceUrl || image.url} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
+            <a key={image.url} href={safeHref(image.sourceUrl || image.url)} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
               <img
                 src={src}
                 alt={image.title}
@@ -174,4 +176,27 @@ function SourceList({ sources, onOpen }: { sources: KnowledgeSource[]; onOpen?: 
 function AttachmentPill({ attachment }: { attachment: Attachment }) {
   const isImage = attachment.type === 'image';
   return <span className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-surface-2/80 px-2 py-1 text-xs text-fg-muted max-w-[220px]">{isImage ? <ImageIcon className="w-3.5 h-3.5 shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0" />}<span className="truncate">{attachment.name}</span></span>;
+}
+
+/** Phase 5: cited web research results — external links with domain attribution. */
+function WebSourceList({ sources }: { sources: WebSearchSource[] }) {
+  const cls = 'inline-flex items-center gap-1 rounded-md border border-border bg-surface-2/70 px-1.5 py-0.5 text-[11px] text-fg-muted max-w-[240px]';
+  return (
+    <div className="flex flex-wrap items-center gap-1.5" aria-label="Web sources">
+      <span className="text-[11px] text-fg-subtle">Web:</span>
+      {sources.map(s => (
+        <a
+          key={s.url}
+          href={safeHref(s.url)}
+          target="_blank"
+          rel="noopener noreferrer nofollow"
+          className={cn(cls, 'hover:text-fg hover:border-border-strong transition-colors')}
+          title={s.snippet ? `${s.title} — ${s.snippet}` : s.title}
+        >
+          <Globe className="w-3 h-3 shrink-0" aria-hidden />
+          <span className="truncate">{s.domain || s.title}</span>
+        </a>
+      ))}
+    </div>
+  );
 }

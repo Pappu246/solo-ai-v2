@@ -5,7 +5,8 @@
  */
 import { supabase, CHAT_FUNCTION_URL, SUPABASE_PUBLISHABLE_KEY } from '../supabase';
 import { AppError } from '../errors';
-import type { AIModel, Attachment, ChatContext, ChatMessage, ModelInfo, ImageSearchImage } from '../../types';
+import { retryTransient } from '../retry';
+import type { AIModel, Attachment, ChatContext, ChatMessage, ModelInfo, ImageSearchImage, WebSearchSource } from '../../types';
 
 async function authHeaders(): Promise<HeadersInit> {
   const { data: { session } } = await supabase.auth.getSession();
@@ -18,7 +19,11 @@ async function authHeaders(): Promise<HeadersInit> {
 }
 
 export async function fetchModels(): Promise<AIModel[]> {
-  const res = await fetch(CHAT_FUNCTION_URL, { method: 'GET', headers: await authHeaders() });
+  // Idempotent GET: safe to retry transient network failures (Phase 11).
+  // The chat POST is deliberately NOT retried — a request that reached the
+  // server would double-spend usage.
+  const headers = await authHeaders();
+  const res = await retryTransient(() => fetch(CHAT_FUNCTION_URL, { method: 'GET', headers }));
   if (!res.ok) throw new AppError('Could not load models', res.status);
   const data = await res.json();
   return Array.isArray(data?.models) ? (data.models as AIModel[]) : [];
@@ -31,6 +36,10 @@ export interface StreamRequest {
   attachments?: Attachment[];
   /** Phase 2: project instructions, memories and retrieved file excerpts. */
   context?: ChatContext;
+  /** Phase 5: explicitly request web research for this turn. */
+  research?: boolean;
+  /** Phase 7: opt in to the bounded agent tool loop for this turn. */
+  agent?: boolean;
   signal: AbortSignal;
 }
 
@@ -40,6 +49,8 @@ export interface StreamHandle {
   deltas: AsyncGenerator<string, void, void>;
   /** Smart Image Search results received while consuming the stream. */
   images: ImageSearchImage[];
+  /** Phase 5: web research sources received while consuming the stream. */
+  webSources: WebSearchSource[];
 }
 
 /**
@@ -49,6 +60,7 @@ export interface StreamHandle {
 export async function* parseSSE(
   body: ReadableStream<Uint8Array>,
   onImageSearch?: (event: { type: 'started' | 'results' | 'error'; queries?: string[]; images?: ImageSearchImage[]; message?: string }) => void,
+  onWebSearch?: (event: { type: 'started' | 'results' | 'error'; query?: string; sources?: WebSearchSource[]; message?: string }) => void,
 ): AsyncGenerator<string, void, void> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
@@ -65,6 +77,7 @@ export async function* parseSSE(
         const parsed = readFrame(frame);
         if (!parsed) continue;
         if (parsed.kind === 'image_search') { onImageSearch?.(parsed.event); continue; }
+        if (parsed.kind === 'web_search') { onWebSearch?.(parsed.event); continue; }
         if (parsed.kind === 'delta') { yield parsed.text; continue; }
         if (parsed.kind === 'done') { completed = true; break; }
         throw toStreamError(parsed.payload);
@@ -73,6 +86,7 @@ export async function* parseSSE(
     if (!completed) {
       const tail = readFrame(buffer);
       if (tail?.kind === 'image_search') onImageSearch?.(tail.event);
+      else if (tail?.kind === 'web_search') onWebSearch?.(tail.event);
       else if (tail?.kind === 'delta') yield tail.text;
       else if (tail?.kind === 'done') completed = true;
       else if (tail?.kind === 'error') throw toStreamError(tail.payload);
@@ -96,7 +110,8 @@ type Frame =
   | { kind: 'delta'; text: string }
   | { kind: 'done' }
   | { kind: 'error'; payload: ServerErrorPayload }
-  | { kind: 'image_search'; event: { type: 'started' | 'results' | 'error'; queries?: string[]; images?: ImageSearchImage[]; message?: string } };
+  | { kind: 'image_search'; event: { type: 'started' | 'results' | 'error'; queries?: string[]; images?: ImageSearchImage[]; message?: string } }
+  | { kind: 'web_search'; event: { type: 'started' | 'results' | 'error'; query?: string; sources?: WebSearchSource[]; message?: string } };
 
 /** Decode one SSE frame (`event:` + one or more `data:` lines). */
 function readFrame(frame: string): Frame | null {
@@ -126,6 +141,16 @@ function readFrame(frame: string): Frame | null {
       return { kind: 'image_search', event: { type: 'results', images } };
     }
     if (type === 'error' && typeof parsed.message === 'string') return { kind: 'image_search', event: { type: 'error', message: parsed.message } };
+    return null;
+  }
+  if (event === 'web_search') {
+    const type = parsed.type;
+    if (type === 'started' && typeof parsed.query === 'string') return { kind: 'web_search', event: { type: 'started', query: parsed.query.slice(0, 300) } };
+    if (type === 'results' && Array.isArray(parsed.sources)) {
+      const sources = parsed.sources.filter((x): x is WebSearchSource => Boolean(x && typeof x === 'object' && typeof (x as Record<string, unknown>).url === 'string' && typeof (x as Record<string, unknown>).title === 'string' && typeof (x as Record<string, unknown>).domain === 'string' && typeof (x as Record<string, unknown>).rank === 'number')) as WebSearchSource[];
+      return { kind: 'web_search', event: { type: 'results', sources } };
+    }
+    if (type === 'error' && typeof parsed.message === 'string') return { kind: 'web_search', event: { type: 'error', message: parsed.message.slice(0, 300) } };
     return null;
   }
   if (event === 'error' || (parsed.error !== undefined && parsed.error !== null)) return { kind: 'error', payload: parsed as ServerErrorPayload };
@@ -162,15 +187,69 @@ export function extractDelta(line: string): string | null {
 }
 
 /** Build the message list sent to the server, appending extracted file text to the last user turn. */
+/**
+ * Server per-message cap (`chat/index.ts` rejects longer content with 413).
+ * The appended file context must keep the last message inside it.
+ */
+export const MAX_MESSAGE_CHARS = 64_000;
+
+/**
+ * Phase 10: build the history window that travels with a request.
+ *
+ * Replaces a fixed `slice(-40)`: turns are taken from the end until either
+ * the message count or the character budget is reached, and every non-final
+ * message is capped so one giant paste from an old turn cannot evict the rest
+ * of the conversation. The newest message (the turn being answered) is always
+ * kept intact and never truncated — it is what the model must answer.
+ *
+ * Older turns are summarised server-side (`buildModelContext`), so breadth
+ * here buys continuity without unbounded payloads.
+ */
+export const HISTORY_MAX_MESSAGES = 200;
+export const HISTORY_MAX_CHARS = 160_000;
+export const HISTORY_MESSAGE_CHARS = 8_000;
+
+export function selectWireHistory(
+  history: ChatMessage[],
+  opts: { maxMessages?: number; maxChars?: number; maxMessageChars?: number } = {},
+): ChatMessage[] {
+  const maxMessages = opts.maxMessages ?? HISTORY_MAX_MESSAGES;
+  const maxChars = opts.maxChars ?? HISTORY_MAX_CHARS;
+  const perMessage = opts.maxMessageChars ?? HISTORY_MESSAGE_CHARS;
+  const out: ChatMessage[] = [];
+  let chars = 0;
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (out.length >= maxMessages) break;
+    const isCurrentTurn = out.length === 0;
+    let content = history[i].content;
+    if (!isCurrentTurn && content.length > perMessage) content = `${content.slice(0, perMessage)}…`;
+    if (!isCurrentTurn && chars + content.length > maxChars) break;
+    out.unshift({ role: history[i].role, content });
+    chars += content.length;
+  }
+  return out;
+}
+
 export function buildWireMessages(history: ChatMessage[], attachments?: Attachment[]): ChatMessage[] {
   const wire = history.map(m => ({ role: m.role, content: m.content }));
-  const fileContext = attachments
-    ?.filter(a => a.extracted_text)
-    .map(a => `[File: ${a.name}]\n${a.extracted_text}`)
-    .join('\n\n');
+  const parts: string[] = [];
+  for (const a of attachments ?? []) {
+    if (a.extracted_text) parts.push(`[File: ${a.name}]\n${a.extracted_text}`);
+    // Knowledge files carry no inline text (their chunks travel in `context`),
+    // but the model must still know the file exists even when retrieval found
+    // nothing relevant — otherwise it answers as if nothing were attached.
+    else if (a.type !== 'image' && a.file_id) parts.push(`[Attached file: ${a.name}]`);
+  }
+  const fileContext = parts.join('\n\n');
   if (fileContext && wire.length) {
     const last = wire[wire.length - 1];
-    wire[wire.length - 1] = { ...last, content: `${last.content}\n\n${fileContext}` };
+    let suffix = `\n\n${fileContext}`;
+    // Keep the whole message inside the server's per-message cap so a large
+    // attachment degrades to a truncated excerpt instead of a 413.
+    const room = MAX_MESSAGE_CHARS - last.content.length;
+    if (room <= 1) suffix = '';
+    else if (suffix.length > room) suffix = `${suffix.slice(0, room - 1)}…`;
+    wire[wire.length - 1] = { ...last, content: `${last.content}${suffix}` };
   }
   return wire;
 }
@@ -185,6 +264,8 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
     ?.filter(a => a.type === 'image' && a.base64)
     .map(a => ({ base64: a.base64, mime_type: a.mime_type || 'image/jpeg' }));
   if (images?.length) body.images = images;
+  if (req.research) body.research = true;
+  if (req.agent) body.agent = true;
   if (req.context) body.context = req.context;
 
   const res = await fetch(CHAT_FUNCTION_URL, {
@@ -215,8 +296,11 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
     category: res.headers.get('X-Route-Category') || 'conversation',
   };
   const imageResults: ImageSearchImage[] = [];
+  const webSources: WebSearchSource[] = [];
   const deltas = parseSSE(res.body, event => {
     if (event.type === 'results' && event.images?.length) imageResults.push(...event.images);
+  }, event => {
+    if (event.type === 'results' && event.sources?.length) webSources.push(...event.sources);
   });
-  return { model, deltas, images: imageResults };
+  return { model, deltas, images: imageResults, webSources };
 }

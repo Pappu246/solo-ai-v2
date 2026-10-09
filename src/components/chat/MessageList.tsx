@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { ArrowDown } from 'lucide-react';
 import type { Message as MessageType, ModelInfo, KnowledgeSource } from '../../types';
 import type { FriendlyError } from '../../lib/errors';
@@ -62,7 +62,9 @@ export function MessageList({
   }, [conversationKey]);
 
   const lastAssistantIdx = (() => { for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return i; return -1; })();
-  const grouped = groupMessages(messages);
+  // Grouping only depends on the messages array — skip it while streaming
+  // tokens re-render this component with a fresh streamingContent string.
+  const grouped = useMemo(() => groupMessages(messages), [messages]);
 
   return (
     <div className="relative flex-1 min-h-0">

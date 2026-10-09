@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
 import type { Attachment, KnowledgeFile } from '../../types';
 import { processFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../lib/files';
 import { detectFileType, KNOWLEDGE_ACCEPT } from '../../lib/knowledge/fileTypes';
@@ -27,7 +27,7 @@ export interface KnowledgeUploader {
 }
 
 interface Props {
-  onSend: (message: string, attachments?: Attachment[]) => void;
+  onSend: (message: string, attachments?: Attachment[], opts?: { research?: boolean; agent?: boolean }) => void;
   onStop: () => void;
   isGenerating: boolean;
   sendOnEnter: boolean;
@@ -36,18 +36,24 @@ interface Props {
   hint?: string;
   autoFocus?: boolean;
   knowledge?: KnowledgeUploader;
+  /** Phase 11: the browser reports no connection — sending would fail. */
+  offline?: boolean;
 }
 
 const MAX_ATTACHMENTS = 6;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus, knowledge }, ref,
+  { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus, knowledge, offline }, ref,
 ) {
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  /** Phase 5: user-controlled web research for the next message. */
+  const [research, setResearch] = useState(false);
+  /** Phase 7: user-controlled agent tool loop for the next message. */
+  const [agent, setAgent] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -73,13 +79,14 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   }, [value]);
 
   const pendingKnowledge = attachments.some(a => a.file_id && (a.status === 'uploading' || a.status === 'processing'));
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !disabled && !processing && !pendingKnowledge;
+  const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !disabled && !processing && !pendingKnowledge && !offline;
 
   const submit = useCallback(() => {
     if (!canSend) return;
     // Failed knowledge files are dropped rather than sent as empty context.
     const usable = attachments.filter(a => !a.file_id || a.status === 'ready');
-    onSend(value.trim(), usable.length ? usable : undefined);
+    const opts = { ...(research ? { research: true } : {}), ...(agent ? { agent: true } : {}) };
+    onSend(value.trim(), usable.length ? usable : undefined, Object.keys(opts).length ? opts : undefined);
     setValue('');
     setAttachments([]);
     fileRefs.current.clear();
@@ -87,7 +94,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
     retryPlans.current.clear();
     setFileError(null);
     if (textareaRef.current) textareaRef.current.style.height = 'auto';
-  }, [canSend, onSend, value, attachments]);
+  }, [canSend, onSend, value, attachments, research, agent]);
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key !== 'Enter' || e.nativeEvent.isComposing) return;
@@ -301,6 +308,26 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   {speech.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </IconButton>
               )}
+              <IconButton
+                label={research ? 'Web research on' : 'Web research'}
+                size="sm"
+                active={research}
+                disabled={disabled || isGenerating}
+                onClick={() => setResearch(v => !v)}
+                className={cn('w-9 h-9', research ? 'text-accent bg-accent/10' : undefined)}
+              >
+                <Globe className="w-4 h-4" />
+              </IconButton>
+              <IconButton
+                label={agent ? 'Agent mode on' : 'Agent mode'}
+                size="sm"
+                active={agent}
+                disabled={disabled || isGenerating}
+                onClick={() => setAgent(v => !v)}
+                className={cn('w-9 h-9', agent ? 'text-accent bg-accent/10' : undefined)}
+              >
+                <Wrench className="w-4 h-4" />
+              </IconButton>
             </div>
 
             {/* One control, two states: the arrow morphs into a stop square. */}

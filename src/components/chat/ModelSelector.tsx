@@ -67,15 +67,24 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
           {order.filter(c => grouped[c]?.length).map(cat => (
             <div key={cat} className="mt-1">
               <p className="px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">{MODEL_CATEGORIES[cat]?.label ?? cat}</p>
-              {grouped[cat].map(m => (
-                <Option
-                  key={m.id}
-                  selected={selected === m.id}
-                  onClick={() => { onSelect(m.id); setOpen(false); }}
-                  title={m.name}
-                  subtitle={[m.provider, m.supports_vision ? 'vision' : null, `${Math.round(m.context_length / 1000)}K context`].filter(Boolean).join(' · ')}
-                />
-              ))}
+              {grouped[cat].map(m => {
+                const unavailable = m.available === false;
+                return (
+                  <Option
+                    key={m.id}
+                    selected={selected === m.id}
+                    disabled={unavailable}
+                    onClick={() => { if (unavailable) return; onSelect(m.id); setOpen(false); }}
+                    title={m.name}
+                    subtitle={[
+                      m.provider,
+                      m.supports_vision ? 'vision' : null,
+                      `${Math.round(m.context_length / 1000)}K context`,
+                      unavailable ? 'temporarily unavailable' : null,
+                    ].filter(Boolean).join(' · ')}
+                  />
+                );
+              })}
             </div>
           ))}
         </div>
@@ -84,14 +93,18 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
   );
 }
 
-function Option({ selected, onClick, title, subtitle, icon }: { selected: boolean; onClick: () => void; title: string; subtitle: string; icon?: React.ReactNode }) {
+function Option({ selected, onClick, title, subtitle, icon, disabled }: { selected: boolean; onClick: () => void; title: string; subtitle: string; icon?: React.ReactNode; disabled?: boolean }) {
   return (
     <button
       type="button"
       role="option"
       aria-selected={selected}
+      aria-disabled={disabled || undefined}
       onClick={onClick}
-      className={cn('w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors', selected ? 'bg-accent/10' : 'hover:bg-surface-2')}
+      className={cn(
+        'w-full flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-left transition-colors',
+        disabled ? 'opacity-50 cursor-not-allowed' : selected ? 'bg-accent/10' : 'hover:bg-surface-2',
+      )}
     >
       {icon}
       <span className="flex-1 min-w-0">

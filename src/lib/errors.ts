@@ -21,6 +21,13 @@ export class AppError extends Error {
 
 const UNAVAILABLE = { title: 'AI is unavailable', message: 'AI provider is temporarily unavailable. Please try again.', retryable: true };
 
+/** True when the browser itself reports no connection (Phase 11). */
+function browserOffline(): boolean {
+  return typeof navigator !== 'undefined' && navigator.onLine === false;
+}
+
+const OFFLINE = { title: 'You’re offline', message: 'No internet connection. Reconnect and try again — your draft is still here.', retryable: true };
+
 /**
  * Machine codes returned by the chat Edge Function → user-facing copy.
  * The server never sends provider names or raw upstream bodies, so this table
@@ -36,6 +43,7 @@ const SERVER_CODES: Record<string, { title: string; message: string; retryable: 
   network_error: { title: 'Connection problem', message: 'Could not reach the AI. Check your connection and try again.', retryable: true },
   provider_timeout: { title: 'Took too long', message: 'The AI took too long to respond. Please try again.', retryable: true },
   rate_limited: { title: 'Slow down', message: 'You are sending messages too quickly. Wait a moment and try again.', retryable: true },
+  usage_limit: { title: 'Limit reached', message: 'You have reached your usage limit for now. Please try again later.', retryable: true },
   model_unavailable: { title: 'Model unavailable', message: 'That model is not available right now. Switch to Auto or pick another model.', retryable: true },
   stream_incomplete: { title: 'Response interrupted', message: 'The response was interrupted. You can retry to continue.', retryable: true },
   empty_response: { title: 'Empty response', message: 'The AI returned an empty response. Please try again.', retryable: true },
@@ -57,6 +65,12 @@ export function toFriendlyError(error: unknown): FriendlyError {
 
   if (err.name === 'AbortError') {
     return { title: 'Stopped', message: 'Generation was stopped.', retryable: false };
+  }
+  // Offline outranks generic network failures: it is the actual cause and
+  // tells the user what to do. Known *server* codes still win — those
+  // responses were actually produced by the backend.
+  if (!code && browserOffline() && (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed') || lower.includes('load failed') || lower.includes('fetch failed'))) {
+    return { ...OFFLINE, detail, code: 'offline' };
   }
   // A known server code always wins: it is precise and already user-safe.
   if (code && SERVER_CODES[code]) {
@@ -89,7 +103,8 @@ export function toFriendlyError(error: unknown): FriendlyError {
   if (lower.includes('not configured') || lower.includes('all configured models failed') || lower.includes('provider is temporarily unavailable')) {
     return { ...UNAVAILABLE, detail };
   }
-  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed') || lower.includes('load failed')) {
+  if (lower.includes('failed to fetch') || lower.includes('networkerror') || lower.includes('network request failed') || lower.includes('load failed') || lower.includes('fetch failed')) {
+    if (browserOffline()) return { ...OFFLINE, detail, code: 'offline' };
     return { title: 'Connection problem', message: 'Could not reach Solo AI. Check your internet connection and try again.', detail, retryable: true };
   }
   if (lower.includes('timeout') || lower.includes('timed out')) {
