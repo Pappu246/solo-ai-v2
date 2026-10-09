@@ -37,6 +37,7 @@ import {
   type ImageResult,
 } from "./providers.ts";
 import { imageSearchCache, type ImageSearchResult } from "./cache.ts";
+import { createUsageController, limitsFromEnv } from "../shared/usage.ts";
 
 // ── CORS ────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,17 @@ function rateLimit(userId: string) {
   b.count++;
 }
 
+// Persistent budgets (shared across isolates) with an in-memory fallback —
+// see supabase/functions/shared/usage.ts and the usage_controls migration.
+const usageLimits = limitsFromEnv(n => Deno.env.get(n));
+function usageForRequest(req: Request, requestId: string) {
+  const auth = req.headers.get("Authorization") || "";
+  const client = supabaseUrl && publishableKey && auth
+    ? createClient(supabaseUrl, publishableKey, { auth: { persistSession: false }, global: { headers: { Authorization: auth } } })
+    : null;
+  return createUsageController(client, { limits: usageLimits, onEvent: (event, fields) => log(requestId, event, fields) });
+}
+
 // ── Logging ─────────────────────────────────────────────────────────────────
 
 function log(requestId: string, event: string, fields: Record<string, unknown> = {}) {
@@ -109,6 +121,18 @@ Deno.serve(async req => {
     }
 
     rateLimit(user.id);
+
+    // Persistent per-user budgets (minute + daily), with graceful degradation.
+    const usageDecision = await usageForRequest(req, requestId).checkImageSearch(user.id);
+    if (!usageDecision.allowed) {
+      return json(req, {
+        error: usageDecision.reason === "minute"
+          ? "Rate limit exceeded. Please wait a minute."
+          : "You have reached your image search limit for now. Please try again later.",
+        code: usageDecision.reason === "minute" ? "rate_limited" : "usage_limit",
+        request_id: requestId,
+      }, 429, requestId);
+    }
 
     // Parse request body
     const body = await req.json().catch(() => {
@@ -135,48 +159,49 @@ Deno.serve(async req => {
       }, 503, requestId);
     }
 
-    // Execute searches (with caching)
+    // Execute searches (with cache hits and in-flight request coalescing)
     const allResults: ImageResult[] = [];
     const executedQueries: string[] = [];
     let anyCached = false;
 
     for (const query of queries) {
-      const cacheKey = `search:${query.toLowerCase().trim()}`;
-      const cached = imageSearchCache.get(cacheKey);
+      const cacheKey = `search:${query}`;
 
-      if (cached) {
-        allResults.push(...cached.results);
-        executedQueries.push(query);
-        anyCached = true;
-        log(requestId, "cache_hit", { query });
-        continue;
-      }
-
-      // Execute search with timeout
       try {
-        const results = await Promise.race([
-          provider.search(query),
-          new Promise<ImageResult[]>((_, reject) =>
-            setTimeout(() => reject(new Error("Search timeout")), 8000)
-          ),
-        ]);
+        const outcome = await imageSearchCache.getOrSet(cacheKey, async () => {
+          // Execute search with timeout. Concurrent requests for the same
+          // normalized key share this single provider call.
+          const results = await Promise.race([
+            provider.search(query),
+            new Promise<ImageResult[]>((_, reject) =>
+              setTimeout(() => reject(new Error("Search timeout")), 8000)
+            ),
+          ]);
 
-        const filtered = filterResults(results);
-        allResults.push(...filtered);
+          return {
+            query,
+            results: filterResults(results),
+            timestamp: Date.now(),
+          } satisfies ImageSearchResult;
+        });
 
-        // Cache the results
-        const cacheEntry: ImageSearchResult = {
-          query,
-          results: filtered,
-          timestamp: Date.now(),
-        };
-        imageSearchCache.set(cacheKey, cacheEntry);
-
+        allResults.push(...outcome.value.results);
         executedQueries.push(query);
-        log(requestId, "search_completed", { query, resultCount: filtered.length });
+        anyCached ||= outcome.cached || outcome.coalesced;
+
+        const event = outcome.cached
+          ? "cache_hit"
+          : outcome.coalesced
+            ? "cache_coalesced"
+            : "search_completed";
+
+        log(requestId, event, {
+          query,
+          resultCount: outcome.value.results.length,
+        });
       } catch (error) {
         log(requestId, "search_failed", { query, error: String(error) });
-        // Continue with other queries even if one fails
+        // Continue with other queries even if one fails.
       }
     }
 

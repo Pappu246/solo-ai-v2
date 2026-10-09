@@ -14,7 +14,7 @@ import {
   type FetchLike,
   type ImageResult,
 } from "./providers.ts";
-import { TTLCache } from "./cache.ts";
+import { TTLCache, normalizeCacheKey } from "./cache.ts";
 import {
   decideImageSearch,
   quickHeuristicCheck,
@@ -75,7 +75,7 @@ function jsonOk(body: unknown): Response {
   });
 }
 
-function makeGoogleCSE(items: Array<{ link: string; title: string; displayLink?: string; image?: Partial<ImageResult["thumbnail"]> }>): Response {
+function makeGoogleCSE(items: Array<{ link: string; title: string; displayLink?: string; image?: { width?: number; height?: number } }>): Response {
   return jsonOk({
     items: items.map(item => ({
       link: item.link,
@@ -278,6 +278,77 @@ Deno.test("cache: clear() removes all keys", () => {
   assertEquals(cache.size, 0);
 });
 
+Deno.test("cache: normalizes equivalent keys", () => {
+  assertEquals(
+    normalizeCacheKey("  Search:   Golden  Retriever  "),
+    "search: golden retriever",
+  );
+
+  const cache = new TTLCache<string>(1000);
+  cache.set("  Search:   Golden  Retriever  ", "value");
+  assertEquals(cache.get("search: golden retriever"), "value");
+});
+
+Deno.test("cache: coalesces concurrent misses into one loader", async () => {
+  const cache = new TTLCache<string>(60000);
+  let calls = 0;
+  let release!: (value: string) => void;
+  const gate = new Promise<string>(resolve => { release = resolve; });
+
+  const loader = async () => {
+    calls++;
+    return gate;
+  };
+
+  const first = cache.getOrSet("Search:   Cats", loader);
+  const second = cache.getOrSet("search: cats", loader);
+
+  // Both callers must share the same pending operation before it resolves.
+  release("shared-value");
+
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+
+  assertEquals(calls, 1);
+  assertEquals(firstResult.value, "shared-value");
+  assertEquals(secondResult.value, "shared-value");
+  assert(!firstResult.cached);
+  assert(!firstResult.coalesced);
+  assert(!secondResult.cached);
+  assert(secondResult.coalesced);
+
+  const thirdResult = await cache.getOrSet("SEARCH: cats", loader);
+  assertEquals(calls, 1);
+  assert(thirdResult.cached);
+  assert(!thirdResult.coalesced);
+});
+
+Deno.test("cache: clears failed in-flight requests so later callers can retry", async () => {
+  const cache = new TTLCache<string>(60000);
+  let calls = 0;
+
+  const failingLoader = async () => {
+    calls++;
+    throw new Error("temporary failure");
+  };
+
+  const first = cache.getOrSet("search: dogs", failingLoader);
+  const second = cache.getOrSet(" SEARCH:   DOGS ", failingLoader);
+
+  const results = await Promise.allSettled([first, second]);
+  assertEquals(calls, 1);
+  assertEquals(results.filter(r => r.status === "rejected").length, 2);
+
+  const recovered = await cache.getOrSet("search: dogs", async () => {
+    calls++;
+    return "recovered";
+  });
+
+  assertEquals(calls, 2);
+  assertEquals(recovered.value, "recovered");
+  assert(!recovered.cached);
+  assert(!recovered.coalesced);
+});
+
 // ── Decision Tests ──────────────────────────────────────────────────────────
 
 Deno.test("decision: triggers for explicit image requests", () => {
@@ -418,4 +489,20 @@ Deno.test("security: filterResults never returns results with missing required f
     assert(result.title.length > 0, "Title must not be empty");
     assert(result.sourceUrl.length > 0, "Source URL must not be empty");
   }
+});
+
+Deno.test("security: filterResults blanks sourceUrl values that are not http(s)", () => {
+  const base = { thumbnail: "https://thumb.com/1.jpg", title: "Pic", sourceName: "example.com" };
+  const filtered = filterResults([
+    { ...base, url: "https://example.com/1.jpg", sourceUrl: "javascript:alert(1)" },
+    { ...base, url: "https://example.com/2.jpg", sourceUrl: "data:text/html,<script>x</script>" },
+    { ...base, url: "https://example.com/3.jpg", sourceUrl: "not a url" },
+    { ...base, url: "https://example.com/4.jpg", sourceUrl: "https://example.com/page?a=1" },
+  ]);
+  assertEquals(filtered.length, 4, "all four pass the url/thumbnail checks");
+  assertEquals(
+    filtered.map(r => r.sourceUrl),
+    ["", "", "", "https://example.com/page?a=1"],
+    "unsafe page links are blanked; valid ones pass through verbatim",
+  );
 });

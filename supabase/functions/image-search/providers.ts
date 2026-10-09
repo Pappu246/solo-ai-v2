@@ -151,9 +151,23 @@ export function filterResults(results: ImageResult[]): ImageResult[] {
     if (seen.has(result.url)) continue;
     seen.add(result.url);
     if (result.width && result.height && (result.width < 200 || result.height < 200)) continue;
-    filtered.push(result);
+    filtered.push({ ...result, sourceUrl: safePageUrl(result.sourceUrl) });
   }
   return filtered;
+}
+
+/**
+ * The page link behind a result is rendered as an anchor target, so only
+ * http(s) survives; anything else (a `javascript:`/`data:` contextLink, a
+ * malformed value) is blanked and the client falls back to the image URL.
+ */
+function safePageUrl(raw: string): string {
+  try {
+    const url = new URL(raw);
+    return ["http:", "https:"].includes(url.protocol) ? raw : "";
+  } catch {
+    return "";
+  }
 }
 
 export function redactImageSearchSecrets(text: string, secrets: Array<string | undefined> = []): string {
