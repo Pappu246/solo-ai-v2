@@ -15,7 +15,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:install": "playwright install --with-deps chromium",
-    "demo": "node --experimental-strip-types e2e/support/demo.ts"
+    "demo": "node --experimental-strip-types e2e/support/demo.ts",
+    "smoke:production": "node scripts/production-smoke.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.57.4",
