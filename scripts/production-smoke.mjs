@@ -7,8 +7,9 @@
  *   SMOKE_BASE_URL       deployed frontend URL
  *   SMOKE_SUPABASE_URL   Supabase project URL
  *
- * Optional authenticated image-search gate:
+ * Authenticated image-search gate:
  *   SMOKE_JWT            short-lived user access token for a dedicated smoke user
+ *   SMOKE_REQUIRE_AUTH   set to "true" so a missing token fails instead of skips
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -19,6 +20,7 @@ const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 const baseUrl = requiredUrl("SMOKE_BASE_URL");
 const supabaseUrl = requiredUrl("SMOKE_SUPABASE_URL");
 const jwt = process.env.SMOKE_JWT?.trim() || "";
+const requireAuth = process.env.SMOKE_REQUIRE_AUTH === "true";
 
 const checks = [];
 
@@ -137,6 +139,12 @@ async function run() {
     } catch (error) {
       record("authenticated image-search", false, error instanceof Error ? error.message : String(error));
     }
+  } else if (requireAuth) {
+    record(
+      "authenticated credentials",
+      false,
+      "SMOKE_JWT is required when SMOKE_REQUIRE_AUTH=true; authenticated checks were not run.",
+    );
   } else {
     console.log("[INFO] Authenticated image-search/thumbnail checks skipped: SMOKE_JWT is not set.");
   }
