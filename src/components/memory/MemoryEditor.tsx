@@ -18,6 +18,8 @@ interface Props {
   defaultProjectId?: string | null;
   /** Prefill for "Remember this" from a message. */
   defaultContent?: string;
+  /** Phase 8: classification suggested by memory detection. */
+  defaultType?: MemoryType;
   projects: Project[];
   onSave: (draft: MemoryDraft) => Promise<void>;
   onClose: () => void;
@@ -25,7 +27,7 @@ interface Props {
 
 const MAX = 1000;
 
-export function MemoryEditor({ open, initial, defaultProjectId = null, defaultContent = '', projects, onSave, onClose }: Props) {
+export function MemoryEditor({ open, initial, defaultProjectId = null, defaultContent = '', defaultType = 'fact', projects, onSave, onClose }: Props) {
   const [draft, setDraft] = useState<MemoryDraft>({ content: '', type: 'fact', project_id: null, importance: 3 });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,8 +38,8 @@ export function MemoryEditor({ open, initial, defaultProjectId = null, defaultCo
     setError(null);
     setDraft(initial
       ? { content: initial.content, type: initial.type, project_id: initial.project_id, importance: initial.importance }
-      : { content: defaultContent, type: 'fact', project_id: defaultProjectId, importance: 3 });
-  }, [open, initial, defaultProjectId, defaultContent]);
+      : { content: defaultContent, type: defaultType, project_id: defaultProjectId, importance: 3 });
+  }, [open, initial, defaultProjectId, defaultContent, defaultType]);
 
   const trimmed = draft.content.trim();
   const canSave = trimmed.length > 0 && trimmed.length <= MAX && !saving;

@@ -1,0 +1,49 @@
+name: Production Smoke Gates
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_authenticated:
+        description: "Run the authenticated image-search + real-thumbnail checks"
+        required: false
+        default: false
+        type: boolean
+  deployment_status:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  public-smoke:
+    name: Public production smoke
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run public smoke gate
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL || 'https://solo-ai-v2-mu.vercel.app' }}
+          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://vqbzyutqgjbfdwxjkplq.supabase.co' }}
+        run: node scripts/production-smoke.mjs
+
+  authenticated-image-smoke:
+    name: Authenticated image-search + thumbnail smoke
+    if: github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run authenticated image smoke
+        env:
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+          SMOKE_JWT: ${{ secrets.SMOKE_JWT }}
+        run: node scripts/production-smoke.mjs

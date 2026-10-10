@@ -129,4 +129,26 @@ describe('ModelSelector', () => {
     const listbox = screen.getByRole('listbox');
     expect(listbox.className).toContain('z-50');
   });
+
+  it('greys out temporarily unavailable models and refuses to select them', async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    // Servers without availability info omit the field — MODELS stay selectable.
+    const models: AIModel[] = [{ ...MODELS[0], available: false }, MODELS[1], MODELS[2]];
+    render(<ModelSelector models={models} selected={null} onSelect={onSelect} />);
+
+    await user.click(screen.getByRole('button', { name: /auto/i }));
+
+    const busy = screen.getByRole('option', { name: /GPT-4o/i });
+    expect(busy).toHaveAttribute('aria-disabled', 'true');
+    expect(busy).toHaveTextContent(/temporarily unavailable/i);
+
+    await user.click(busy);
+    expect(onSelect).not.toHaveBeenCalled();
+    // The list stays open so the user can pick a healthy model or Auto.
+    expect(screen.getByRole('listbox')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('option', { name: /Claude 3/i }));
+    expect(onSelect).toHaveBeenCalledWith('claude-3');
+  });
 });

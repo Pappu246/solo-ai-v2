@@ -19,6 +19,7 @@ import {
   MODELS,
   openModelStream,
   ProviderError,
+  publicModelAvailability,
   publicModels,
   readProviderEvents,
   redactSecrets,
@@ -577,4 +578,36 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
   const result = await openModelStream(model("gpt-4o"), [{ role: "user", content: "look" }], [image], { env, fetchImpl, guards });
   await drain(result.events);
   assertStringIncludes(String(calls[0].init?.body), "image_url");
+});
+
+Deno.test("availability: the browser catalog reflects model blocks and provider cooldowns", () => {
+  // No tracker → every model available, internal fields still stripped.
+  const plain = publicModelAvailability(null);
+  assertEquals(plain.length, publicModels().length);
+  assert(plain.every(m => m.available), "null health should mark everything available");
+  assert(plain.every(m => !("provider_model" in m)), "provider_model must never reach the browser");
+
+  // One blocked model, one cooling-down provider → exactly those go dark.
+  const health = {
+    isHealthy: (provider: string) => provider !== "openai",
+    isModelAvailable: (modelId: string) => modelId !== "gpt-4o",
+  };
+  const annotated = publicModelAvailability(health);
+  assertEquals(annotated.length, publicModels().length);
+  for (const m of annotated) {
+    assertEquals(
+      m.available,
+      m.id !== "gpt-4o" && m.provider !== "openai",
+      `${m.id} (${m.provider}) availability`,
+    );
+  }
+  assert(annotated.some(m => !m.available), "the blocked model must be reported unavailable");
+  assert(annotated.some(m => m.available), "unaffected models must stay available");
+
+  // Recovery flips the whole catalog back on.
+  const recovered = publicModelAvailability({
+    isHealthy: () => true,
+    isModelAvailable: () => true,
+  });
+  assert(recovered.every(m => m.available), "recovered health should mark everything available");
 });

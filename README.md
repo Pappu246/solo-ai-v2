@@ -9,6 +9,7 @@ SOLO AI brings different AI providers into one clean chat interface with saved c
 - Email authentication with clear sign-up / confirmation feedback
 - Saved chat history: search, rename, pin, archive, delete (with confirmation)
 - Multiple AI providers and models — **Auto** routing by default, manual override per chat
+- Model availability in the picker — models the server is temporarily routing around (provider cooldown or a retired catalog entry) are greyed out with a reason, Auto always works, and the catalog quietly refreshes after an availability error
 - Streaming responses; **Stop** keeps the partial reply
 - Regenerate, **edit & resend**, retry — without duplicating messages
 - GitHub-flavoured Markdown, tables, and syntax-highlighted code blocks with copy
@@ -75,7 +76,9 @@ supabase/
 │   ├── chat/
 │   │   ├── index.ts          request validation, auth, rate limit, Phase 2 context, image search integration, SSE response
 │   │   ├── providers.ts      model catalog + aliases, provider fallback, stream guards, safe errors
-│   │   └── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
+│   │   ├── routing.ts        query → route classification for Auto routing (extracted so it can be evaluated offline)
+│   │   ├── providers_test.ts offline Deno tests (`deno test supabase/functions/chat/providers_test.ts`)
+│   │   └── routing_test.ts   routing eval: labelled fixtures, measured accuracy, throughput benchmark (`deno test …/routing_test.ts`)
 │   └── image-search/
 │       ├── index.ts          standalone image search endpoint (POST /functions/v1/image-search)
 │       ├── providers.ts      ImageSearchProvider interface + Google CSE implementation, result filtering

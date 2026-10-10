@@ -1,5 +1,7 @@
-import { useState, useRef, useMemo, useCallback, useEffect } from 'react';
-import type { Conversation, KnowledgeFile, Project, SearchResult, KnowledgeSource, Attachment } from './types';
+import { useState, useRef, useMemo, useCallback, useEffect, memo } from 'react';
+import { WifiOff } from 'lucide-react';
+import type { Conversation, KnowledgeFile, Project, SearchResult, KnowledgeSource, Attachment, MemoryType } from './types';
+import { detectMemorySuggestion } from './lib/memory/suggest';
 import { useAuth } from './hooks/useAuth';
 import { useChat, type ContextResolver } from './hooks/useChat';
 import { useSettings } from './hooks/useSettings';
@@ -7,16 +9,17 @@ import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 import { useProjects, type ProjectInput } from './hooks/useProjects';
 import { useMemories } from './hooks/useMemories';
 import { useKnowledge } from './hooks/useKnowledge';
+import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { isSupabaseConfigured } from './lib/supabase';
 import { retrieveKnowledge, selectMemories, buildChatContext } from './lib/knowledge/retriever';
 import { toFriendlyError } from './lib/errors';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { SetupScreen } from './components/auth/SetupScreen';
-import { Sidebar, type SidebarView } from './components/layout/Sidebar';
-import { Topbar } from './components/layout/Topbar';
+import { Sidebar as SidebarBase, type SidebarView } from './components/layout/Sidebar';
+import { Topbar as TopbarBase } from './components/layout/Topbar';
 import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
-import { Composer, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
+import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
 import { FileDetailDialog } from './components/knowledge/FileDetailDialog';
@@ -29,6 +32,13 @@ import { SearchPalette } from './components/search/SearchPalette';
 import { ConfirmDialog, Logo, ToastProvider, useToast } from './components/ui';
 
 const SIDEBAR_KEY = 'solo-ai-sidebar-collapsed';
+
+// Streaming tokens re-render Shell (streamingContent lives here). These memo
+// wrappers, plus the stable callback identities created inside Shell, let the
+// heavy children skip that work instead of redrawing on every token.
+const Sidebar = memo(SidebarBase);
+const Topbar = memo(TopbarBase);
+const Composer = memo(ComposerBase);
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupScreen />;
@@ -48,6 +58,12 @@ function Shell() {
   const projectsCtl = useProjects(user);
   const memoriesCtl = useMemories(user);
   const knowledge = useKnowledge(user);
+  // Method handles are stable useCallback identities. Destructuring them lets
+  // dependent callbacks depend on exactly those: `chat.someMethod()` calls make
+  // react-hooks/exhaustive-deps demand the whole `chat` object, which is a new
+  // object on every streaming render and would churn every memoized child.
+  const { uploadFiles, cancelUpload, retryProcessing, attachToConversation } = knowledge;
+  const { progress: uploadProgress, files: knowledgeFiles } = knowledge;
   const projectsRef = useRef<Project[]>([]);
   projectsRef.current = projectsCtl.projects;
   const memoriesRef = useRef(memoriesCtl.memories);
@@ -70,6 +86,24 @@ function Shell() {
   }, [knowledge]);
 
   const pendingAttachRef = useRef<string[]>([]);
+
+  // ── Phase 8: memory suggestions ───────────────────────────────────────
+  // One prompt per distinct statement; dismissed or saved text is never
+  // re-suggested in this session.
+  const lastSuggestedRef = useRef<string | null>(null);
+  const maybeSuggestMemory = useCallback((text: string) => {
+    if (!settings.suggest_memories) return;
+    const suggestion = detectMemorySuggestion(text);
+    if (!suggestion || suggestion.content === lastSuggestedRef.current) return;
+    lastSuggestedRef.current = suggestion.content;
+    toast({
+      title: 'Remember this for future chats?',
+      description: suggestion.reason,
+      duration: 8000,
+      action: { label: 'Save memory', onClick: () => setRememberDraft(suggestion) },
+    });
+  }, [settings.suggest_memories, toast]);
+
   const chat = useChat(user, {
     settings,
     resolveContext,
@@ -78,6 +112,8 @@ function Shell() {
       if (pendingAttachRef.current.length) { knowledge.attachToConversation(pendingAttachRef.current, conversation.id); pendingAttachRef.current = []; }
     },
   });
+
+  const { selectConversation, deleteConversation, archiveConversation, moveConversation, setActiveProject, startNewChat: chatStartNewChat, sendMessage: chatSend } = chat;
 
   // ── UI state ───────────────────────────────────────────────────────────────
   const [view, setView] = useState<SidebarView>({ kind: 'chat' });
@@ -88,7 +124,7 @@ function Shell() {
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null);
   const [fileDetail, setFileDetail] = useState<KnowledgeFile | null>(null);
   const [projectDialog, setProjectDialog] = useState<{ open: boolean; project: Project | null }>({ open: false, project: null });
-  const [rememberDraft, setRememberDraft] = useState<string | null>(null);
+  const [rememberDraft, setRememberDraft] = useState<{ content: string; type: MemoryType } | null>(null);
   const [picker, setPicker] = useState<{ resolve: (files: KnowledgeFile[]) => void } | null>(null);
   const composerRef = useRef<ComposerHandle>(null);
 
@@ -113,21 +149,21 @@ function Shell() {
   }, [chat, toast, view.kind]);
 
   // ── Navigation helpers ─────────────────────────────────────────────────────
-  const openConversation = useCallback((c: Conversation) => { setView({ kind: 'chat' }); chat.selectConversation(c); }, [chat]);
+  const openConversation = useCallback((c: Conversation) => { setView({ kind: 'chat' }); selectConversation(c); }, [selectConversation]);
   const openConversationById = useCallback((id: string) => {
     const c = chat.conversations.find(x => x.id === id);
     if (c) openConversation(c); else toast({ title: 'Chat not found', description: 'It may have been deleted.', tone: 'error' });
   }, [chat.conversations, openConversation, toast]);
-  const openProject = useCallback((p: Project) => { setView({ kind: 'project', id: p.id }); chat.setActiveProject(p.id); }, [chat]);
+  const openProject = useCallback((p: Project) => { setView({ kind: 'project', id: p.id }); setActiveProject(p.id); }, [setActiveProject]);
   const openProjectById = useCallback((id: string) => {
     const p = projectsCtl.projects.find(x => x.id === id);
     if (p) openProject(p); else toast({ title: 'Project not found', tone: 'error' });
   }, [projectsCtl.projects, openProject, toast]);
   const startNewChat = useCallback((projectId: string | null = null) => {
     setView({ kind: 'chat' });
-    chat.startNewChat(projectId);
+    chatStartNewChat(projectId);
     composerRef.current?.focus();
-  }, [chat]);
+  }, [chatStartNewChat]);
   const openFileById = useCallback((id: string) => {
     const f = knowledge.files.find(x => x.id === id);
     if (f) setFileDetail(f); else toast({ title: 'File not found', description: 'It may have been deleted.', tone: 'error' });
@@ -161,9 +197,9 @@ function Shell() {
     if (!pendingDelete) return;
     const title = pendingDelete.title;
     setPendingDelete(null);
-    await chat.deleteConversation(pendingDelete.id);
+    await deleteConversation(pendingDelete.id);
     toast({ title: 'Chat deleted', description: title, tone: 'success' });
-  }, [pendingDelete, chat, toast]);
+  }, [pendingDelete, deleteConversation, toast]);
 
   // ── Phase 2 actions ────────────────────────────────────────────────────────
   const withToast = useCallback(async (fn: () => Promise<unknown>, success?: string) => {
@@ -201,33 +237,54 @@ function Shell() {
     upload: async (files, onChange) => {
       const conversationId = chat.activeConversation?.id ?? null;
       const projectId = chat.activeConversation?.project_id ?? chat.activeProjectId ?? null;
-      const outcome = await knowledge.uploadFiles(files, { conversationId, projectId, onChange });
+      const outcome = await uploadFiles(files, { conversationId, projectId, onChange });
       if (!conversationId) pendingAttachRef.current.push(...outcome.files.filter(f => f.status === 'ready').map(f => f.id));
       for (const reason of outcome.rejected) toast({ title: 'File skipped', description: reason, tone: 'error' });
       if (outcome.cancelled.length) toast({ title: outcome.cancelled.length === 1 ? 'Upload cancelled' : `${outcome.cancelled.length} uploads cancelled`, tone: 'info' });
       return outcome.files;
     },
     pickFromLibrary: () => new Promise<KnowledgeFile[]>(resolve => setPicker({ resolve })),
-    cancelUpload: knowledge.cancelUpload,
-    progress: knowledge.progress,
-    files: knowledge.files,
+    cancelUpload,
+    progress: uploadProgress,
+    files: knowledgeFiles,
     retryProcessing: async (fileId) => {
-      const f = knowledge.files.find(x => x.id === fileId);
+      const f = knowledgeFiles.find(x => x.id === fileId);
       if (!f) throw new Error('File not found');
-      await knowledge.retryProcessing(f);
+      await retryProcessing(f);
     },
-  }), [chat.activeConversation, chat.activeProjectId, knowledge, toast]);
+  }), [chat.activeConversation, chat.activeProjectId, uploadFiles, cancelUpload, uploadProgress, knowledgeFiles, retryProcessing, toast]);
 
-  const sendMessage = useCallback((text: string, attachments?: Attachment[]) => {
+  const sendMessage = useCallback((text: string, attachments?: Attachment[], opts?: { research?: boolean; agent?: boolean }) => {
     const ids = (attachments ?? []).map(a => a.file_id).filter((id): id is string => Boolean(id));
     if (ids.length) {
-      if (chat.activeConversation) knowledge.attachToConversation(ids, chat.activeConversation.id);
+      if (chat.activeConversation) attachToConversation(ids, chat.activeConversation.id);
       else pendingAttachRef.current.push(...ids);
     }
-    return chat.sendMessage(text, attachments);
-  }, [chat, knowledge]);
+    maybeSuggestMemory(text);
+    return chatSend(text, attachments, opts);
+  }, [chat.activeConversation, chatSend, attachToConversation, maybeSuggestMemory]);
+
+  // Stable action identities for the memoized shell: fresh closures here would
+  // defeat memo(Sidebar/Topbar/Composer) on every streaming token.
+  const sidebarNewChat = useCallback(() => startNewChat(view.kind === 'project' ? view.id : null), [startNewChat, view]);
+  const archiveWithToast = useCallback((id: string, archived: boolean) => { archiveConversation(id, archived); toast({ title: archived ? 'Chat archived' : 'Chat restored', tone: 'success' }); }, [archiveConversation, toast]);
+  const moveWithToast = useCallback((id: string, projectId: string | null) => { moveConversation(id, projectId); toast({ title: projectId ? 'Moved to project' : 'Removed from project', tone: 'success' }); }, [moveConversation, toast]);
+  const openSettingsPanel = useCallback(() => setSettingsOpen(true), []);
+  const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
+  const collapseSidebar = useCallback(() => toggleSidebar(true), [toggleSidebar]);
+  const expandSidebar = useCallback(() => toggleSidebar(false), [toggleSidebar]);
+  const openMobileSidebar = useCallback(() => setMobileSidebarOpen(true), []);
+  const openNewProjectDialog = useCallback(() => setProjectDialog({ open: true, project: null }), []);
+  const openFilesView = useCallback(() => setView({ kind: 'files' }), []);
+  const openMemoryView = useCallback(() => setView({ kind: 'memory' }), []);
+  const openSearchPalette = useCallback(() => setSearchOpen(true), []);
+  const handleRemember = useCallback((content: string) => { setRememberDraft(content.length > 600 ? { content: `${content.slice(0, 600).trimEnd()}…`, type: 'fact' } : { content, type: 'fact' }); }, []);
 
   const openSource = useCallback((s: KnowledgeSource) => openFileById(s.file_id), [openFileById]);
+
+  // Connectivity drives the offline banner and the composer hint. It must be
+  // called before any early return so the hook order never changes.
+  const online = useOnlineStatus();
 
   if (authLoading) {
     return (
@@ -248,7 +305,9 @@ function Shell() {
     ? projectsCtl.projects.find(p => p.id === chat.activeConversation!.project_id) ?? null
     : chat.activeProjectId ? projectsCtl.projects.find(p => p.id === chat.activeProjectId) ?? null : null;
   const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
-  const composerHint = activeModelName ? `Using ${activeModelName}` : chatProject ? `In ${chatProject.name} · Auto picks the best model` : 'Auto picks the best model for each message';
+  const composerHint = !online
+    ? 'You’re offline — reconnect to send'
+    : activeModelName ? `Using ${activeModelName}` : chatProject ? `In ${chatProject.name} · Auto picks the best model` : 'Auto picks the best model for each message';
 
   // The shell must not paint an opaque background: the ambient glow layer
   // lives behind it (body::before, z -1) and every frosted surface above
@@ -260,27 +319,27 @@ function Shell() {
         status={chat.conversationsStatus}
         activeId={view.kind === 'chat' ? chat.activeConversation?.id ?? null : null}
         onSelect={openConversation}
-        onNewChat={() => startNewChat(view.kind === 'project' ? view.id : null)}
+        onNewChat={sidebarNewChat}
         onRename={chat.renameConversation}
         onPin={chat.pinConversation}
-        onArchive={(id, archived) => { chat.archiveConversation(id, archived); toast({ title: archived ? 'Chat archived' : 'Chat restored', tone: 'success' }); }}
+        onArchive={archiveWithToast}
         onDeleteRequest={setPendingDelete}
-        onOpenSettings={() => setSettingsOpen(true)}
+        onOpenSettings={openSettingsPanel}
         onRetryLoad={chat.loadConversations}
         mobileOpen={mobileSidebarOpen}
-        onCloseMobile={() => setMobileSidebarOpen(false)}
+        onCloseMobile={closeMobileSidebar}
         collapsed={sidebarCollapsed}
-        onCollapse={() => toggleSidebar(true)}
-        onExpand={() => toggleSidebar(false)}
+        onCollapse={collapseSidebar}
+        onExpand={expandSidebar}
         userEmail={user.email}
         projects={projectsCtl.projects}
         view={view}
         onOpenProject={openProject}
-        onNewProject={() => setProjectDialog({ open: true, project: null })}
-        onOpenFiles={() => setView({ kind: 'files' })}
-        onOpenMemory={() => setView({ kind: 'memory' })}
-        onOpenSearch={() => setSearchOpen(true)}
-        onMoveToProject={(id, projectId) => { chat.moveConversation(id, projectId); toast({ title: projectId ? 'Moved to project' : 'Removed from project', tone: 'success' }); }}
+        onNewProject={openNewProjectDialog}
+        onOpenFiles={openFilesView}
+        onOpenMemory={openMemoryView}
+        onOpenSearch={openSearchPalette}
+        onMoveToProject={moveWithToast}
       />
 
       <div className="flex-1 flex flex-col min-w-0 h-full">
@@ -290,10 +349,17 @@ function Shell() {
           selectedModel={chat.selectedModel}
           onSelectModel={chat.selectModel}
           sidebarCollapsed={sidebarCollapsed}
-          onOpenSidebar={() => toggleSidebar(false)}
-          onOpenMobileSidebar={() => setMobileSidebarOpen(true)}
+          onOpenSidebar={expandSidebar}
+          onOpenMobileSidebar={openMobileSidebar}
           disabled={chat.isGenerating}
         />
+
+        {!online && (
+          <div role="status" aria-live="polite" className="flex items-center justify-center gap-2 bg-danger/10 border-b border-danger/30 px-4 py-1.5 text-xs font-medium text-danger">
+            <WifiOff className="w-3.5 h-3.5 shrink-0" aria-hidden />
+            <span>You’re offline — messages will fail until you reconnect. Your draft is kept.</span>
+          </div>
+        )}
 
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {view.kind === 'files' && (
@@ -316,7 +382,7 @@ function Shell() {
             onEdit={() => setProjectDialog({ open: true, project: activeProject })}
             onArchive={archived => projectsCtl.archiveProject(activeProject.id, archived)}
             onDelete={() => deleteProject(activeProject)}
-            onOpenMemory={() => setView({ kind: 'memory' })}
+            onOpenMemory={openMemoryView}
           />
         )}
         {view.kind === 'project' && !activeProject && (
@@ -342,12 +408,12 @@ function Shell() {
                 onEdit={chat.editMessage}
                 onRetry={chat.retry}
                 onDismissError={chat.clearError}
-                onRemember={content => setRememberDraft(content.length > 600 ? `${content.slice(0, 600).trimEnd()}…` : content)}
+                onRemember={handleRemember}
                 onOpenSource={openSource}
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <EmptyState onSuggestion={text => sendMessage(text)} userName={user.email} />
+                <EmptyState onSuggestion={sendMessage} userName={user.email} />
               </div>
             )}
 
@@ -359,6 +425,7 @@ function Shell() {
               sendOnEnter={settings.send_on_enter}
               hint={composerHint}
               knowledge={knowledgeUploader}
+              offline={!online}
               autoFocus
             />
           </>
@@ -411,7 +478,8 @@ function Shell() {
       <MemoryEditor
         open={rememberDraft !== null}
         initial={null}
-        defaultContent={rememberDraft ?? ''}
+        defaultContent={rememberDraft?.content ?? ''}
+        defaultType={rememberDraft?.type}
         defaultProjectId={chat.activeConversation?.project_id ?? null}
         projects={projectsCtl.projects.filter(p => !p.archived)}
         onSave={saveRemembered}

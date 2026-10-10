@@ -111,6 +111,26 @@ export function publicModels(): Array<Omit<ModelSpec, "provider_model">> {
   });
 }
 
+/**
+ * Catalog annotated with live availability for the model picker (Phase 15).
+ *
+ * A model reports `available: false` exactly when routing would skip it: its
+ * catalog entry is blocked (the provider retired it) or its provider is
+ * cooling down after repeated failures. Like the health snapshot, this only
+ * exposes booleans — never keys, request data or error bodies. `null` health
+ * means "no tracker" (all available), which keeps call sites and tests simple.
+ */
+export function publicModelAvailability(health: {
+  isHealthy(provider: string): boolean;
+  isModelAvailable?(modelId: string): boolean;
+} | null): Array<Omit<ModelSpec, "provider_model"> & { available: boolean }> {
+  return publicModels().map((model) => ({
+    ...model,
+    available: health === null
+      || ((health.isModelAvailable?.(model.id) ?? true) && health.isHealthy(model.provider)),
+  }));
+}
+
 /** Resolve a requested id (possibly a retired alias) to a live catalog entry. */
 export function resolveModel(id: string | null | undefined): ModelSpec | null {
   if (!id) return null;
@@ -125,17 +145,120 @@ export function isAliasedModel(id: string): boolean {
   return !MODELS.some(m => m.id === id) && Boolean(MODEL_ALIASES[id]);
 }
 
-/** Ordered fallback chain: the chosen model first, then healthy alternatives. */
-export function fallbackChain(primary: ModelSpec, hasImages: boolean): ModelSpec[] {
-  const ids = hasImages
+// ── Health- & capability-aware routing ────────────────────────────────────
+
+/**
+ * Structural view of a health tracker (implemented by `./health.ts`).
+ * Declared locally to avoid an import cycle and to keep tests trivial.
+ */
+export interface HealthTracker {
+  isHealthy(provider: string): boolean;
+  isModelAvailable?(modelId: string): boolean;
+  recordSuccess(provider: string): void;
+  recordFailure(provider: string, outcome: { code: string; retryable: boolean }, modelId?: string): void;
+}
+
+export interface RoutingOptions {
+  /** The request carries image input — only vision models may be chosen. */
+  hasImages?: boolean;
+  /** Rough prompt size in tokens (chars / 4) used to respect context limits. */
+  estimatedContextTokens?: number;
+  /** Health tracker; `null`/omitted keeps plain capability-based routing. */
+  health?: HealthTracker | null;
+}
+
+/** Auto-route category → preferred catalog id (kept from the original router). */
+export const ROUTE_PREFERENCE: Readonly<Record<string, string>> = {
+  coding: "claude-sonnet-5",
+  reasoning: "deepseek-v4-pro",
+  research: "gemini-3.7-flash",
+  fast: "gpt-oss-20b",
+  conversation: "gpt-oss-120b",
+  vision: "gemini-3.7-flash",
+};
+
+/** Capability gate: can this model accept the request as posed? */
+function fitsRequest(model: ModelSpec, options: RoutingOptions): boolean {
+  if (options.hasImages && !model.supports_vision) return false;
+  const tokens = options.estimatedContextTokens ?? 0;
+  if (tokens > 0 && model.context_length < tokens) return false;
+  const health = options.health;
+  if (health?.isModelAvailable && !health.isModelAvailable(model.id)) return false;
+  return true;
+}
+
+function categoryMatches(model: ModelSpec, route: string): boolean {
+  return route === "vision" ? model.supports_vision : model.category === route;
+}
+
+/**
+ * Pick the best model for an auto-routed request.
+ *
+ * Guarantees: never selects a model that cannot accept the input (vision or
+ * context), never an entry marked unavailable, and — when any healthy
+ * candidate exists — never a provider that is currently cooling down. When
+ * every candidate is degraded it still returns a usable model: routing must
+ * degrade, not fail.
+ */
+export function selectAutoModel(route: string, options: RoutingOptions = {}): ModelSpec {
+  const health = options.health ?? null;
+  const preferredId = ROUTE_PREFERENCE[route] ?? ROUTE_PREFERENCE.conversation;
+
+  const capable = MODELS.filter(m => fitsRequest(m, options));
+  // Degradation: relax context/availability filters (never the image one —
+  // the provider would reject the request anyway) rather than returning null.
+  const pool = capable.length ? capable : MODELS.filter(m => !options.hasImages || m.supports_vision);
+
+  const ranked = [...pool].sort((a, b) => {
+    const healthyA = health && !health.isHealthy(a.provider) ? 1 : 0;
+    const healthyB = health && !health.isHealthy(b.provider) ? 1 : 0;
+    if (healthyA !== healthyB) return healthyA - healthyB;
+    const prefA = a.id === preferredId ? 0 : 1;
+    const prefB = b.id === preferredId ? 0 : 1;
+    if (prefA !== prefB) return prefA - prefB;
+    const catA = categoryMatches(a, route) ? 0 : 1;
+    const catB = categoryMatches(b, route) ? 0 : 1;
+    if (catA !== catB) return catA - catB;
+    if (a.quality !== b.quality) return b.quality - a.quality;
+    if (a.cost !== b.cost) return a.cost - b.cost;
+    if (a.speed !== b.speed) return b.speed - a.speed;
+    return a.id.localeCompare(b.id);
+  });
+  return ranked[0];
+}
+
+/**
+ * Ordered fallback chain: the chosen model first, then alternatives that fit
+ * the request (vision / context / availability), healthy providers first.
+ * Unhealthy candidates stay in the chain as a last resort — a cooldown must
+ * degrade the choice, never leave the request with nowhere to go.
+ */
+export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: RoutingOptions = {}): ModelSpec[] {
+  // The explicit parameter is authoritative for vision filtering.
+  const opts: RoutingOptions = { ...options, hasImages };
+  const preferredIds = hasImages
     ? ["gemini-3.7-flash", "gpt-4o", "claude-haiku-4-5-20251001"]
     : ["gpt-oss-120b", "gemini-3.7-flash", "deepseek-v4-flash", "gpt-4o-mini"];
-  const chain = [primary];
-  for (const id of ids) {
-    const model = resolveModel(id);
-    if (!model) continue;
-    if (hasImages && !model.supports_vision) continue;
-    if (chain.some(m => m.id === model.id)) continue;
+  const health = opts.health ?? null;
+
+  const preferred = preferredIds
+    .map(resolveModel)
+    .filter((m): m is ModelSpec => m !== null)
+    .filter(m => fitsRequest(m, opts));
+  const rest = MODELS
+    .filter(m => fitsRequest(m, opts))
+    .filter(m => !preferred.some(p => p.id === m.id));
+
+  const order = (list: ModelSpec[]): ModelSpec[] =>
+    health
+      ? [...list.filter(m => health.isHealthy(m.provider)), ...list.filter(m => !health.isHealthy(m.provider))]
+      : list;
+
+  const chain: ModelSpec[] = [primary];
+  const seen = new Set([primary.id]);
+  for (const model of order([...preferred, ...rest])) {
+    if (seen.has(model.id)) continue;
+    seen.add(model.id);
     chain.push(model);
   }
   return chain;
@@ -600,10 +723,13 @@ const MAX_OUTPUT_TOKENS = 4096;
  * `?key=`; query strings leak into proxy logs and error messages, so we use
  * `x-goog-api-key` instead.
  */
-export function buildProviderRequest(model: ModelSpec, messages: Message[], apiKey: string): ProviderRequest {
+export function buildProviderRequest(model: ModelSpec, messages: Message[], apiKey: string, options: { tools?: unknown; stream?: boolean } = {}): ProviderRequest {
   const providerModel = model.provider_model ?? model.id;
   const adapter = adapterFor(model.provider);
   const jsonHeaders = { "Content-Type": "application/json" };
+  const streaming = options.stream !== false;
+  // Provider-shaped `tools` value (built by the caller, see agent.ts).
+  const tools = options.tools === undefined ? undefined : options.tools;
 
   if (model.provider === "anthropic") {
     const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n") || "You are a helpful AI assistant.";
@@ -612,7 +738,7 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
       init: {
         method: "POST",
         headers: { ...jsonHeaders, "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: providerModel, system, messages: messages.filter(m => m.role !== "system"), max_tokens: MAX_OUTPUT_TOKENS, stream: true }),
+        body: JSON.stringify({ model: providerModel, system, messages: messages.filter(m => m.role !== "system"), max_tokens: MAX_OUTPUT_TOKENS, stream: streaming, ...(tools ? { tools } : {}) }),
       },
       adapter,
     };
@@ -625,11 +751,11 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
       parts: Array.isArray(m.content) ? m.content : [{ text: m.content }],
     }));
     return {
-      url: `https://generativelanguage.googleapis.com/v1beta/models/${providerModel}:streamGenerateContent?alt=sse`,
+      url: `https://generativelanguage.googleapis.com/v1beta/models/${providerModel}:${streaming ? "streamGenerateContent?alt=sse" : "generateContent"}`,
       init: {
         method: "POST",
         headers: { ...jsonHeaders, "x-goog-api-key": apiKey },
-        body: JSON.stringify({ contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS } }),
+        body: JSON.stringify({ contents, ...(system ? { systemInstruction: { parts: [{ text: system }] } } : {}), generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS }, ...(tools ? { tools: [tools] } : {}) }),
       },
       adapter,
     };
@@ -645,7 +771,7 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
     init: {
       method: "POST",
       headers: { ...jsonHeaders, Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: providerModel, messages, stream: true, max_tokens: MAX_OUTPUT_TOKENS }),
+      body: JSON.stringify({ model: providerModel, messages, stream: streaming, max_tokens: MAX_OUTPUT_TOKENS, ...(tools ? { tools, tool_choice: "auto" } : {}) }),
     },
     adapter,
   };
@@ -783,6 +909,21 @@ export interface Attempt {
 
 export interface FallbackOptions extends CallOptions {
   onAttempt?: (attempt: Attempt) => void;
+  /** Optional health tracker: skips cooling-down providers, records outcomes. */
+  health?: HealthTracker | null;
+  /**
+   * Retry budget: maximum provider attempts for this request. Bounds the
+   * fallback loop even if the candidate chain grows. Defaults to the chain
+   * length (each candidate tried at most once).
+   */
+  maxAttempts?: number;
+  /**
+   * Per-provider concurrency gate (best-effort, per isolate). In the first
+   * pass, saturated providers are skipped so load steers to other providers;
+   * in the degradation pass requests still proceed without a slot —
+   * saturation must slow the route down, never block chat outright.
+   */
+  concurrency?: { tryAcquire(provider: string): boolean; release(provider: string): void } | null;
 }
 
 /**
@@ -797,31 +938,77 @@ export interface FallbackOptions extends CallOptions {
 export async function streamWithFallback(candidates: ModelSpec[], messages: Message[], images: Image[], options: FallbackOptions = {}): Promise<{ stream: ModelStream; attempts: Attempt[] }> {
   const attempts: Attempt[] = [];
   const deadProviders = new Set<string>();
+  const health = options.health ?? null;
+  const tried = new Set<string>();
 
-  for (const candidate of candidates) {
-    if (deadProviders.has(candidate.provider)) continue;
-    try {
-      const stream = await openModelStream(candidate, messages, images, options);
-      return { stream, attempts };
-    } catch (error) {
-      if (isAbortError(error)) throw error;
-      const providerError = error instanceof ProviderError
-        ? error
-        : new ProviderError({ provider: candidate.provider, ...classifyNetworkError(error) });
-      const attempt: Attempt = {
-        model: candidate.id,
-        provider: candidate.provider,
-        code: providerError.code,
-        status: providerError.status,
-        retryable: providerError.retryable,
-        detail: providerError.detail,
-      };
-      attempts.push(attempt);
-      options.onAttempt?.(attempt);
-      if (!providerError.retryable) throw providerError;
-      // A missing/rejected key kills every model from that provider.
-      if (providerError.code === "provider_not_configured" || providerError.code === "provider_auth" || providerError.code === "provider_payment") {
-        deadProviders.add(candidate.provider);
+  // With health tracking: pass 1 tries only healthy providers, pass 2 falls
+  // back to the cooling-down ones if nothing else was left — a cooldown
+  // degrades the route, it never locks the user out of chat.
+  const guarded = Boolean(health) || Boolean(options.concurrency);
+  const passes: Array<"healthy" | "all"> = guarded ? ["healthy", "all"] : ["all"];
+  const budget = options.maxAttempts !== undefined
+    ? Math.max(1, Math.floor(options.maxAttempts))
+    : Number.POSITIVE_INFINITY;
+
+  outer: for (const pass of passes) {
+    for (const candidate of candidates) {
+      if (attempts.length >= budget) break outer;
+      if (tried.has(candidate.id)) continue;
+      if (deadProviders.has(candidate.provider)) continue;
+      if (pass === "healthy" && health && !health.isHealthy(candidate.provider)) continue;
+      let acquired = false;
+      let heldByStream = false;
+      if (options.concurrency) {
+        if (options.concurrency.tryAcquire(candidate.provider)) acquired = true;
+        else if (pass === "healthy") continue; // revisit in the degradation pass
+      }
+      tried.add(candidate.id);
+      try {
+        const stream = await openModelStream(candidate, messages, images, options);
+        health?.recordSuccess(candidate.provider);
+        if (acquired && options.concurrency) {
+          // Hold the slot until the consumer finishes with the stream so the
+          // gauge reflects live streams, not just connection setup.
+          heldByStream = true;
+          const limiter = options.concurrency;
+          const provider = candidate.provider;
+          const inner = stream.events;
+          const guarded: ModelStream = {
+            model: stream.model,
+            events: (async function* () {
+              try {
+                for await (const event of inner) yield event;
+              } finally {
+                limiter.release(provider);
+              }
+            })(),
+          };
+          return { stream: guarded, attempts };
+        }
+        return { stream, attempts };
+      } catch (error) {
+        if (isAbortError(error)) throw error;
+        const providerError = error instanceof ProviderError
+          ? error
+          : new ProviderError({ provider: candidate.provider, ...classifyNetworkError(error) });
+        const attempt: Attempt = {
+          model: candidate.id,
+          provider: candidate.provider,
+          code: providerError.code,
+          status: providerError.status,
+          retryable: providerError.retryable,
+          detail: providerError.detail,
+        };
+        attempts.push(attempt);
+        options.onAttempt?.(attempt);
+        health?.recordFailure(candidate.provider, { code: providerError.code, retryable: providerError.retryable }, candidate.id);
+        if (!providerError.retryable) throw providerError;
+        // A missing/rejected key kills every model from that provider.
+        if (providerError.code === "provider_not_configured" || providerError.code === "provider_auth" || providerError.code === "provider_payment") {
+          deadProviders.add(candidate.provider);
+        }
+      } finally {
+        if (acquired && !heldByStream) options.concurrency?.release(candidate.provider);
       }
     }
   }

@@ -57,6 +57,15 @@ describe('Markdown', () => {
     expect(container.textContent).toContain('hello');
   });
 
+  it('never turns javascript:/data: links into live hrefs', () => {
+    const { container } = render(
+      <Markdown content={'[go](javascript:alert(1)) and [bad](data:text/html,x) and [ok](https://example.com)'} />,
+    );
+    expect(container.querySelector('a[href^="javascript"]')).toBeNull();
+    expect(container.querySelector('a[href^="data:"]')).toBeNull();
+    expect(container.querySelector('a[href="https://example.com"]')).not.toBeNull();
+  });
+
   // ── Math (KaTeX) ─────────────────────────────────────────────────────────────
 
   it('renders inline $…$ math with KaTeX', () => {

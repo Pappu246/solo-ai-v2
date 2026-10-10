@@ -13,6 +13,7 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run check
+      - run: node --check scripts/production-smoke.mjs
       - run: npx tsc -p e2e/tsconfig.json
   e2e:
     name: End-to-end (Playwright)
@@ -35,5 +36,5 @@ jobs:
       - uses: actions/checkout@v4
       - uses: denoland/setup-deno@v2
         with: { deno-version: v2.x }
-      - run: deno check supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-proxy/index.ts
-      - run: deno test supabase/functions/chat/context.test.ts supabase/functions/image-search/decision_test.ts supabase/functions/image-search/final_regression_test.ts supabase/functions/image-proxy/index_test.ts
+      - run: deno check supabase/functions/chat/index.ts supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/chat/routing.ts supabase/functions/chat/health.ts supabase/functions/chat/metrics.ts supabase/functions/chat/tools.ts supabase/functions/chat/tools_test.ts supabase/functions/chat/agent.ts supabase/functions/chat/agent_test.ts supabase/functions/shared/usage.ts supabase/functions/shared/usage_test.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-search/cache.ts supabase/functions/image-search/index.ts supabase/functions/image-proxy/index.ts supabase/functions/web-search/providers.ts supabase/functions/web-search/safeFetch.ts supabase/functions/web-search/events.ts
+      - run: deno test supabase/functions/chat/context.test.ts supabase/functions/chat/providers_test.ts supabase/functions/chat/routing_test.ts supabase/functions/chat/health_test.ts supabase/functions/chat/metrics_test.ts supabase/functions/chat/tools_test.ts supabase/functions/chat/agent_test.ts supabase/functions/shared/usage_test.ts supabase/functions/image-search/decision_test.ts supabase/functions/image-search/final_regression_test.ts supabase/functions/image-search/providers_test.ts supabase/functions/image-proxy/index_test.ts supabase/functions/web-search/providers_test.ts
