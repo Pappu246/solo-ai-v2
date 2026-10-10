@@ -69,11 +69,11 @@ begin
   -- Server-authoritative scope allow-list: canonical window and operator
   -- ceiling per scope. Unknown scopes are rejected outright.
   case p_scope
-    when 'chat_minute'   then begin v_window := 60;      v_ceiling := 10000;      end
-    when 'chat_day'      then begin v_window := 86400;   v_ceiling := 1000000;    end
-    when 'chat_tokens'   then begin v_window := 86400;   v_ceiling := 1000000000; end
-    when 'image_minute'  then begin v_window := 60;      v_ceiling := 10000;      end
-    when 'image_day'     then begin v_window := 86400;   v_ceiling := 1000000;    end
+    when 'chat_minute'   then begin v_window := 60;      v_ceiling := 10000;      end;
+    when 'chat_day'      then begin v_window := 86400;   v_ceiling := 1000000;    end;
+    when 'chat_tokens'   then begin v_window := 86400;   v_ceiling := 1000000000; end;
+    when 'image_minute'  then begin v_window := 60;      v_ceiling := 10000;      end;
+    when 'image_day'     then begin v_window := 86400;   v_ceiling := 1000000;    end;
     else raise exception 'usage: scope not permitted' using errcode = '42501';
   end case;
 
