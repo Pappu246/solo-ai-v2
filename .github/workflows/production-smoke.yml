@@ -46,4 +46,5 @@ jobs:
           SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
           SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
           SMOKE_JWT: ${{ secrets.SMOKE_JWT }}
+          SMOKE_REQUIRE_AUTH: "true"
         run: node scripts/production-smoke.mjs
