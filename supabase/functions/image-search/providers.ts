@@ -114,6 +114,127 @@ export class GoogleCSEProvider implements ImageSearchProvider {
   }
 }
 
+/**
+ * Free, keyless fallback provider backed by Wikimedia Commons.
+ * Results are explicitly attributed to Commons and retain their file-page URL.
+ */
+export class WikimediaCommonsProvider implements ImageSearchProvider {
+  readonly name = "wikimedia-commons";
+  private readonly fetchImpl: FetchLike;
+
+  constructor(fetchImpl: FetchLike = fetch) {
+    this.fetchImpl = fetchImpl;
+  }
+
+  async search(query: string): Promise<ImageResult[]> {
+    const url = new URL("https://commons.wikimedia.org/w/api.php");
+    url.search = new URLSearchParams({
+      action: "query",
+      generator: "search",
+      gsrsearch: query,
+      gsrnamespace: "6",
+      gsrlimit: "10",
+      prop: "imageinfo|info",
+      inprop: "url",
+      iiprop: "url|size|mime",
+      iiurlwidth: "320",
+      format: "json",
+      formatversion: "2",
+    }).toString();
+
+    let response: Response;
+    try {
+      response = await this.fetchImpl(url.toString(), {
+        method: "GET",
+        headers: {
+          Accept: "application/json",
+          "Api-User-Agent": "SoloAI/1.0 (https://solo-ai-v2-mu.vercel.app; image search)",
+        },
+        signal: AbortSignal.timeout(8000),
+      });
+    } catch (error) {
+      console.error("[WikimediaCommons] fetch failed:", error instanceof Error ? error.name : "unknown");
+      return [];
+    }
+
+    if (!response.ok) {
+      console.error("[WikimediaCommons] HTTP " + response.status);
+      return [];
+    }
+
+    let data: WikimediaCommonsResponse;
+    try {
+      data = await response.json() as WikimediaCommonsResponse;
+    } catch {
+      console.error("[WikimediaCommons] invalid JSON response");
+      return [];
+    }
+
+    const rawPages = data.query?.pages;
+    const pages = Array.isArray(rawPages)
+      ? rawPages
+      : rawPages && typeof rawPages === "object"
+        ? Object.values(rawPages)
+        : [];
+    const results: ImageResult[] = [];
+    const seen = new Set<string>();
+
+    for (const page of pages) {
+      const image = page.imageinfo?.[0];
+      const originalUrl = image?.url;
+      const thumbnail = image?.thumburl;
+      const title = page.title?.replace(/^File:/i, "").trim();
+      if (!originalUrl || !thumbnail || !title || seen.has(originalUrl)) continue;
+
+      const width = Number(image.width) || 0;
+      const height = Number(image.height) || 0;
+      if (width > 0 && height > 0 && (width < 200 || height < 200)) continue;
+
+      seen.add(originalUrl);
+      results.push({
+        url: originalUrl,
+        thumbnail,
+        title,
+        sourceUrl: page.fullurl || image.descriptionurl || originalUrl,
+        sourceName: "Wikimedia Commons",
+        width: width > 0 ? width : undefined,
+        height: height > 0 ? height : undefined,
+      });
+      if (results.length >= 8) break;
+    }
+
+    return results;
+  }
+}
+
+interface WikimediaCommonsResponse {
+  query?: {
+    pages?: Array<{
+      title?: string;
+      fullurl?: string;
+      imageinfo?: Array<{
+        url?: string;
+        thumburl?: string;
+        descriptionurl?: string;
+        width?: number;
+        height?: number;
+        mime?: string;
+      }>;
+    }> | Record<string, {
+      title?: string;
+      fullurl?: string;
+      imageinfo?: Array<{
+        url?: string;
+        thumburl?: string;
+        descriptionurl?: string;
+        width?: number;
+        height?: number;
+        mime?: string;
+      }>;
+    }>;
+  };
+}
+
 interface GoogleCSEResponse {
   items?: Array<{
     link: string;
@@ -128,12 +249,12 @@ interface GoogleCSEResponse {
   }>;
 }
 
-export function createImageSearchProvider(env: EnvReader, fetchImpl: FetchLike = fetch): ImageSearchProvider | null {
+export function createImageSearchProvider(env: EnvReader, fetchImpl: FetchLike = fetch): ImageSearchProvider {
   const apiKey = env("GOOGLE_CSE_API_KEY")?.trim();
   const engineId = env("GOOGLE_CSE_ENGINE_ID")?.trim();
   if (!apiKey || !engineId) {
-    console.warn("[image-search] Google CSE not configured (missing GOOGLE_CSE_API_KEY or GOOGLE_CSE_ENGINE_ID)");
-    return null;
+    console.warn("[image-search] Google CSE not configured; using attributed Wikimedia Commons fallback");
+    return new WikimediaCommonsProvider(fetchImpl);
   }
   return new GoogleCSEProvider({ apiKey, engineId }, fetchImpl);
 }
