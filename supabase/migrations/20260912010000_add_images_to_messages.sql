@@ -6,7 +6,7 @@ alter table public.messages
 comment on column public.messages.images is
   'Normalized Smart Image Search results attached to an assistant message; contains URLs, thumbnails, titles and source attribution.';
 
-do $
+do $images_constraint$
 begin
   if not exists (
     select 1
@@ -19,4 +19,4 @@ begin
       check (images is null or jsonb_typeof(images) = 'array');
   end if;
 end;
-$;
+$images_constraint$;
