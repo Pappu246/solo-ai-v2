@@ -53,7 +53,7 @@ export interface AgentRound {
 export interface AgentResult {
   enabled: boolean;
   /** Reason the loop did not run or stopped, for structured logs. */
-  stop: "ok" | "disabled" | "not_supported" | "no_api_key" | "deadline" | "rounds" | "provider_error";
+  stop: "ok" | "disabled" | "not_supported" | "no_api_key" | "deadline" | "rounds" | "provider_error" | "aborted";
   rounds: number;
   /** Tool call records (successes and failures) in call order. */
   records: ToolCallRecord[];
@@ -226,7 +226,7 @@ export async function runAgentLoop(options: AgentOptions): Promise<AgentResult> 
 
   for (let round = 1; round <= maxRounds; round++) {
     if (Date.now() > deadline) { stop = "deadline"; break; }
-    if (options.signal?.aborted) { stop = "provider_error"; break; }
+    if (options.signal?.aborted) { stop = "aborted"; break; }
 
     const { url, init } = buildProviderRequest(model, history, apiKey, { tools, stream: false });
     let payload: unknown;
@@ -234,7 +234,8 @@ export async function runAgentLoop(options: AgentOptions): Promise<AgentResult> 
       payload = await fetchJson(url, init, fetchImpl, Math.min(roundTimeoutMs, Math.max(deadline - Date.now(), 1_000)), options.signal);
     } catch (error) {
       options.log?.("agent_round_failed", { round, error: redactSecrets(error instanceof Error ? `${error.name}: ${error.message}` : String(error)) });
-      stop = Date.now() > deadline ? "deadline" : "provider_error";
+      // A caller abort is not a provider failure — label it honestly.
+      stop = options.signal?.aborted ? "aborted" : Date.now() > deadline ? "deadline" : "provider_error";
       break;
     }
 
@@ -250,12 +251,14 @@ export async function runAgentLoop(options: AgentOptions): Promise<AgentResult> 
 
     for (const call of calls) {
       if (Date.now() > deadline) { stop = "deadline"; break; }
+      // Honour cancellation between tool calls so an abort stops queued tools.
+      if (options.signal?.aborted) { stop = "aborted"; break; }
       const result = await session.call(call.name, call.args);
       records.push({ tool: result.tool, ok: result.ok, ...(result.ok ? { output: result.output } : { error: result.error }) });
       history.push(toolTurn(model.provider, call, result));
       options.log?.("agent_tool", { tool: call.name, ok: result.ok, code: result.code, durationMs: result.durationMs });
     }
-    if (stop === "deadline") break;
+    if (stop === "deadline" || stop === "aborted") break;
   }
 
   return {

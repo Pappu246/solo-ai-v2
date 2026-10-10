@@ -297,6 +297,65 @@ Deno.test("requested=false returns before touching env or network", async () => 
   assert(!called, "no env reads or fetches when disabled");
 });
 
+Deno.test("cancellation before the first round never reaches the provider", async () => {
+  const controller = new AbortController();
+  controller.abort();
+  let fetched = false;
+  const result = await runAgentLoop({
+    model: model(),
+    messages,
+    ctx: ctx(),
+    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    fetchImpl: async () => { fetched = true; return new Response("{}", { status: 200 }); },
+    requested: true,
+    registry: testRegistry(),
+    signal: controller.signal,
+  });
+  assertEquals(result.stop, "aborted");
+  assertEquals(result.rounds, 0);
+  assertEquals(result.records.length, 0);
+  assertEquals(fetched, false, "an aborted loop must not call the provider");
+});
+
+Deno.test("cancellation between tool calls stops queued tools and the next round", async () => {
+  const controller = new AbortController();
+  const executed: string[] = [];
+  const registry = new ToolRegistry().register({
+    name: "abort_now",
+    description: "Aborts the request.",
+    parameters: { type: "object", properties: {} },
+    parse: () => ({}),
+    execute: async () => { controller.abort(); executed.push("abort_now"); return "{}"; },
+  }).register({
+    name: "never_run",
+    description: "Must not execute after cancellation.",
+    parameters: { type: "object", properties: {} },
+    parse: () => ({}),
+    execute: async () => { executed.push("never_run"); return "{}"; },
+  });
+  let fetches = 0;
+  const twoCalls = {
+    choices: [{ message: { role: "assistant", content: "", tool_calls: [
+      { id: "c1", type: "function", function: { name: "abort_now", arguments: "{}" } },
+      { id: "c2", type: "function", function: { name: "never_run", arguments: "{}" } },
+    ] } }],
+  };
+  const result = await runAgentLoop({
+    model: model(),
+    messages,
+    ctx: ctx(),
+    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    fetchImpl: async () => { fetches += 1; return new Response(JSON.stringify(twoCalls), { status: 200 }); },
+    requested: true,
+    registry,
+    signal: controller.signal,
+  });
+  assertEquals(result.stop, "aborted");
+  assertEquals(executed, ["abort_now"], "the queued tool after the abort must not run");
+  assertEquals(fetches, 1, "no further provider round after cancellation");
+  assertEquals(result.records.length, 1, "only the in-flight tool is recorded");
+});
+
 // Compile-time guard: AgentResult shape stays stable for index.ts consumers.
 const _shapeCheck: (r: AgentResult) => string = r => r.stop;
 void _shapeCheck;
