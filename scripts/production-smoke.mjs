@@ -8,8 +8,10 @@
  *   SMOKE_SUPABASE_URL   Supabase project URL
  *
  * Authenticated image-search gate:
- *   SMOKE_JWT            short-lived user access token for a dedicated smoke user
- *   SMOKE_REQUIRE_AUTH   set to "true" so a missing token fails instead of skips
+ *   SMOKE_JWT            optional access token (normally obtained by login below)
+ *   SMOKE_USER_EMAIL     dedicated test user's email (GitHub Actions secret)
+ *   SMOKE_USER_PASSWORD  dedicated test user's password (GitHub Actions secret)
+ *   SMOKE_REQUIRE_AUTH   set to "true" so missing credentials fail instead of skip
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -19,8 +21,11 @@
 const timeoutMs = Number(process.env.SMOKE_TIMEOUT_MS || 15000);
 const baseUrl = requiredUrl("SMOKE_BASE_URL");
 const supabaseUrl = requiredUrl("SMOKE_SUPABASE_URL");
-const jwt = process.env.SMOKE_JWT?.trim() || "";
+let jwt = process.env.SMOKE_JWT?.trim() || "";
 const requireAuth = process.env.SMOKE_REQUIRE_AUTH === "true";
+const smokeEmail = process.env.SMOKE_USER_EMAIL?.trim() || "";
+const smokePassword = process.env.SMOKE_USER_PASSWORD || "";
+const publishableKey = process.env.SMOKE_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
 
 const checks = [];
 
@@ -94,9 +99,39 @@ async function run() {
     400,
   );
 
+  // Obtain a fresh short-lived user JWT at runtime when one was not explicitly supplied.
+  // Only a dedicated low-privilege smoke account should be used here.
+  if (!jwt && requireAuth && smokeEmail && smokePassword && publishableKey) {
+    try {
+      const loginResponse = await request(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: "POST",
+        headers: {
+          apikey: publishableKey,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ email: smokeEmail, password: smokePassword }),
+      });
+      if (loginResponse.status === 200) {
+        const loginBody = await loginResponse.json();
+        if (typeof loginBody?.access_token === "string" && loginBody.access_token.length > 0) {
+          jwt = loginBody.access_token;
+          record("authenticated smoke login", true, "Dedicated test user signed in; short-lived token obtained.");
+        } else {
+          record("authenticated smoke login", false, "Login response did not contain an access token.");
+        }
+      } else {
+        // Do not log the response body: auth providers may return sensitive details.
+        record("authenticated smoke login", false, `HTTP ${loginResponse.status}; check test-account credentials and email confirmation.`);
+      }
+    } catch (error) {
+      record("authenticated smoke login", false, error instanceof Error ? error.message : String(error));
+    }
+  }
+
   if (jwt) {
     const authHeaders = {
       authorization: `Bearer ${jwt}`,
+      apikey: publishableKey,
       "content-type": "application/json",
     };
 
@@ -108,8 +143,7 @@ async function run() {
       });
 
       if (response.status !== 200) {
-        const body = await response.text();
-        record("authenticated image-search", false, `HTTP ${response.status}; body=${body.slice(0, 120)}`);
+        record("authenticated image-search", false, `HTTP ${response.status}; authenticated request was rejected.`);
       } else {
         const body = await response.json();
         const results = Array.isArray(body?.results) ? body.results : [];
@@ -143,7 +177,7 @@ async function run() {
     record(
       "authenticated credentials",
       false,
-      "SMOKE_JWT is required when SMOKE_REQUIRE_AUTH=true; authenticated checks were not run.",
+      "No session token found. Configure SMOKE_USER_EMAIL and SMOKE_USER_PASSWORD secrets (or SMOKE_JWT) before running the authenticated gate.",
     );
   } else {
     console.log("[INFO] Authenticated image-search/thumbnail checks skipped: SMOKE_JWT is not set.");

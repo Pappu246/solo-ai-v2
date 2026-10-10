@@ -1,6 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
-const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com"]);
+const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com", "upload.wikimedia.org"]);
 const MAX_BYTES = 5 * 1024 * 1024;
 function isAllowedHost(hostname: string) { const host = hostname.toLowerCase().replace(/\.$/, ""); return [...ALLOWED_HOSTS].some(base => host === base || host.endsWith(`.${base}`)); }
 function cors(req: Request): HeadersInit { return { "Access-Control-Allow-Origin": req.headers.get("Origin") || "*", "Vary": "Origin", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable" }; }

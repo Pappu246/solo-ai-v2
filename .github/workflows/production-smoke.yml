@@ -11,6 +11,9 @@ on:
   deployment_status:
   pull_request:
     branches: [main]
+  workflow_run:
+    workflows: ["Deploy Supabase AI Functions"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -21,7 +24,8 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -35,7 +39,9 @@ jobs:
 
   authenticated-image-smoke:
     name: Authenticated image-search + thumbnail smoke
-    if: github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -43,8 +49,12 @@ jobs:
 
       - name: Run authenticated image smoke
         env:
-          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
-          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL || 'https://solo-ai-v2-mu.vercel.app' }}
+          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://vqbzyutqgjbfdwxjkplq.supabase.co' }}
           SMOKE_JWT: ${{ secrets.SMOKE_JWT }}
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+          # Public client key (not a service-role key); used only to sign in as the smoke user.
+          SMOKE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CGJc_QEGr-DBNIR7hjJI_w_vj_NmxlA
           SMOKE_REQUIRE_AUTH: "true"
         run: node scripts/production-smoke.mjs
