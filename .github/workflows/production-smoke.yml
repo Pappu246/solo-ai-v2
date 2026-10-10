@@ -43,8 +43,12 @@ jobs:
 
       - name: Run authenticated image smoke
         env:
-          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
-          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL }}
+          SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL || 'https://solo-ai-v2-mu.vercel.app' }}
+          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://vqbzyutqgjbfdwxjkplq.supabase.co' }}
           SMOKE_JWT: ${{ secrets.SMOKE_JWT }}
+          SMOKE_USER_EMAIL: ${{ secrets.SMOKE_USER_EMAIL }}
+          SMOKE_USER_PASSWORD: ${{ secrets.SMOKE_USER_PASSWORD }}
+          # Public client key (not a service-role key); used only to sign in as the smoke user.
+          SMOKE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CGJc_QEGr-DBNIR7hjJI_w_vj_NmxlA
           SMOKE_REQUIRE_AUTH: "true"
         run: node scripts/production-smoke.mjs
