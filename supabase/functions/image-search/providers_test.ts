@@ -94,15 +94,52 @@ function makeGoogleCSE(items: Array<{ link: string; title: string; displayLink?:
 
 // ── Provider Tests ──────────────────────────────────────────────────────────
 
-Deno.test("provider: createImageSearchProvider returns null when keys are missing", () => {
+Deno.test("provider: selects Wikimedia Commons fallback when Google credentials are missing", () => {
   const provider = createImageSearchProvider(noKeys);
-  assertEquals(provider, null);
+  assert(provider !== null);
+  assertEquals(provider.name, "wikimedia-commons");
 });
 
 Deno.test("provider: createImageSearchProvider returns a provider when keys are present", () => {
   const provider = createImageSearchProvider(env);
   assert(provider !== null);
   assertEquals(provider.name, "google-cse");
+});
+
+Deno.test("provider: Wikimedia Commons fallback parses attributed thumbnail results", async () => {
+  const calls: { url: URL | null } = { url: null };
+  const fetchImpl: FetchLike = async input => {
+    calls.url = new URL(input);
+    return jsonOk({
+      query: {
+        pages: [{
+          title: "File:Golden Retriever Puppy.jpg",
+          fullurl: "https://commons.wikimedia.org/wiki/File:Golden_Retriever_Puppy.jpg",
+          imageinfo: [{
+            url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Golden_Retriever_Puppy.jpg",
+            thumburl: "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Golden_Retriever_Puppy.jpg/320px-Golden_Retriever_Puppy.jpg",
+            width: 800,
+            height: 600,
+            mime: "image/jpeg",
+          }],
+        }],
+      },
+    });
+  };
+
+  const provider = createImageSearchProvider(noKeys, fetchImpl);
+  const results = await provider.search("golden retriever puppies");
+  assertEquals(provider.name, "wikimedia-commons");
+  assertEquals(results.length, 1);
+  assertEquals(results[0].title, "Golden Retriever Puppy.jpg");
+  assertEquals(results[0].sourceName, "Wikimedia Commons");
+  assertEquals(results[0].sourceUrl, "https://commons.wikimedia.org/wiki/File:Golden_Retriever_Puppy.jpg");
+  assert(results[0].thumbnail.startsWith("https://upload.wikimedia.org/"));
+  assert(calls.url !== null, "expected the Commons API to be called");
+  const requestUrl = calls.url as URL;
+  assertEquals(requestUrl.searchParams.get("gsrnamespace"), "6");
+  assertEquals(requestUrl.searchParams.get("iiurlwidth"), "320");
+  assertEquals(requestUrl.searchParams.get("gsrsearch"), "golden retriever puppies");
 });
 
 Deno.test("provider: GoogleCSEProvider parses valid results", async () => {
