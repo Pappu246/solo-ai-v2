@@ -35,7 +35,9 @@ jobs:
 
   authenticated-image-smoke:
     name: Authenticated image-search + thumbnail smoke
-    if: github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true
+    if: >-
+      (github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true) ||
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
