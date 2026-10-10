@@ -41,6 +41,29 @@ export const DEFAULT_LIMITS: UsageLimits = {
 
 export type EnvReader = (name: string) => string | undefined;
 
+/**
+ * Canonical scope allow-list, mirrored by the `consume_usage` DB ceiling
+ * (see migrations/20261007150000_harden_usage_controls.sql). A scope outside
+ * this set is refused client-side AND rejected by the database, so a forged or
+ * buggy caller can never mint an unbounded counter row.
+ */
+export const USAGE_SCOPES = new Set([
+  "chat_tokens",
+  "chat_minute",
+  "chat_day",
+  "image_minute",
+  "image_day",
+]);
+
+/** Hard per-scope ceilings; a request may lower but never raise these. */
+export const SCOPE_CEILINGS: Record<string, number> = {
+  chat_tokens: 1_000_000_000,
+  chat_minute: 10_000,
+  chat_day: 1_000_000,
+  image_minute: 10_000,
+  image_day: 1_000_000,
+};
+
 function intFromEnv(env: EnvReader, name: string, fallback: number): number {
   const raw = env(name);
   if (raw === undefined || raw.trim() === "") return fallback;
@@ -95,10 +118,17 @@ export class SupabaseUsageStore implements UsageStore {
   constructor(private readonly client: RpcClient) {}
 
   async consume(input: ConsumeInput): Promise<ConsumeResult> {
+    // Defense in depth (the DB enforces this too): refuse unknown scopes and
+    // never send a limit above the operator ceiling for the scope.
+    if (!USAGE_SCOPES.has(input.scope)) {
+      throw new Error(`usage store unavailable: scope not permitted`);
+    }
+    const ceiling = SCOPE_CEILINGS[input.scope] ?? 0;
+    const limit = Math.max(1, Math.min(input.limit, ceiling));
     const { data, error } = await this.client.rpc("consume_usage", {
       p_user_id: input.userId,
       p_scope: input.scope,
-      p_limit: input.limit,
+      p_limit: limit,
       p_window_seconds: input.windowSeconds,
       p_amount: input.amount ?? 1,
       p_tokens: input.tokens ?? 0,

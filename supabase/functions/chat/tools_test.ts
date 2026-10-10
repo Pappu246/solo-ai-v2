@@ -5,8 +5,10 @@ import {
   ToolRegistry,
   ToolUnavailableError,
   createDefaultRegistry,
+  evaluateArithmetic,
   sanitizeOutput,
   type ToolContext,
+  type ToolData,
   type ToolSpec,
 } from "./tools.ts";
 
@@ -192,9 +194,16 @@ Deno.test("outputs are JSON-capped before reaching the model", async () => {
 
 Deno.test("declarations expose registered tools in provider format", () => {
   const declarations = createDefaultRegistry().declarations();
-  assertEquals(declarations.length, 2);
+  assertEquals(declarations.length, 6);
   const names = declarations.map(d => d.function.name).sort();
-  assertEquals(names, ["current_time", "web_search"]);
+  assertEquals(names, [
+    "calculator",
+    "conversation_read",
+    "conversation_search",
+    "current_time",
+    "knowledge_search",
+    "web_search",
+  ]);
   const search = declarations.find(d => d.function.name === "web_search")!;
   assertEquals(search.type, "function");
   assertEquals(search.function.parameters.required, ["query"]);
@@ -246,6 +255,58 @@ Deno.test("web_search degrades cleanly when disabled", async () => {
   assertIncludes(result.error ?? "", "not configured");
 });
 
+Deno.test("calculator evaluates arithmetic and rejects non-arithmetic input", async () => {
+  const registry = createDefaultRegistry();
+  const cases: Array<[unknown, number | string]> = [
+    [{ expression: "2 + 2" }, 4],
+    [{ expression: "(1 + 2) * 3" }, 9],
+    [{ expression: "2 ** 10" }, 1024],
+    [{ expression: "-5 + 10" }, 5],
+    [{ expression: "10 / 4" }, 2.5],
+    [{ expression: "10 % 3" }, 1],
+    [{ expression: "0.5 * 4" }, 2],
+  ];
+  for (const [args, expected] of cases) {
+    // A fresh session per call keeps the assertions independent of the
+    // per-session call budget (which is exercised separately).
+    const result = await registry.session(ctx()).call("calculator", args);
+    assertEquals(result.ok, true, `expected success for ${JSON.stringify(args)}, got ${result.error ?? ""}`);
+    assertEquals(JSON.parse(result.output!).value, expected);
+  }
+
+  // Invalid / dangerous input is refused before it can evaluate anything.
+  for (const bad of [
+    { expression: "process.exit(1)" },
+    { expression: "alert(1)" },
+    { expression: "2 +" },
+    { expression: "" },
+    { expression: "a".repeat(300) },
+    { expression: "2 ** 5 ** 5 ** 5" },
+  ]) {
+    const result = await registry.session(ctx()).call("calculator", bad);
+    assert(result.ok === false || Number.isFinite(JSON.parse(result.output!).value), `unsafe expression must not produce a value: ${JSON.stringify(bad)}`);
+    if (!result.ok) assert(["invalid_arguments", "failed"].includes(result.code ?? ""), `unexpected code ${result.code}`);
+  }
+  // Missing expression is an argument error with a safe message.
+  const missing = await registry.session(ctx()).call("calculator", {});
+  assertEquals(missing.code, "invalid_arguments");
+  assertIncludes(missing.error ?? "", "`expression` is required");
+});
+
+Deno.test("evaluateArithmetic handles precedence, unary and rejects junk", () => {
+  assertEquals(evaluateArithmetic("2 + 3 * 4"), 14);
+  assertEquals(evaluateArithmetic("(2 + 3) * 4"), 20);
+  assertEquals(evaluateArithmetic("-3 ** 2"), -9); // JS precedence: unary minus binds looser than **
+  assertEquals(evaluateArithmetic("100 / 10 / 2"), 5);
+  assertEquals(evaluateArithmetic("2 * (3 + (4 * 5))"), 46);
+  assertEquals(evaluateArithmetic("  7  "), 7);
+  assertEquals(evaluateArithmetic("2+2"), 4);
+  for (const junk of ["foo", "1,2", "1..2", "2 3", "(2", "2)", "", "Math.random()", "2**5**5**5**5**5**5**5"]) {
+    const value = evaluateArithmetic(junk);
+    assert(value === null || Number.isFinite(value), `must not yield a non-finite value: ${junk}`);
+  }
+});
+
 Deno.test("web_search input limits are enforced", async () => {
   const session = createDefaultRegistry().session(ctx());
   const empty = await session.call("web_search", { query: "   " });
@@ -255,4 +316,107 @@ Deno.test("web_search input limits are enforced", async () => {
   const badLimit = await session.call("web_search", { query: "ok", limit: 99 });
   assertEquals(badLimit.code, "invalid_arguments");
   assertIncludes(badLimit.error ?? "", "between 1 and 10");
+});
+
+// ── user-scoped retrieval tools ─────────────────────────────────────────────
+
+/** A deterministic in-memory stand-in for the RLS-enforced data accessor. */
+function fakeData(overrides: Partial<ToolData> = {}): ToolData {
+  return {
+    listConversations: async () => [
+      { id: "c1", title: "Q3 planning", project_id: null },
+      { id: "c2", title: "Recipe ideas", project_id: "p1" },
+      { id: "c3", title: "Planning offsite", project_id: null },
+    ],
+    listMessages: async (conversationId) =>
+      conversationId === "c1"
+        ? [
+            { role: "user", content: "Draft the Q3 plan" },
+            { role: "assistant", content: "Here is a draft plan." },
+          ]
+        : [],
+    searchAll: async () => [
+      { kind: "file", title: "roadmap.md", snippet: "Q3 goals…" },
+      { kind: "memory", title: "prefers concise answers", snippet: "user prefers…" },
+    ],
+    ...overrides,
+  };
+}
+
+Deno.test("conversation_search filters by title and honors the limit", async () => {
+  const session = createDefaultRegistry().session(ctx({ data: fakeData() }));
+  const all = await session.call("conversation_search", { query: "plan" });
+  assertEquals(all.ok, true, all.error ?? "");
+  const parsed = JSON.parse(all.output!);
+  // "Q3 planning" and "Planning offsite" match; "Recipe ideas" does not.
+  assertEquals(parsed.conversations.length, 2);
+  assertEquals(parsed.conversations.map((c: { id: string }) => c.id).sort(), ["c1", "c3"]);
+
+  const capped = await session.call("conversation_search", { query: "plan", limit: 1 });
+  assertEquals(JSON.parse(capped.output!).conversations.length, 1);
+});
+
+Deno.test("conversation_read returns a conversation's messages, empty for a missing one", async () => {
+  const session = createDefaultRegistry().session(ctx({ data: fakeData() }));
+  const ok = await session.call("conversation_read", { conversation_id: "c1" });
+  assertEquals(ok.ok, true, ok.error ?? "");
+  assertEquals(JSON.parse(ok.output!).messages.length, 2);
+
+  // A conversation the fake data does not return (e.g. not owned) is empty,
+  // not an error and never another user's content.
+  const missing = await session.call("conversation_read", { conversation_id: "nope" });
+  assertEquals(missing.ok, true);
+  assertEquals(JSON.parse(missing.output!).messages.length, 0);
+});
+
+Deno.test("knowledge_search returns hits and reports an empty result honestly", async () => {
+  const session = createDefaultRegistry().session(ctx({ data: fakeData() }));
+  const hits = await session.call("knowledge_search", { query: "roadmap" });
+  assertEquals(hits.ok, true, hits.error ?? "");
+  assertEquals(JSON.parse(hits.output!).results.length, 2);
+
+  const none = createDefaultRegistry().session(ctx({ data: fakeData({ searchAll: async () => [] }) }));
+  const empty = await none.call("knowledge_search", { query: "zzz" });
+  assertEquals(empty.ok, true);
+  assertEquals(JSON.parse(empty.output!).results.length, 0);
+});
+
+Deno.test("user-scoped tools are unavailable without a data accessor", async () => {
+  // No `data` in the context (e.g. deployment wired no database): the tools must
+  // report unavailable rather than fabricate or throw a raw error.
+  const session = createDefaultRegistry().session(ctx());
+  for (const [tool, args] of [
+    ["conversation_search", { query: "x" }],
+    ["conversation_read", { conversation_id: "c1" }],
+    ["knowledge_search", { query: "x" }],
+  ] as const) {
+    const result = await session.call(tool, args);
+    assertEquals(result.ok, false, `${tool} must not claim success`);
+    assertEquals(result.code, "unavailable", `${tool} should be unavailable`);
+    assertIncludes(result.error ?? "", "not available");
+  }
+});
+
+Deno.test("user-scoped tools surface a data-access failure as a safe failure", async () => {
+  const session = createDefaultRegistry().session(ctx({
+    data: fakeData({ listConversations: async () => { throw new Error("db down api_key=sk-secret"); } }),
+  }));
+  const result = await session.call("conversation_search", { query: "x" });
+  assertEquals(result.ok, false);
+  assertEquals(result.code, "failed");
+  assert(!(result.error ?? "").includes("sk-secret"), "must not leak internals");
+});
+
+Deno.test("user-scoped tools validate arguments before touching data", async () => {
+  let touched = false;
+  const session = createDefaultRegistry().session(ctx({
+    data: fakeData({ listConversations: async () => { touched = true; return []; } }),
+  }));
+  const missing = await session.call("conversation_search", {});
+  assertEquals(missing.code, "invalid_arguments");
+  const tooLong = await session.call("conversation_search", { query: "a".repeat(121) });
+  assertEquals(tooLong.code, "invalid_arguments");
+  const badLimit = await session.call("conversation_search", { query: "ok", limit: 999 });
+  assertEquals(badLimit.code, "invalid_arguments");
+  assertEquals(touched, false, "invalid input must be rejected before any data access");
 });

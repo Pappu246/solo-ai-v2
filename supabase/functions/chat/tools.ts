@@ -38,6 +38,29 @@ export interface ToolContext {
   fetchImpl?: FetchLike;
   /** Structured log sink; receives already-redacted fields. */
   log?: (event: string, fields: Record<string, unknown>) => void;
+  /**
+   * Optional read-only, user-scoped data accessor (RLS-enforced Supabase
+   * client in production, injected fake in tests). When absent the retrieval
+   * tools report themselves as unavailable rather than failing or guessing.
+   * It is deliberately read-only: the interface exposes no writes, so no tool
+   * can mutate state through it.
+   */
+  data?: ToolData;
+}
+
+/**
+ * A read-only, user-scoped view of the caller's workspace. Every method is
+ * implicitly bounded by Row Level Security on the server, and the edge layer
+ * additionally clamps `limit` and caps result length, so a tool cannot be used
+ * to read another user's data or to pull an unbounded payload into context.
+ */
+export interface ToolData {
+  /** RLS-scoped `conversations` rows (id, title, project_id, updated_at). */
+  listConversations(limit: number): Promise<Array<{ id: string; title: string; project_id: string | null }>>;
+  /** RLS-scoped `messages` for one of the caller's conversations. */
+  listMessages(conversationId: string, limit: number): Promise<Array<{ role: string; content: string }>>;
+  /** RLS-scoped `search_all` RPC across the caller's files/projects/memories. */
+  searchAll(query: string, limit: number): Promise<Array<{ kind: string; title: string; snippet: string }>>;
 }
 
 export interface ToolSpec<A> {
@@ -424,7 +447,253 @@ const web_search: ToolSpec<{ query: string; limit: number }> = {
   },
 };
 
+const calculator: ToolSpec<{ expression: string }> = {
+  name: "calculator",
+  description: "Evaluate an arithmetic expression (+ - * / % ** parentheses, unary minus). Returns the numeric result. Use for math you cannot do reliably in your head.",
+  parameters: {
+    type: "object",
+    properties: {
+      expression: { type: "string", description: "Arithmetic expression, e.g. `2 * (3 + 4)`." },
+    },
+    required: ["expression"],
+  },
+  timeoutMs: 2000,
+  parse: raw => ({ expression: requireString(raw, "expression", { max: 200 }) }),
+  execute: async args => {
+    const value = evaluateArithmetic(args.expression);
+    if (value === null) throw new ToolInputError(`\`expression\` is not a valid arithmetic expression: ${args.expression}`);
+    if (!Number.isFinite(value)) throw new ToolInputError("The expression did not evaluate to a finite number.");
+    return JSON.stringify({ expression: args.expression, value });
+  },
+};
+
+/**
+ * A tiny, dependency-free arithmetic evaluator. It never touches the network,
+ * the filesystem or eval — only a fixed grammar of numbers and operators, so
+ * an untrusted model cannot reach anything through it.
+ */
+export function evaluateArithmetic(input: string): number | null {
+  const tokens = tokenizeArithmetic(input);
+  if (!tokens) return null;
+  let pos = 0;
+
+  const peek = () => tokens[pos];
+  const eat = (tok: string) => { if (tokens[pos] === tok) { pos++; return true; } return false; };
+
+  // Shared descent budget: every recursive step consumes one, so no input
+  // (however deeply nested or chained) can blow the stack or loop forever.
+  // 200 tokens can never need more than ~400 steps, so this is generous.
+  let budget = 400;
+  const spend = (): boolean => (--budget >= 0);
+
+  const parsePrimary = (): number | null => {
+    if (!spend()) return null;
+    const tok = peek();
+    if (tok === undefined) return null;
+    if (tok === "(") {
+      pos++;
+      const v = parseAddSub();
+      if (v === null || !eat(")")) return null;
+      return v;
+    }
+    if (tok === "+") { pos++; return parsePrimary(); }
+    if (tok === "-") { pos++; const v = parsePrimary(); return v === null ? null : -v; }
+    if (/^\d+(\.\d+)?$/.test(tok)) { pos++; return Number(tok); }
+    return null;
+  };
+
+  const parseUnary = (): number | null => {
+    if (!spend()) return null;
+    let sign = 1;
+    while (peek() === "-" || peek() === "+") {
+      if (peek() === "-") sign = -sign;
+      pos++;
+    }
+    const v = parsePower();
+    return v === null ? null : sign * v;
+  };
+
+  // `**` is right-associative and binds tighter than unary minus, so
+  // `-3 ** 2 === -(3 ** 2) === -9` (JS semantics). The exponent is parsed as
+  // a unary/power chain, so `2 ** -1` works while `2 ** 5 ** 5` stays bounded
+  // by the shared descent budget instead of recursing forever.
+  const parsePower = (): number | null => {
+    if (!spend()) return null;
+    const base = parsePrimary();
+    if (base === null) return null;
+    if (peek() !== "**") return base;
+    pos++;
+    const exp = parseUnary();
+    if (exp === null) return null;
+    return base ** exp;
+  };
+
+  const parseMulDiv = (): number | null => {
+    let left = parseUnary();
+    if (left === null) return null;
+    for (;;) {
+      const op = peek();
+      if (op !== "*" && op !== "/" && op !== "%") return left;
+      pos++;
+      const right = parseUnary();
+      if (right === null) return null;
+      left = op === "*" ? left * right : op === "/" ? left / right : left % right;
+    }
+  };
+
+  const parseAddSub = (): number | null => {
+    let left = parseMulDiv();
+    if (left === null) return null;
+    for (;;) {
+      const op = peek();
+      if (op !== "+" && op !== "-") return left;
+      pos++;
+      const right = parseMulDiv();
+      if (right === null) return null;
+      left = op === "+" ? left + right : left - right;
+    }
+  };
+
+  const value = parseAddSub();
+  if (value === null || pos !== tokens.length) return null;
+  // Overflow from exponent chains yields Infinity/NaN; report as unparseable
+  // so the tool refuses rather than returning a meaningless number.
+  return Number.isFinite(value) ? value : null;
+}
+
+function tokenizeArithmetic(input: string): string[] | null {
+  const src = input.replace(/\s+/g, "");
+  if (!src || src.length > 200) return null;
+  const tokens: string[] = [];
+  let i = 0;
+  while (i < src.length) {
+    const ch = src[i]!;
+    if (ch === "(") { tokens.push(ch); i++; continue; }
+    if (ch === ")") { tokens.push(ch); i++; continue; }
+    if (ch === "+" || ch === "-" || ch === "*" || ch === "/" || ch === "%") {
+      // `**` is a single power operator.
+      if (ch === "*" && src[i + 1] === "*") { tokens.push("**"); i += 2; continue; }
+      tokens.push(ch); i++; continue;
+    }
+    const num = /^\d+(\.\d+)?/.exec(src.slice(i));
+    if (num) { tokens.push(num[0]); i += num[0].length; continue; }
+    return null; // any other character (letters, dots, commas…) is rejected
+  }
+  return tokens;
+}
+
+/**
+ * Guard for the user-scoped tools: without a `data` accessor the tool cannot
+ * honestly claim it can read anything, so it reports itself unavailable instead
+ * of throwing or returning fabricated results.
+ */
+function requireData(ctx: ToolContext): ToolData {
+  if (!ctx.data) {
+    throw new ToolUnavailableError(
+      "Workspace search is not available in this deployment.",
+    );
+  }
+  return ctx.data;
+}
+
+/** Clamp a caller-supplied result window; models sometimes overshoot. */
+function clampLimit(value: number, max: number): number {
+  if (!Number.isFinite(value)) return max;
+  return Math.min(Math.max(Math.floor(value), 1), max);
+}
+
+const conversation_search: ToolSpec<{ query: string; limit: number }> = {
+  name: "conversation_search",
+  description: "Search the user's own saved conversations by title. Returns matching conversation ids and titles only (never message bodies). Use to resume or reference a past chat.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Title substring to match, 1-120 characters." },
+      limit: { type: "integer", description: "Max conversations to return (1-20, default 8)." },
+    },
+    required: ["query"],
+  },
+  timeoutMs: 4000,
+  parse: raw => ({
+    query: requireString(raw, "query", { max: 120 }),
+    limit: optionalInt(raw, "limit", { min: 1, max: 20, def: 8 }),
+  }),
+  execute: async (args, ctx) => {
+    const data = requireData(ctx);
+    const limit = clampLimit(args.limit, 20);
+    const all = await data.listConversations(limit * 4);
+    const needle = args.query.toLowerCase();
+    const matches = all
+      .filter(c => c.title.toLowerCase().includes(needle))
+      .slice(0, limit)
+      .map(c => ({ id: c.id, title: c.title, project_id: c.project_id }));
+    if (!matches.length) return JSON.stringify({ conversations: [], note: "No matching conversations." });
+    return JSON.stringify({ conversations: matches });
+  },
+};
+
+const conversation_read: ToolSpec<{ conversation_id: string; limit: number }> = {
+  name: "conversation_read",
+  description: "Read the most recent messages of one of the user's own conversations. Refuses any conversation the signed-in user does not own (enforced by the database).",
+  parameters: {
+    type: "object",
+    properties: {
+      conversation_id: { type: "string", description: "The conversation id (from conversation_search)." },
+      limit: { type: "integer", description: "Max recent messages to return (1-40, default 12)." },
+    },
+    required: ["conversation_id"],
+  },
+  timeoutMs: 5000,
+  parse: raw => ({
+    conversation_id: requireString(raw, "conversation_id", { max: 64 }),
+    limit: optionalInt(raw, "limit", { min: 1, max: 40, def: 12 }),
+  }),
+  execute: async (args, ctx) => {
+    const data = requireData(ctx);
+    const limit = clampLimit(args.limit, 40);
+    const messages = await data.listMessages(args.conversation_id, limit);
+    if (!messages.length) {
+      return JSON.stringify({
+        messages: [],
+        note: "No messages found. The conversation may not exist or may not belong to this user.",
+      });
+    }
+    return JSON.stringify({ messages });
+  },
+};
+
+const knowledge_search: ToolSpec<{ query: string; limit: number }> = {
+  name: "knowledge_search",
+  description: "Full-text search across the user's own uploaded files, projects and memories. Returns kind, title and a short snippet per hit. Use to ground answers in the user's own documents.",
+  parameters: {
+    type: "object",
+    properties: {
+      query: { type: "string", description: "Search terms, 1-200 characters." },
+      limit: { type: "integer", description: "Max hits to return (1-20, default 6)." },
+    },
+    required: ["query"],
+  },
+  timeoutMs: 6000,
+  parse: raw => ({
+    query: requireString(raw, "query", { max: 200 }),
+    limit: optionalInt(raw, "limit", { min: 1, max: 20, def: 6 }),
+  }),
+  execute: async (args, ctx) => {
+    const data = requireData(ctx);
+    const limit = clampLimit(args.limit, 20);
+    const hits = await data.searchAll(args.query, limit);
+    if (!hits.length) return JSON.stringify({ results: [], note: "No matching files, projects or memories." });
+    return JSON.stringify({ results: hits.slice(0, limit) });
+  },
+};
+
 /** The default tool set registered by the chat function's agent loop. */
 export function createDefaultRegistry(): ToolRegistry {
-  return new ToolRegistry().register(current_time).register(web_search);
+  return new ToolRegistry()
+    .register(current_time)
+    .register(calculator)
+    .register(web_search)
+    .register(conversation_search)
+    .register(conversation_read)
+    .register(knowledge_search);
 }

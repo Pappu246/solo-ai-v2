@@ -20,6 +20,9 @@ import {
 import {
   fetchSource,
   isPrivateIpv4,
+  isPrivateIpv6,
+  normalizeIpv4,
+  parseIpv6,
   stripHtml,
   UnsafeUrlError,
   validatePublicHttpUrl,
@@ -54,6 +57,8 @@ async function assertRejectsUnsafe(fn: () => Promise<unknown>): Promise<void> {
 }
 
 const noDns = async (): Promise<string[]> => [];
+/** Resolves any hostname to a public address (positive-path fixture). */
+const publicDnsAll = async (): Promise<string[]> => ["93.184.216.34"];
 const publicDns = async (host: string): Promise<string[]> =>
   host === "resolves-internal.example" ? ["10.0.0.5"] : ["93.184.216.34"];
 
@@ -91,7 +96,7 @@ Deno.test("ssrf: private, loopback, link-local and metadata addresses are reject
 
 Deno.test("ssrf: public URLs are allowed", async () => {
   for (const url of ["https://example.com/article", "http://example.org:80/x", "https://sub.domain.co.uk/a?b=c"]) {
-    const parsed = await validatePublicHttpUrl(url, noDns);
+    const parsed = await validatePublicHttpUrl(url, publicDnsAll);
     assert(parsed.href.startsWith("http"));
   }
 });
@@ -112,6 +117,85 @@ Deno.test("ssrf: private range classifier", () => {
   }
 });
 
+Deno.test("ssrf: unusual IPv4 representations normalise before classification", async () => {
+  // Decimal, hex and octal forms of 127.0.0.1.
+  assertEquals(normalizeIpv4("2130706433"), "127.0.0.1");
+  assertEquals(normalizeIpv4("0x7f.0.0.1"), "127.0.0.1");
+  assertEquals(normalizeIpv4("0177.0.0.1"), "127.0.0.1");
+  assertEquals(normalizeIpv4("0x7f000001"), "127.0.0.1");
+  assert(isPrivateIpv4("2130706433"), "decimal 127.0.0.1 must be private");
+  assert(isPrivateIpv4("0x7f000001"), "hex 127.0.0.1 must be private");
+  // Public equivalents stay public.
+  assertEquals(normalizeIpv4("0x08080808"), "8.8.8.8");
+  assert(!isPrivateIpv4("0x08080808"), "hex 8.8.8.8 must be public");
+  // Out-of-range / malformed are not IPv4.
+  assertEquals(normalizeIpv4("256.1.1.1"), null);
+  assertEquals(normalizeIpv4("1.2.3"), null);
+  assertEquals(normalizeIpv4("08.1.1.1"), null, "bare leading-zero decimal octet is invalid");
+  assertEquals(normalizeIpv4("99999999999999999999"), null);
+
+  // URLs that embed these forms must be rejected, not silently allowed.
+  for (const url of ["http://2130706433/", "http://0x7f000001/", "http://0177.0.0.1/", "http://127.1/"]) {
+    await assertRejectsUnsafe(() => validatePublicHttpUrl(url, noDns));
+  }
+});
+
+Deno.test("ssrf: IPv6 literals and IPv4-mapped forms are classified", async () => {
+  // Parser correctness for compressed and embedded forms.
+  assertEquals(parseIpv6("::1")?.length, 8);
+  assertEquals(parseIpv6("::")?.every(h => h === 0), true);
+  assertEquals(parseIpv6("2001:db8::1"), [0x2001, 0x0db8, 0, 0, 0, 0, 0, 1]);
+  assertEquals(parseIpv6("::ffff:127.0.0.1"), [0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001]);
+  assertEquals(parseIpv6("::ffff:7f00:1"), [0, 0, 0, 0, 0, 0xffff, 0x7f00, 0x0001]);
+  assertEquals(parseIpv6("bad::zz"), null);
+
+  // Private classifications.
+  for (const ip of ["::1", "::", "fc00::1", "fd12:3456::1", "fe80::1", "ff02::1", "::ffff:127.0.0.1", "::ffff:10.0.0.1", "::ffff:7f00:1", "64:ff9b::169.254.169.254"]) {
+    assert(isPrivateIpv6(ip), `${ip} must be private`);
+  }
+  // Public IPv6 and a public mapped address stay public.
+  for (const ip of ["2001:db8::1", "2606:4700:4700::1111", "::ffff:8.8.8.8"]) {
+    assert(!isPrivateIpv6(ip), `${ip} must be public`);
+  }
+
+  // Mapped private literals in URL form must be rejected.
+  for (const url of ["http://[::ffff:127.0.0.1]/", "http://[::ffff:7f00:1]/", "http://[::ffff:a00:1]/", "http://[::ffff:169.254.169.254]/"]) {
+    await assertRejectsUnsafe(() => validatePublicHttpUrl(url, noDns));
+  }
+  // A public mapped literal is allowed.
+  const okMapped = await validatePublicHttpUrl("http://[::ffff:8.8.8.8]/", noDns);
+  assert(okMapped.hostname.includes("::ffff"));
+});
+
+Deno.test("ssrf: DNS failure and empty answers are denied (fail-closed)", async () => {
+  // The resolver throws — must be treated as unsafe, never as "assume public".
+  const throwing = async (): Promise<string[]> => { throw new Error("resolver down"); };
+  await assertRejectsUnsafe(() => validatePublicHttpUrl("https://example.com/", throwing));
+  // The resolver returns an empty array — also unsafe.
+  await assertRejectsUnsafe(() => validatePublicHttpUrl("https://example.com/", async () => []));
+  // Non-IP garbage answers count as unusable → unsafe.
+  await assertRejectsUnsafe(() => validatePublicHttpUrl("https://example.com/", async () => ["not-an-ip"]));
+});
+
+Deno.test("ssrf: private DNS answers are rejected, public answers allowed", async () => {
+  for (const answer of ["10.0.0.5", "127.0.0.1", "169.254.169.254", "::1", "fc00::1", "::ffff:192.168.1.1"]) {
+    await assertRejectsUnsafe(() =>
+      validatePublicHttpUrl("https://mixed-dns.example/", async () => ["93.184.216.34", answer]))
+    ;
+  }
+  // A fully public answer set passes.
+  const ok = await validatePublicHttpUrl("https://example.com/", async () => ["93.184.216.34", "2606:4700:4700::1111"]);
+  assertEquals(ok.hostname, "example.com");
+});
+
+Deno.test("fetch: reports the unpinned-DNS (rebinding) risk flag honestly", async () => {
+  const fetchImpl: FetchLike = async () => htmlResponse("<title>Host</title><p>ok</p>");
+  const byHost = await fetchSource("https://example.com/x", { fetchImpl, resolveDns: async () => ["93.184.216.34"] });
+  assertEquals(byHost.dnsRebindUnpinned, true, "hostname fetches cannot be pinned by the runtime");
+  const byIp = await fetchSource("http://93.184.216.34/x", { fetchImpl, resolveDns: noDns });
+  assertEquals(byIp.dnsRebindUnpinned, false, "literal-IP fetches need no DNS at request time");
+});
+
 // ── safe fetch ─────────────────────────────────────────────────────────────
 
 function htmlResponse(html: string, init: ResponseInit = {}): Response {
@@ -124,7 +208,7 @@ Deno.test("fetch: extracts readable text and strips active content", async () =>
     <body><nav>Ignore me</nav><h1>Quarterly Report</h1><p>Revenue &amp; growth &mdash; details.</p>
     <script>trackEverything()</script></body></html>`;
   const fetchImpl: FetchLike = async () => htmlResponse(html);
-  const result = await fetchSource("https://example.com/report", { fetchImpl, resolveDns: noDns });
+  const result = await fetchSource("https://example.com/report", { fetchImpl, resolveDns: publicDnsAll });
   assertEquals(result.title, "Quarterly Report — Example");
   assert(!result.text.includes("alert"), "script content leaked");
   assert(!result.text.includes("trackEverything"), "script content leaked");
@@ -140,7 +224,7 @@ Deno.test("fetch: non-text content types are refused", async () => {
     headers: { "Content-Type": "application/octet-stream" },
   });
   try {
-    await fetchSource("https://example.com/blob", { fetchImpl, resolveDns: noDns });
+    await fetchSource("https://example.com/blob", { fetchImpl, resolveDns: publicDnsAll });
     throw new AssertionError("expected a rejection");
   } catch (error) {
     assert(error instanceof UnsafeUrlError, `expected UnsafeUrlError, got ${String(error)}`);
@@ -150,7 +234,7 @@ Deno.test("fetch: non-text content types are refused", async () => {
 Deno.test("fetch: oversized bodies are capped, not buffered whole", async () => {
   const big = `<html><body>${"word ".repeat(200_000)}</body></html>`;
   const fetchImpl: FetchLike = async () => htmlResponse(big);
-  const result = await fetchSource("https://example.com/big", { fetchImpl, resolveDns: noDns, maxBytes: 10_000 });
+  const result = await fetchSource("https://example.com/big", { fetchImpl, resolveDns: publicDnsAll, maxBytes: 10_000 });
   assert(result.truncated, "must report truncation");
   assert(result.text.length <= 4_000, `extracted text must stay bounded, got ${result.text.length}`);
 });
@@ -161,7 +245,7 @@ Deno.test("fetch: redirects are re-validated at every hop", async () => {
     status: 302,
     headers: { Location: "http://169.254.169.254/latest/meta-data/" },
   });
-  await assertRejectsUnsafe(() => fetchSource("https://example.com/start", { fetchImpl: evil, resolveDns: noDns }));
+  await assertRejectsUnsafe(() => fetchSource("https://example.com/start", { fetchImpl: evil, resolveDns: publicDnsAll }));
 
   // Hop 1 → public target: followed once and served.
   let hops = 0;
@@ -171,7 +255,7 @@ Deno.test("fetch: redirects are re-validated at every hop", async () => {
     assertEquals(url, "https://example.org/final");
     return htmlResponse("<title>Final</title><p>reached after redirect</p>");
   };
-  const result = await fetchSource("https://example.com/start", { fetchImpl: ok, resolveDns: noDns });
+  const result = await fetchSource("https://example.com/start", { fetchImpl: ok, resolveDns: publicDnsAll });
   assertEquals(result.finalUrl, "https://example.org/final");
   assertEquals(hops, 2);
   assert(result.text.includes("reached after redirect"));
@@ -182,7 +266,7 @@ Deno.test("fetch: plain text responses pass through", async () => {
     status: 200,
     headers: { "Content-Type": "text/plain" },
   });
-  const result = await fetchSource("https://example.com/notes.txt", { fetchImpl, resolveDns: noDns });
+  const result = await fetchSource("https://example.com/notes.txt", { fetchImpl, resolveDns: publicDnsAll });
   assertEquals(result.text, "line one line two");
   assertEquals(result.title, "");
 });

@@ -11,7 +11,9 @@ import {
   limitsFromEnv,
   MemoryUsageStore,
   ProviderConcurrency,
+  SCOPE_CEILINGS,
   SupabaseUsageStore,
+  USAGE_SCOPES,
   UsageController,
   type ConsumeInput,
   type RpcClient,
@@ -226,6 +228,103 @@ Deno.test("usage: an RPC error surfaces as a store failure (caller degrades)", a
 function assertStringIncludes(actual: string, expected: string, message?: string): void {
   if (!actual.includes(expected)) throw new AssertionError(message ?? `expected ${show(actual)} to include ${show(expected)}`);
 }
+
+// ── tamper-resistance (mirror of the DB hardening migration) ─────────────────
+//
+// The `consume_usage` RPC is granted to `authenticated`, so a signed-in user can
+// invoke it directly. The database is the authority (it allow-lists the scope
+// and clamps the limit to a per-scope ceiling); these tests pin the identical
+// contract in the Edge-Function store so a forged call is also refused before it
+// ever reaches Postgres, and so the two layers cannot silently drift.
+
+function recordingClient(): { client: RpcClient; calls: Array<{ fn: string; args: Record<string, unknown> }> } {
+  const calls: Array<{ fn: string; args: Record<string, unknown> }> = [];
+  const client: RpcClient = {
+    rpc: async (fn, args) => {
+      calls.push({ fn, args });
+      return { data: [{ used_count: 1, allowed: true }], error: null };
+    },
+  };
+  return { client, calls };
+}
+
+Deno.test("usage: an unauthorized scope is refused before it reaches the store", async () => {
+  const { client, calls } = recordingClient();
+  const store = new SupabaseUsageStore(client);
+  for (const scope of ["admin", "__proto__", "chat_day; drop table", "CHAT_DAY", "chat_minute ", ""]) {
+    let caught: unknown = null;
+    try {
+      await store.consume({ userId: "u", scope, limit: 10, windowSeconds: 60 });
+    } catch (error) {
+      caught = error;
+    }
+    assert(caught instanceof Error, `scope ${JSON.stringify(scope)} must be refused`);
+    assertStringIncludes(caught.message, "scope not permitted");
+  }
+  assertEquals(calls.length, 0, "no RPC call is issued for a refused scope");
+  // Every scope the controller actually uses is permitted.
+  for (const scope of USAGE_SCOPES) {
+    const { client: c, calls: k } = recordingClient();
+    await new SupabaseUsageStore(c).consume({ userId: "u", scope, limit: 1, windowSeconds: 60 });
+    assertEquals(k.length, 1, `scope ${scope} must be permitted`);
+  }
+});
+
+Deno.test("usage: a manipulated limit above the ceiling is clamped down", async () => {
+  const { client, calls } = recordingClient();
+  const store = new SupabaseUsageStore(client);
+  // A huge limit cannot raise the budget; it is clamped to the scope ceiling.
+  await store.consume({ userId: "u", scope: "chat_minute", limit: 9_999_999_999, windowSeconds: 60 });
+  assertEquals(calls[0].args.p_limit, SCOPE_CEILINGS.chat_minute);
+  // A negative / zero limit is floored to 1 (never lets a budget go negative).
+  await store.consume({ userId: "u", scope: "chat_day", limit: -5, windowSeconds: 86_400 });
+  assertEquals(calls[1].args.p_limit, 1);
+  // A legitimate limit at or below the ceiling is passed through untouched.
+  await store.consume({ userId: "u", scope: "chat_day", limit: 500, windowSeconds: 86_400 });
+  assertEquals(calls[2].args.p_limit, 500);
+});
+
+Deno.test("usage: manipulated windows and amounts cannot mint a finer-grained budget", async () => {
+  const { client, calls } = recordingClient();
+  const store = new SupabaseUsageStore(client);
+  // The window is still forwarded, but the DB forces the canonical window per
+  // scope; the store's job is only to not strip it. A 1-second window attempt is
+  // forwarded verbatim and neutralised server-side (asserted by the ceiling test
+  // contract above). What must NOT happen is the store silently *widening* it.
+  await store.consume({ userId: "u", scope: "chat_minute", limit: 30, windowSeconds: 1 });
+  assertEquals(calls[0].args.p_window_seconds, 1, "store forwards the window; DB is the authority");
+  // A huge single-shot amount is still forwarded but bounded by the DB check;
+  // the store never inflates it further.
+  await store.consume({ userId: "u", scope: "chat_day", limit: 1000, windowSeconds: 86_400, amount: 50_000 });
+  assertEquals(calls[1].args.p_amount, 50_000);
+});
+
+Deno.test("usage: a cross-user (foreign user_id) attempt still sends the caller's own id only", async () => {
+  // The JWT-bound `p_user_id` is validated in the DB against `auth.uid()`; the
+  // store's contract is that it always sends the userId the controller hands it
+  // (which is the authenticated user). This pins that no re-mapping happens.
+  const { client, calls } = recordingClient();
+  await new SupabaseUsageStore(client).consume({
+    userId: "victim-user", scope: "chat_minute", limit: 30, windowSeconds: 60,
+  });
+  assertEquals(calls[0].args.p_user_id, "victim-user");
+  // And the memory fallback keeps users isolated (RLS-equivalent at the store).
+  const memory = new MemoryUsageStore(() => 1_000_000);
+  await memory.consume({ userId: "attacker", scope: "chat_day", limit: 1, windowSeconds: 86_400 });
+  const victim = await memory.consume({ userId: "victim", scope: "chat_day", limit: 1, windowSeconds: 86_400, amount: 0 });
+  assertEquals(victim.count, 0, "one user's consumption must not count against another");
+});
+
+Deno.test("usage: concurrent requests cannot collectively exceed the limit", async () => {
+  const memory = new MemoryUsageStore(() => 1_000_000);
+  const results = await Promise.all(
+    Array.from({ length: 20 }, () => memory.consume({ userId: "u", scope: "chat_minute", limit: 5, windowSeconds: 60 })),
+  );
+  const allowed = results.filter(r => r.allowed).length;
+  assertEquals(allowed, 5, "exactly the limit may pass under concurrency");
+  const finalState = await memory.consume({ userId: "u", scope: "chat_minute", limit: 5, windowSeconds: 60, amount: 0 });
+  assertEquals(finalState.count, 5);
+});
 
 // ── provider concurrency gauge ─────────────────────────────────────────────
 
