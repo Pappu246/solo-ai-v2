@@ -11,6 +11,9 @@ on:
   deployment_status:
   pull_request:
     branches: [main]
+  workflow_run:
+    workflows: ["Deploy Supabase AI Functions"]
+    types: [completed]
 
 permissions:
   contents: read
@@ -21,7 +24,8 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) ||
-      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))
+      (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production')) ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -37,7 +41,7 @@ jobs:
     name: Authenticated image-search + thumbnail smoke
     if: >-
       (github.event_name == 'workflow_dispatch' && inputs.run_authenticated == true) ||
-      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository)
+      (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
