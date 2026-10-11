@@ -13,6 +13,7 @@
  *   SMOKE_USER_PASSWORD  dedicated test user's password (GitHub Actions secret)
  *   SMOKE_REQUIRE_AUTH   set to "true" so missing credentials fail instead of skip
  *   SMOKE_REQUIRE_SECURITY_HEADERS  verify expected browser response headers
+ *   SMOKE_REQUIRE_CORS_ALLOWLIST     verify approved/denied browser origins after Edge Function deploys
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -25,6 +26,7 @@ const supabaseUrl = requiredUrl("SMOKE_SUPABASE_URL");
 let jwt = process.env.SMOKE_JWT?.trim() || "";
 const requireAuth = process.env.SMOKE_REQUIRE_AUTH === "true";
 const requireSecurityHeaders = process.env.SMOKE_REQUIRE_SECURITY_HEADERS === "true";
+const requireCorsAllowlist = process.env.SMOKE_REQUIRE_CORS_ALLOWLIST === "true";
 const smokeEmail = process.env.SMOKE_USER_EMAIL?.trim() || "";
 const smokePassword = process.env.SMOKE_USER_PASSWORD || "";
 const publishableKey = process.env.SMOKE_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
@@ -68,6 +70,54 @@ async function expectStatus(name, url, expected, init) {
   }
 }
 
+async function checkCorsAllowlist() {
+  const expectedOrigin = new URL(baseUrl).origin;
+  const untrustedOrigin = "https://solo-ai-cors-probe.invalid";
+
+  for (const functionName of ["chat", "image-search"]) {
+    const endpoint = `${supabaseUrl}/functions/v1/${functionName}`;
+    const preflight = (origin) => ({
+      method: "OPTIONS",
+      headers: {
+        Origin: origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "authorization,apikey,content-type",
+      },
+    });
+
+    try {
+      const response = await request(endpoint, preflight(expectedOrigin));
+      const allowedOrigin = response.headers.get("access-control-allow-origin") || "";
+      const methods = (response.headers.get("access-control-allow-methods") || "").toLowerCase();
+      const headers = (response.headers.get("access-control-allow-headers") || "").toLowerCase();
+      const ok = response.status >= 200 && response.status < 400 &&
+        allowedOrigin === expectedOrigin &&
+        methods.includes("post") && methods.includes("options") &&
+        headers.includes("authorization") && headers.includes("apikey") && headers.includes("content-type");
+      record(
+        `${functionName} CORS allows production origin`,
+        ok,
+        `HTTP ${response.status}, allow-origin=${allowedOrigin || "(absent)"}`,
+      );
+    } catch (error) {
+      record(`${functionName} CORS allows production origin`, false, error instanceof Error ? error.message : String(error));
+    }
+
+    try {
+      const response = await request(endpoint, preflight(untrustedOrigin));
+      const allowOrigin = response.headers.get("access-control-allow-origin");
+      const ok = response.status >= 200 && response.status < 400 && !allowOrigin;
+      record(
+        `${functionName} CORS rejects untrusted origin`,
+        ok,
+        `HTTP ${response.status}, allow-origin=${allowOrigin || "(absent)"}`,
+      );
+    } catch (error) {
+      record(`${functionName} CORS rejects untrusted origin`, false, error instanceof Error ? error.message : String(error));
+    }
+  }
+}
+
 async function run() {
   console.log("Solo AI production smoke gate");
   console.log(`Target: ${baseUrl}`);
@@ -105,6 +155,8 @@ async function run() {
       record("production security headers", false, "Frontend request failed; response headers could not be verified.");
     }
   }
+
+  if (requireCorsAllowlist) await checkCorsAllowlist();
 
   await expectStatus(
     "chat auth boundary",
