@@ -13,9 +13,11 @@ jobs:
         with: { node-version: 20, cache: npm }
       - run: npm ci
       - run: npm run check
+      - name: Scan tracked source for hard-coded credentials
+        run: node scripts/check-secrets.mjs
       - run: node --check scripts/production-smoke.mjs
       - run: node --check api/csp-report.js
-      - run: npx tsc -p e2e/tsconfig.json
+      - npx tsc -p e2e/tsconfig.json
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
