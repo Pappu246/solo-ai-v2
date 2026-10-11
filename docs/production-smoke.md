@@ -37,7 +37,17 @@ The Vercel deployment sets these baseline headers on frontend routes:
 
 The smoke script checks these headers when `SMOKE_REQUIRE_SECURITY_HEADERS=true`. The workflow enables that check for manual production smoke runs and successful Vercel Production deployment events. It is disabled on pull requests because those checks target the current production URL, not the preview deployment.
 
-**Content Security Policy (CSP) is not yet enforced.** This baseline is not a complete CSP or a full security audit. CSP needs a separate compatibility pass for Supabase connectivity, remote image sources, PDF.js workers, and voice input; deploy a report-only policy and review violations before enforcement.
+## Content Security Policy — report-only
+
+The Vercel deployment emits `Content-Security-Policy-Report-Only`, with both a `Reporting-Endpoints` target and a legacy `report-uri` target. **This policy does not block resources and is not an enforcement control.** It is a first telemetry slice, not proof that all runtime flows are compatible.
+
+The initial policy reflects known runtime requirements: Supabase HTTPS/WSS connectivity, Google Fonts, local/blob PDF.js workers, microphone access via the existing Permissions Policy, and remote HTTPS images rendered from user/assistant markdown. `img-src https:` is intentionally broad because markdown currently permits remote HTTPS images; narrowing image sources requires a separate proxy/allowlist change. Inline script/style allowances remain for the existing theme bootstrap and application styling. These allowances should be revisited before enforcement.
+
+The `/api/csp-report` receiver accepts bounded JSON report bodies, caps individual requests at 32 KiB and logs at most 20 reports per warm instance per minute. It logs only directive, disposition, status, and resource **origins** for reports whose document origin is the canonical production origin. It omits full paths, query strings, source samples, original policy text, referrer, and user-agent. Reports are untrusted and sampled; absence of logs is not proof of zero violations.
+
+When `SMOKE_REQUIRE_CSP_REPORTING=true`, the smoke script checks that the report-only header and Reporting API target are present, that no enforcing CSP header is present, and that `/api/csp-report` responds as a POST-only endpoint. The workflow enables this verification on manual runs and successful Vercel Production deployment events. It does not run against production from ordinary pull-request events.
+
+Before enforcing CSP, inspect real production report logs and exercise sign-in/sign-up, authenticated chat, image search, file/PDF upload and preview, and voice input. Do not treat this report-only smoke check as completion of the CSP compatibility review.
 
 The workflow defaults to the current production frontend and Supabase project. Set the following repository secrets only if these defaults need to be overridden:
 
