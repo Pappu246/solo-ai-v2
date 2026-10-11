@@ -1,0 +1,62 @@
+name: Dependency Audit Diagnostics
+on:
+  push:
+    branches: ["audit/dependency-advisories"]
+permissions:
+  contents: read
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Fetch current npm advisories and print safe summary
+        shell: bash
+        run: |
+          set -uo pipefail
+          npm audit --json > "$RUNNER_TEMP/npm-audit.json" || true
+          node --input-type=commonjs - "$RUNNER_TEMP/npm-audit.json" <<'NODE'
+          const fs = require("node:fs");
+          const reportPath = process.argv[2];
+          let audit;
+          try {
+            audit = JSON.parse(fs.readFileSync(reportPath, "utf8"));
+          } catch {
+            console.error("Could not parse npm audit JSON. Registry/network response may be unavailable.");
+            process.exit(2);
+          }
+          const vulnerabilities = audit.vulnerabilities || {};
+          const packages = Object.entries(vulnerabilities)
+            .map(([name, v]) => ({
+              package: name,
+              severity: v.severity,
+              direct: Boolean(v.isDirect),
+              range: v.range || null,
+              advisories: (v.via || [])
+                .filter(x => x && typeof x === "object")
+                .map(x => ({
+                  title: x.title,
+                  url: x.url,
+                  severity: x.severity,
+                  range: x.range,
+                  cwe: x.cwe,
+                  cvss: x.cvss && x.cvss.score
+                })),
+              fixAvailable: v.fixAvailable
+            }))
+            .sort((a, b) => {
+              const order = { critical: 0, high: 1, moderate: 2, low: 3, info: 4 };
+              return (order[a.severity] ?? 9) - (order[b.severity] ?? 9) || a.package.localeCompare(b.package);
+            });
+          console.log("NPM AUDIT SEVERITY COUNTS");
+          console.log(JSON.stringify(audit.metadata?.vulnerabilities || {}, null, 2));
+          console.log("AFFECTED PACKAGES AND REMEDIATION");
+          console.log(JSON.stringify(packages, null, 2));
+          if (audit.error) console.log("AUDIT ERROR METADATA: " + JSON.stringify(audit.error));
+          NODE
