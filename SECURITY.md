@@ -28,6 +28,12 @@ The production smoke gate verifies these headers after successful Production dep
 
 **CSP is not yet enforced.** A restrictive policy must be based on an inventory of actual runtime origins and browser capabilities (Supabase APIs, remote image sources, PDF.js workers, and microphone access). Use a report-only rollout and review violations before enabling enforcement; do not interpret the baseline headers as a completed CSP review.
 
+## Database function search-path hardening
+
+All six `SECURITY DEFINER` functions in the `public` schema are configured with an empty PostgreSQL `search_path`; application relations referenced by their bodies are schema-qualified. The migrations that establish this are `20261011095514_harden_db_function_search_path.sql` and `20261011100137_harden_ownership_function_search_paths.sql`.
+
+`public.consume_usage` intentionally remains executable by the `authenticated` role: Edge Functions call it with the user's JWT and do not need a service-role key. The function checks that `p_user_id = auth.uid()`, only accepts known usage scopes, forces each canonical window, clamps per-scope limits, validates amounts/tokens, and increments counters atomically. The `usage_counters` table deliberately has RLS enabled, no client policies, and no table grants for `anon` or `authenticated`. Do not clear these remaining advisory findings by exposing counter rows or revoking the RPC without redesigning its caller architecture.
+
 ## Knowledge layer (Phase 2)
 
 - `projects`, `files`, `file_chunks` and `memories` have RLS enabled with `auth.uid() = user_id` on every operation. `files` additionally requires the storage path to start with the caller's user id; `file_chunks` can only be inserted for a file the caller owns.
