@@ -15,7 +15,7 @@ jobs:
           node-version: 22
           cache: npm
       - name: Regenerate lockfile for patched toolchain
-        run: npm install --save-dev vite@^6.4.4 vitest@^4.1.11 @vitejs/plugin-react@^4.3.4 --ignore-scripts --no-audit --no-fund
+        run: rm -f package-lock.json && npm install --save-dev vite@^6.4.4 vitest@^4.1.11 @vitejs/plugin-react@^4.3.4 --ignore-scripts --no-audit --no-fund
       - name: Verify dependency install
         run: npm ci
       - name: Report security audit after targeted upgrade
