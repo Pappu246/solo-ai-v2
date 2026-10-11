@@ -38,21 +38,15 @@ import {
 } from "./providers.ts";
 import { imageSearchCache, type ImageSearchResult } from "./cache.ts";
 import { createUsageController, limitsFromEnv } from "../shared/usage.ts";
+import { corsHeaders } from "../shared/cors.ts";
 
 // ── CORS ────────────────────────────────────────────────────────────────────
 
-const origins = (Deno.env.get("APP_ORIGIN") || "").split(",").map(v => v.trim()).filter(Boolean);
-const cors = (req: Request) => {
-  const origin = req.headers.get("Origin") || "";
-  const allow = origins.length ? (origins.includes(origin) ? origin : origins[0]) : (origin || "*");
-  return {
-    "Access-Control-Allow-Origin": allow,
-    "Vary": "Origin",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Client-Info, Apikey",
-    "Access-Control-Expose-Headers": "X-Request-Id",
-  };
-};
+const cors = (req: Request) => corsHeaders(req, Deno.env.get("APP_ORIGIN"), {
+  allowMethods: "GET, POST, OPTIONS",
+  allowHeaders: "Content-Type, Authorization, X-Client-Info, Apikey",
+  exposeHeaders: "X-Request-Id",
+});
 
 const json = (req: Request, body: unknown, status = 200, requestId?: string) =>
   new Response(JSON.stringify(body), {

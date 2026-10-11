@@ -105,6 +105,12 @@ Model replies are untrusted input and are never injected as raw HTML:
 - Currency-looking dollar pairs ("$5 and $10") are escaped before math
   parsing so prices stay text instead of becoming a formula.
 
+## Edge Function CORS
+
+The authenticated `chat` and `image-search` Edge Functions use a strict origin allowlist. Set `APP_ORIGIN` to a comma-separated list of exact frontend origins (for example, the production origin and explicitly approved preview origins). A configured list replaces the fallback list; malformed non-empty configuration fails closed. When unset, the fallback is limited to `https://solo-ai-v2-mu.vercel.app` and the standard local Vite origins. Unlisted origins receive no `Access-Control-Allow-Origin` header; arbitrary request origins are never reflected and wildcard CORS is never emitted by these authenticated functions.
+
+CORS only controls browser cross-origin access and is not an authorization boundary. The chat and image-search handlers still verify a Supabase JWT, and database RLS/ownership checks remain necessary. The public `image-proxy` is intentionally a separate endpoint: its protection is a strict upstream-host allowlist and byte/content-type limits, not user authentication.
+
 ## Production checklist
 
 - Keep `.env`, `.env.local`, and provider credentials out of Git.

@@ -38,6 +38,8 @@ jobs:
           # Pull-request checks target the current production URL before a merge.
           # Validate deployment headers only on manual production checks or a successful Production deployment event.
           SMOKE_REQUIRE_SECURITY_HEADERS: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))) && 'true' || 'false' }}
+          # CORS allowlist is verified only after production Edge Function deploys (or on manual runs).
+          SMOKE_REQUIRE_CORS_ALLOWLIST: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && 'true' || 'false' }}
         run: node scripts/production-smoke.mjs
 
   authenticated-image-smoke:
