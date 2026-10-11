@@ -1,0 +1,54 @@
+name: Vitest 4 Security Migration Helper
+on:
+  push:
+    branches: ["security/vitest-4.1.11-toolchain"]
+permissions:
+  contents: write
+jobs:
+  generate-lock-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Regenerate lockfile for patched toolchain
+        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+      - name: Verify dependency install
+        run: npm ci
+      - name: Report security audit after targeted upgrade
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/npm-audit-vitest4.json" || true
+          node - "$RUNNER_TEMP/npm-audit-vitest4.json" <<'NODE'
+          const fs = require("node:fs");
+          try {
+            const a = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            console.log("VITEST4_AUDIT_COUNTS", JSON.stringify(a.metadata?.vulnerabilities || {}));
+            for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+              if (["critical", "high"].includes(v.severity)) {
+                console.log("REMAINING_HIGH_OR_CRITICAL", name, v.severity, "fixAvailable=" + JSON.stringify(v.fixAvailable));
+              }
+            }
+          } catch {
+            console.log("Could not parse npm audit JSON; do not infer a clean audit.");
+          }
+          NODE
+      - name: Commit updated lockfile to migration branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo "LOCKFILE_UNCHANGED"
+          else
+            git diff --stat -- package-lock.json
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "security(deps): lock patched Vite and Vitest versions"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+      - name: Run unit, lint and production build checks
+        run: npm run check
