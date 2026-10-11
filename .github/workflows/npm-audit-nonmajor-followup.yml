@@ -1,0 +1,76 @@
+name: Security Audit — Non-major Follow-up
+on:
+  push:
+    branches: ["security/npm-audit-nonmajor-followup"]
+permissions:
+  contents: write
+jobs:
+  safe-fix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install current lockfile
+        run: npm ci
+      - name: Baseline audit summary
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/audit-before.json" || true
+          node - "$RUNNER_TEMP/audit-before.json" <<'NODE'
+          const fs = require("node:fs");
+          try {
+            const a = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            console.log("AUDIT_BEFORE", JSON.stringify(a.metadata?.vulnerabilities || {}));
+          } catch {
+            console.log("AUDIT_BEFORE_JSON_UNAVAILABLE");
+          }
+          NODE
+      - name: Apply non-force npm audit fixes only
+        shell: bash
+        run: |
+          set +e
+          npx --yes npm@11 audit fix
+          result=$?
+          set -e
+          echo "NON_FORCE_AUDIT_FIX_EXIT_CODE=$result"
+          # No --force is permitted: major upgrades stay in a separate migration.
+      - name: Show remaining high and critical findings
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/audit-after.json" || true
+          node - "$RUNNER_TEMP/audit-after.json" <<'NODE'
+          const fs = require("node:fs");
+          try {
+            const a = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+            console.log("AUDIT_AFTER", JSON.stringify(a.metadata?.vulnerabilities || {}));
+            for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+              if (["critical", "high"].includes(v.severity)) {
+                console.log("REMAINING_HIGH_OR_CRITICAL", name, v.severity, "fixAvailable=" + JSON.stringify(v.fixAvailable));
+              }
+            }
+          } catch {
+            console.log("AUDIT_AFTER_JSON_UNAVAILABLE");
+          }
+          NODE
+      - name: Commit package changes on this branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "NO_NON_MAJOR_PACKAGE_CHANGES"
+          else
+            git diff --stat -- package.json package-lock.json
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package.json package-lock.json
+            git commit -m "fix(deps): apply remaining non-major npm audit fixes"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
+      - name: Verify clean locked install
+        run: npm ci
+      - name: Run unit, lint, type and production build checks
+        run: npm run check
