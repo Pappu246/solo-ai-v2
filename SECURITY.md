@@ -26,7 +26,11 @@ The Vercel deployment applies baseline headers to frontend routes:
 
 The production smoke gate verifies these headers after successful Production deployment events and on manual production runs. Pull-request smoke checks do not enforce them because the current smoke workflow targets the already-deployed production URL rather than the PR preview.
 
-**CSP is not yet enforced.** A restrictive policy must be based on an inventory of actual runtime origins and browser capabilities (Supabase APIs, remote image sources, PDF.js workers, and microphone access). Use a report-only rollout and review violations before enabling enforcement; do not interpret the baseline headers as a completed CSP review.
+**CSP is report-only and is not enforced.** `vercel.json` sends a `Content-Security-Policy-Report-Only` header with both `report-to` and compatibility `report-uri` directives. This reports suspected violations without blocking resources. The policy currently allows the known Supabase HTTPS/WSS origin, Google Fonts, local/blob PDF.js workers, and HTTPS images; `img-src https:` remains intentionally broad because the markdown renderer permits arbitrary HTTPS image URLs. Inline script/style allowances remain for the current theme bootstrap and app styles. These are compatibility accommodations, not a final enforcement policy.
+
+Reports go to `/api/csp-report`. The receiver caps each body at 32 KiB, processes at most eight reports per request, and rate-limits log output to 20 records per minute per warm instance. It logs only the effective directive, disposition, status code, and normalized resource origins for reports whose document origin is `https://solo-ai-v2-mu.vercel.app`. It deliberately does not log full URL paths/queries, original policy text, source samples, referrers, or user agents. The production smoke gate checks that the report-only policy and endpoint are configured, and asserts that no enforcing `Content-Security-Policy` header is present.
+
+This does **not** complete the CSP compatibility review. Review real production reports and manually exercise sign-in/sign-up, authenticated chat, image search, uploads, PDF extraction/workers, remote markdown images, and voice input. Only then design a separate enforcing policy; remove inline allowances and narrow remote image sources where compatible before considering enforcement.
 
 ## Database function search-path hardening
 
