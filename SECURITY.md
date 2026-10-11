@@ -16,6 +16,18 @@ Recommended Edge Function secrets:
 
 Only `VITE_SUPABASE_URL` and the Supabase publishable key belong in the browser. A legacy `VITE_SUPABASE_ANON_KEY` is supported temporarily for older projects.
 
+## Browser response headers
+
+The Vercel deployment applies baseline headers to frontend routes:
+- `X-Content-Type-Options: nosniff`
+- `X-Frame-Options: DENY`
+- `Referrer-Policy: strict-origin-when-cross-origin`
+- `Permissions-Policy: camera=(), geolocation=(), microphone=(self)`
+
+The production smoke gate verifies these headers after successful Production deployment events and on manual production runs. Pull-request smoke checks do not enforce them because the current smoke workflow targets the already-deployed production URL rather than the PR preview.
+
+**CSP is not yet enforced.** A restrictive policy must be based on an inventory of actual runtime origins and browser capabilities (Supabase APIs, remote image sources, PDF.js workers, and microphone access). Use a report-only rollout and review violations before enabling enforcement; do not interpret the baseline headers as a completed CSP review.
+
 ## Knowledge layer (Phase 2)
 
 - `projects`, `files`, `file_chunks` and `memories` have RLS enabled with `auth.uid() = user_id` on every operation. `files` additionally requires the storage path to start with the caller's user id; `file_chunks` can only be inserted for a file the caller owns.

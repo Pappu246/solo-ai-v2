@@ -24,6 +24,21 @@ The public gate checks:
 3. The image-search Edge Function rejects an unauthenticated request with HTTP 401.
 4. The image proxy rejects a malformed request cleanly with HTTP 400.
 
+## Browser security response headers
+
+The Vercel deployment sets these baseline headers on frontend routes:
+
+| Header | Required value | Purpose |
+| --- | --- | --- |
+| `X-Content-Type-Options` | `nosniff` | Prevent MIME-type sniffing |
+| `X-Frame-Options` | `DENY` | Prevent framing/clickjacking |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Limit referrer details sent to other origins |
+| `Permissions-Policy` | `camera=(), geolocation=(), microphone=(self)` | Disable camera/geolocation APIs while retaining same-origin voice input |
+
+The smoke script checks these headers when `SMOKE_REQUIRE_SECURITY_HEADERS=true`. The workflow enables that check for manual production smoke runs and successful Vercel Production deployment events. It is disabled on pull requests because those checks target the current production URL, not the preview deployment.
+
+**Content Security Policy (CSP) is not yet enforced.** This baseline is not a complete CSP or a full security audit. CSP needs a separate compatibility pass for Supabase connectivity, remote image sources, PDF.js workers, and voice input; deploy a report-only policy and review violations before enforcement.
+
 The workflow defaults to the current production frontend and Supabase project. Set the following repository secrets only if these defaults need to be overridden:
 
 - `SMOKE_BASE_URL` — frontend base URL.

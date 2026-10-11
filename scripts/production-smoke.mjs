@@ -12,6 +12,7 @@
  *   SMOKE_USER_EMAIL     dedicated test user's email (GitHub Actions secret)
  *   SMOKE_USER_PASSWORD  dedicated test user's password (GitHub Actions secret)
  *   SMOKE_REQUIRE_AUTH   set to "true" so missing credentials fail instead of skip
+ *   SMOKE_REQUIRE_SECURITY_HEADERS  verify expected browser response headers
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -23,6 +24,7 @@ const baseUrl = requiredUrl("SMOKE_BASE_URL");
 const supabaseUrl = requiredUrl("SMOKE_SUPABASE_URL");
 let jwt = process.env.SMOKE_JWT?.trim() || "";
 const requireAuth = process.env.SMOKE_REQUIRE_AUTH === "true";
+const requireSecurityHeaders = process.env.SMOKE_REQUIRE_SECURITY_HEADERS === "true";
 const smokeEmail = process.env.SMOKE_USER_EMAIL?.trim() || "";
 const smokePassword = process.env.SMOKE_USER_PASSWORD || "";
 const publishableKey = process.env.SMOKE_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
@@ -75,8 +77,33 @@ async function run() {
     const type = response.headers.get("content-type") || "";
     const ok = response.status >= 200 && response.status < 400 && type.includes("text/html");
     record("frontend reachable", ok, `HTTP ${response.status}, content-type=${type.split(";")[0] || "unknown"}`);
+
+    if (requireSecurityHeaders) {
+      const expectedHeaders = [
+        ["x-content-type-options", "nosniff"],
+        ["x-frame-options", "deny"],
+        ["referrer-policy", "strict-origin-when-cross-origin"],
+      ];
+      const problems = expectedHeaders
+        .filter(([name, expected]) => (response.headers.get(name) || "").trim().toLowerCase() !== expected)
+        .map(([name, expected]) => `${name}: expected ${expected}`);
+      const permissionsPolicy = (response.headers.get("permissions-policy") || "").toLowerCase().replace(/\s/g, "");
+      for (const directive of ["camera=()", "geolocation=()", "microphone=(self)"]) {
+        if (!permissionsPolicy.includes(directive)) problems.push(`permissions-policy: missing ${directive}`);
+      }
+      record(
+        "production security headers",
+        problems.length === 0,
+        problems.length === 0
+          ? "X-Content-Type-Options, X-Frame-Options, Referrer-Policy, and Permissions-Policy are present."
+          : problems.join("; "),
+      );
+    }
   } catch (error) {
     record("frontend reachable", false, error instanceof Error ? error.message : String(error));
+    if (requireSecurityHeaders) {
+      record("production security headers", false, "Frontend request failed; response headers could not be verified.");
+    }
   }
 
   await expectStatus(

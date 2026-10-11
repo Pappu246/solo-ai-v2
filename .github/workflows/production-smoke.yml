@@ -35,6 +35,9 @@ jobs:
         env:
           SMOKE_BASE_URL: ${{ secrets.SMOKE_BASE_URL || 'https://solo-ai-v2-mu.vercel.app' }}
           SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://vqbzyutqgjbfdwxjkplq.supabase.co' }}
+          # Pull-request checks target the current production URL before a merge.
+          # Validate deployment headers only on manual production checks or a successful Production deployment event.
+          SMOKE_REQUIRE_SECURITY_HEADERS: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'deployment_status' && github.event.deployment_status.state == 'success' && (github.event.deployment.environment == 'Production' || github.event.deployment.environment == 'production'))) && 'true' || 'false' }}
         run: node scripts/production-smoke.mjs
 
   authenticated-image-smoke:
