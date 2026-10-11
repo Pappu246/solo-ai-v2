@@ -21,7 +21,7 @@ describe("CSP report sanitization", () => {
       disposition: undefined,
       documentOrigin: "https://solo-ai-v2-mu.vercel.app",
       blockedOrigin: "https://tracker.example",
-      sourceOrigin: "https://solo-ai-v2.vercel.app",
+      sourceOrigin: "https://solo-ai-v2-mu.vercel.app",
       statusCode: 200,
     });
     expect(JSON.stringify(report)).not.toContain("token=");
