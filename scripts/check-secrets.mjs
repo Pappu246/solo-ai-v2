@@ -4,10 +4,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { findSecretCandidates } from "./secret-scanner.mjs";
 
-const TEXT_EXTENSIONS = new Set([
-  ".cjs", ".css", ".html", ".js", ".jsx", ".json", ".md", ".mjs",
-  ".sh", ".sql", ".toml", ".ts", ".tsx", ".txt", ".yaml", ".yml",
-]);
 const SKIP_BASENAMES = new Set(["package-lock.json", "deno.lock"]);
 const trackedPaths = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")
@@ -17,10 +13,7 @@ let scanned = 0;
 const findings = [];
 
 for (const filePath of trackedPaths) {
-  const basename = path.basename(filePath);
-  const extension = path.extname(filePath).toLowerCase();
-  if (SKIP_BASENAMES.has(basename)) continue;
-  if (!TEXT_EXTENSIONS.has(extension) && ![".env.example", ".env.sample"].includes(basename)) continue;
+  if (SKIP_BASENAMES.has(path.basename(filePath))) continue;
 
   let bytes;
   try {
@@ -30,6 +23,8 @@ for (const filePath of trackedPaths) {
     process.exitCode = 2;
     continue;
   }
+  // Skip binary assets; scan all text files regardless of extension, including
+  // extensionless files and .env-style filenames if they were tracked.
   if (bytes.includes(0)) continue;
 
   scanned += 1;
