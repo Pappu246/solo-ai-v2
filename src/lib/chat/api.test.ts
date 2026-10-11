@@ -163,6 +163,7 @@ describe('messagesApi', () => {
     await messagesApi.updateContent('m1', 'final');
     expect(mock.tables.messages[0].content).toBe('final');
     const from = vi.spyOn(mock.client, 'from');
+    from.mockClear();
     await messagesApi.remove([]);
     expect(from).not.toHaveBeenCalled();
     from.mockRestore();
