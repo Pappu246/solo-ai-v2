@@ -1,5 +1,115 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { normalizeReportedOrigin, sanitizeCspReport } from "./csp-report.js";
+
+function mockRequest(method: string, headers: Record<string, string> = {}, body = "") {
+  return {
+    method,
+    headers,
+    async *[Symbol.asyncIterator]() {
+      if (body) yield Buffer.from(body);
+    },
+  };
+}
+
+function mockResponse() {
+  const headers: Record<string, string> = {};
+  return {
+    headers,
+    statusCode: 200,
+    ended: false,
+    setHeader(name: string, value: string) { headers[name.toLowerCase()] = value; },
+    end() { this.ended = true; },
+  };
+}
+
+describe("CSP report endpoint handler", () => {
+  it("is POST-only and sends no-store response headers", async () => {
+    const response = mockResponse();
+    await handler(mockRequest("GET") as never, response as never);
+
+    expect(response.statusCode).toBe(405);
+    expect(response.headers.allow).toBe("POST");
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.ended).toBe(true);
+  });
+
+  it("rejects unsupported content types before parsing", async () => {
+    const response = mockResponse();
+    await handler(mockRequest("POST", { "content-type": "text/plain" }, "{}") as never, response as never);
+    expect(response.statusCode).toBe(415);
+  });
+
+  it("rejects malformed JSON", async () => {
+    const response = mockResponse();
+    await handler(mockRequest("POST", { "content-type": "application/reports+json" }, "{") as never, response as never);
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("rejects oversized declared bodies before consuming the stream", async () => {
+    const response = mockResponse();
+    await handler(mockRequest("POST", {
+      "content-type": "application/reports+json",
+      "content-length": String(32 * 1024 + 1),
+    }) as never, response as never);
+    expect(response.statusCode).toBe(413);
+  });
+
+  it("accepts a synthetic non-production report without logging it", async () => {
+    const response = mockResponse();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(mockRequest("POST", { "content-type": "application/reports+json" }, JSON.stringify([{
+        type: "csp-violation",
+        url: "https://csp-smoke.invalid/",
+        body: {
+          documentURL: "https://csp-smoke.invalid/",
+          blockedURL: "https://asset-smoke.invalid/test.js",
+          effectiveDirective: "script-src-elem",
+          disposition: "report",
+          statusCode: 200,
+          sample: "must not be logged",
+        },
+      }])) as never, response as never);
+      expect(response.statusCode).toBe(204);
+      expect(log).not.toHaveBeenCalled();
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it("logs only normalized metadata for canonical production reports", async () => {
+    const response = mockResponse();
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await handler(mockRequest("POST", { "content-type": "application/csp-report" }, JSON.stringify({
+        "csp-report": {
+          "document-uri": "https://solo-ai-v2-mu.vercel.app/chat?token=must-not-be-logged",
+          "blocked-uri": "https://tracker.example/pixel?user=private",
+          "effective-directive": "connect-src",
+          "original-policy": "must not be logged",
+          "script-sample": "must not be logged",
+          "status-code": 200,
+        },
+      })) as never, response as never);
+      expect(response.statusCode).toBe(204);
+      expect(log).toHaveBeenCalledTimes(1);
+      const record = JSON.parse(String(log.mock.calls[0][0]));
+      expect(record).toMatchObject({
+        event: "csp_violation_report_only",
+        directive: "connect-src",
+        documentOrigin: "https://solo-ai-v2-mu.vercel.app",
+        blockedOrigin: "https://tracker.example",
+        statusCode: 200,
+      });
+      expect(JSON.stringify(record)).not.toContain("token=");
+      expect(JSON.stringify(record)).not.toContain("private");
+      expect(JSON.stringify(record)).not.toContain("must not be logged");
+    } finally {
+      log.mockRestore();
+    }
+  });
+});
+
 
 describe("CSP report sanitization", () => {
   it("keeps legacy report metadata but removes URL paths, query strings, and payload samples", () => {
