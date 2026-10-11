@@ -147,8 +147,8 @@ async function run() {
           : `Report-only policy/report endpoint missing or an enforcing policy is present (report-only length=${reportOnlyPolicy.length}, reporting endpoint=${reportingEndpoints ? "present" : "missing"}, enforced policy=${enforcedPolicy ? "present" : "absent"}).`,
       );
 
+      const reportEndpoint = new URL("/api/csp-report", baseUrl).toString();
       try {
-        const reportEndpoint = new URL("/api/csp-report", baseUrl).toString();
         const endpointResponse = await request(reportEndpoint, { method: "GET" });
         const allow = (endpointResponse.headers.get("allow") || "").toUpperCase();
         const endpointOk = endpointResponse.status === 405 && allow.split(",").map(v => v.trim()).includes("POST");
@@ -159,6 +159,36 @@ async function run() {
         );
       } catch (error) {
         record("CSP report endpoint reachable", false, error instanceof Error ? error.message : String(error));
+      }
+
+      try {
+        // This synthetic non-production report validates request parsing without
+        // being eligible for logging by the report receiver.
+        const syntheticReport = {
+          type: "csp-violation",
+          url: "https://csp-smoke.invalid/",
+          body: {
+            documentURL: "https://csp-smoke.invalid/",
+            blockedURL: "https://asset-smoke.invalid/test.js",
+            effectiveDirective: "script-src-elem",
+            disposition: "report",
+            statusCode: 200,
+            sample: "synthetic smoke sample must not be logged",
+          },
+        };
+        const postResponse = await request(reportEndpoint, {
+          method: "POST",
+          headers: { "content-type": "application/reports+json" },
+          body: JSON.stringify([syntheticReport]),
+        });
+        const postOk = postResponse.status === 204;
+        record(
+          "CSP report endpoint accepts sanitized probe",
+          postOk,
+          `HTTP ${postResponse.status} (expected 204; report origin is intentionally non-production)`,
+        );
+      } catch (error) {
+        record("CSP report endpoint accepts sanitized probe", false, error instanceof Error ? error.message : String(error));
       }
     }
     if (requireSecurityHeaders) {
