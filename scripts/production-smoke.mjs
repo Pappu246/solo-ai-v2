@@ -12,6 +12,7 @@
  *   SMOKE_USER_EMAIL     dedicated test user's email (GitHub Actions secret)
  *   SMOKE_USER_PASSWORD  dedicated test user's password (GitHub Actions secret)
  *   SMOKE_REQUIRE_AUTH   set to "true" so missing credentials fail instead of skip
+ *   SMOKE_REQUIRE_SECURITY_HEADERS  verify expected browser response headers
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -86,7 +87,7 @@ async function run() {
       const problems = expectedHeaders
         .filter(([name, expected]) => (response.headers.get(name) || "").trim().toLowerCase() !== expected)
         .map(([name, expected]) => `${name}: expected ${expected}`);
-      const permissionsPolicy = (response.headers.get("permissions-policy") || "").toLowerCase().replace(/\\s/g, "");
+      const permissionsPolicy = (response.headers.get("permissions-policy") || "").toLowerCase().replace(/\s/g, "");
       for (const directive of ["camera=()", "geolocation=()", "microphone=(self)"]) {
         if (!permissionsPolicy.includes(directive)) problems.push(`permissions-policy: missing ${directive}`);
       }
