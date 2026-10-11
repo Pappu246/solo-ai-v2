@@ -17,7 +17,7 @@ jobs:
         run: node scripts/check-secrets.mjs
       - run: node --check scripts/production-smoke.mjs
       - run: node --check api/csp-report.js
-      - npx tsc -p e2e/tsconfig.json
+      - run: npx tsc -p e2e/tsconfig.json
   e2e:
     name: End-to-end (Playwright)
     runs-on: ubuntu-latest
