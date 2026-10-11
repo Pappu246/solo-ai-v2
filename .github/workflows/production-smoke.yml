@@ -44,26 +44,6 @@ jobs:
           SMOKE_REQUIRE_CORS_ALLOWLIST: ${{ (github.event_name == 'workflow_dispatch' || (github.event_name == 'workflow_run' && github.event.workflow_run.name == 'Deploy Supabase AI Functions' && github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')) && 'true' || 'false' }}
         run: node scripts/production-smoke.mjs
 
-  csp-preview-smoke:
-    name: CSP report-only preview smoke
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.head.repo.full_name == github.repository &&
-      github.event.pull_request.head.ref == 'security/csp-report-only-telemetry'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Verify CSP report-only preview
-        env:
-          # A manually-created preview for this exact PR head. Production alias is not changed.
-          SMOKE_BASE_URL: https://solo-ai-v2-git-security-csp-report-on-306e3f-pappu246s-projects.vercel.app
-          SMOKE_SUPABASE_URL: ${{ secrets.SMOKE_SUPABASE_URL || 'https://vqbzyutqgjbfdwxjkplq.supabase.co' }}
-          SMOKE_REQUIRE_SECURITY_HEADERS: "true"
-          SMOKE_REQUIRE_CSP_REPORTING: "true"
-        run: node scripts/production-smoke.mjs
-
   authenticated-image-smoke:
     name: Authenticated image-search + thumbnail smoke
     if: >-
