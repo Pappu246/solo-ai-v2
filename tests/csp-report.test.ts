@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { normalizeReportedOrigin, sanitizeCspReport } from "./csp-report.js";
+import { normalizeReportedOrigin, sanitizeCspReport } from "../api/csp-report.js";
 import { Buffer } from "node:buffer";
-import handler from "./csp-report.js";
+import handler from "../api/csp-report.js";
 
 function mockRequest(method: string, headers: Record<string, string> = {}, body = "") {
   return {
