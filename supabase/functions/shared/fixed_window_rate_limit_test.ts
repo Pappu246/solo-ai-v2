@@ -9,7 +9,7 @@ function assertEquals<T>(actual: T, expected: T, message: string): void {
 }
 
 Deno.test("local rate limit allows the configured count and then denies", () => {
-  let now = 1_000;
+  const now = 1_000;
   const limiter = new FixedWindowRateLimiter({ limit: 3, windowMs: 60_000, now: () => now });
   assert(limiter.allow("user-a"), "first request should pass");
   assert(limiter.allow("user-a"), "second request should pass");
