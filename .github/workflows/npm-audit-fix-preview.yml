@@ -1,0 +1,74 @@
+name: Security Audit — Compatible Fixes Only
+on:
+  push:
+    branches: ["security/npm-audit-patch-only"]
+permissions:
+  contents: write
+jobs:
+  fix-compatible:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Record baseline audit summary
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/npm-audit-before.json" || true
+          node - "$RUNNER_TEMP/npm-audit-before.json" <<'NODE'
+          const fs = require("node:fs");
+          const p = process.argv[2];
+          try {
+            const a = JSON.parse(fs.readFileSync(p, "utf8"));
+            console.log("BASELINE_NPM_AUDIT", JSON.stringify(a.metadata?.vulnerabilities || {}));
+          } catch {
+            console.log("Baseline audit JSON unavailable; continue to compatible fix attempt.");
+          }
+          NODE
+      - name: Apply compatible updates only (no force)
+        shell: bash
+        run: |
+          set +e
+          npm audit fix
+          result=$?
+          set -e
+          echo "NPM_AUDIT_FIX_EXIT_CODE=$result"
+          # Never use --force; any unresolved major-version upgrades remain for review.
+      - name: Summarize post-fix audit
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/npm-audit-after.json" || true
+          node - "$RUNNER_TEMP/npm-audit-after.json" <<'NODE'
+          const fs = require("node:fs");
+          const p = process.argv[2];
+          try {
+            const a = JSON.parse(fs.readFileSync(p, "utf8"));
+            console.log("AFTER_NPM_AUDIT", JSON.stringify(a.metadata?.vulnerabilities || {}));
+            for (const [name, v] of Object.entries(a.vulnerabilities || {})) {
+              if (["critical", "high"].includes(v.severity)) {
+                console.log("UNRESOLVED_HIGH_OR_CRITICAL", name, v.severity, "fixAvailable=" + JSON.stringify(v.fixAvailable));
+              }
+            }
+          } catch {
+            console.log("Post-fix audit JSON unavailable.");
+          }
+          NODE
+      - name: Commit lockfile changes on this branch only
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package.json package-lock.json; then
+            echo "NO_COMPATIBLE_PACKAGE_CHANGES"
+            exit 0
+          fi
+          git diff --stat -- package.json package-lock.json
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json package-lock.json
+          git commit -m "fix(deps): apply compatible npm security updates"
+          git push origin "HEAD:\${GITHUB_REF_NAME}"
