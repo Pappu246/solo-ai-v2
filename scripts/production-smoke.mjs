@@ -14,6 +14,7 @@
  *   SMOKE_REQUIRE_AUTH   set to "true" so missing credentials fail instead of skip
  *   SMOKE_REQUIRE_SECURITY_HEADERS  verify expected browser response headers
  *   SMOKE_REQUIRE_CORS_ALLOWLIST     verify approved/denied browser origins after Edge Function deploys
+ *   SMOKE_REQUIRE_CSP_REPORTING      verify report-only policy and reachable report endpoint
  *
  * The authenticated gate deliberately verifies the real image-search contract
  * and then fetches the returned thumbnail through the image-proxy. It does not
@@ -27,6 +28,7 @@ let jwt = process.env.SMOKE_JWT?.trim() || "";
 const requireAuth = process.env.SMOKE_REQUIRE_AUTH === "true";
 const requireSecurityHeaders = process.env.SMOKE_REQUIRE_SECURITY_HEADERS === "true";
 const requireCorsAllowlist = process.env.SMOKE_REQUIRE_CORS_ALLOWLIST === "true";
+const requireCspReporting = process.env.SMOKE_REQUIRE_CSP_REPORTING === "true";
 const smokeEmail = process.env.SMOKE_USER_EMAIL?.trim() || "";
 const smokePassword = process.env.SMOKE_USER_PASSWORD || "";
 const publishableKey = process.env.SMOKE_SUPABASE_PUBLISHABLE_KEY?.trim() || "";
@@ -128,6 +130,37 @@ async function run() {
     const ok = response.status >= 200 && response.status < 400 && type.includes("text/html");
     record("frontend reachable", ok, `HTTP ${response.status}, content-type=${type.split(";")[0] || "unknown"}`);
 
+    if (requireCspReporting) {
+      const reportOnlyPolicy = (response.headers.get("content-security-policy-report-only") || "").toLowerCase();
+      const reportingEndpoints = (response.headers.get("reporting-endpoints") || "").toLowerCase();
+      const enforcedPolicy = response.headers.get("content-security-policy") || "";
+      const policyOk =
+        reportOnlyPolicy.includes("report-uri /api/csp-report") &&
+        reportOnlyPolicy.includes("report-to csp-endpoint") &&
+        reportingEndpoints.includes('csp-endpoint="https://solo-ai-v2-mu.vercel.app/api/csp-report"') &&
+        !enforcedPolicy.trim();
+      record(
+        "CSP policy is report-only",
+        policyOk,
+        policyOk
+          ? "Reporting endpoint is configured and no enforcing Content-Security-Policy header is present."
+          : `Report-only policy/report endpoint missing or an enforcing policy is present (report-only length=${reportOnlyPolicy.length}, reporting endpoint=${reportingEndpoints ? "present" : "missing"}, enforced policy=${enforcedPolicy ? "present" : "absent"}).`,
+      );
+
+      try {
+        const reportEndpoint = new URL("/api/csp-report", baseUrl).toString();
+        const endpointResponse = await request(reportEndpoint, { method: "GET" });
+        const allow = (endpointResponse.headers.get("allow") || "").toUpperCase();
+        const endpointOk = endpointResponse.status === 405 && allow.split(",").map(v => v.trim()).includes("POST");
+        record(
+          "CSP report endpoint reachable",
+          endpointOk,
+          `HTTP ${endpointResponse.status}, Allow=${allow || "(absent)"}`,
+        );
+      } catch (error) {
+        record("CSP report endpoint reachable", false, error instanceof Error ? error.message : String(error));
+      }
+    }
     if (requireSecurityHeaders) {
       const expectedHeaders = [
         ["x-content-type-options", "nosniff"],
@@ -151,6 +184,11 @@ async function run() {
     }
   } catch (error) {
     record("frontend reachable", false, error instanceof Error ? error.message : String(error));
+    if (requireCspReporting) {
+      record("CSP policy is report-only", false, "Frontend request failed; CSP headers could not be verified.");
+      record("CSP report endpoint reachable", false, "Frontend request failed; report endpoint could not be verified.");
+    }
+
     if (requireSecurityHeaders) {
       record("production security headers", false, "Frontend request failed; response headers could not be verified.");
     }
