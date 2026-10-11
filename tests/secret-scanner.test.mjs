@@ -18,7 +18,8 @@ describe("tracked-source secret regression scanner", () => {
   });
 
   it("detects private-key headers", () => {
-    const findings = findSecretCandidates("config:\n-----BEGIN PRIVATE KEY-----\n...", "private.pem");
+    const marker = "-----BEGIN " + "PRIVATE KEY-----";
+    const findings = findSecretCandidates("config:\n" + marker + "\n...", "private.pem");
     expect(findings).toEqual([{ path: "private.pem", line: 2, rule: "private-key PEM header" }]);
   });
 
