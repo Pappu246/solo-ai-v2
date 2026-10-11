@@ -1,0 +1,57 @@
+name: Dependency Audit — Production vs Development
+on:
+  push:
+    branches: ["audit/production-vs-dev-dependencies"]
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked packages
+        run: npm ci
+      - name: Compare full-tree and production-only audit results
+        shell: bash
+        run: |
+          npm audit --json > "$RUNNER_TEMP/audit-all.json" || true
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-prod.json" || true
+          node - "$RUNNER_TEMP/audit-all.json" "$RUNNER_TEMP/audit-prod.json" <<'NODE'
+          const fs = require("node:fs");
+          function read(file) {
+            try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+            catch { return null; }
+          }
+          const all = read(process.argv[2]);
+          const prod = read(process.argv[3]);
+          if (!all || !prod) {
+            console.error("AUDIT_JSON_PARSE_FAILED; no clean result may be inferred.");
+            process.exit(2);
+          }
+          const count = a => a.metadata?.vulnerabilities || {};
+          console.log("AUDIT_ALL_COUNTS", JSON.stringify(count(all)));
+          console.log("AUDIT_PRODUCTION_ONLY_COUNTS", JSON.stringify(count(prod)));
+          for (const [label, report] of [["ALL", all], ["PRODUCTION_ONLY", prod]]) {
+            console.log("AUDIT_PACKAGE_LIST_BEGIN", label);
+            for (const [name, v] of Object.entries(report.vulnerabilities || {})) {
+              console.log(JSON.stringify({
+                package: name,
+                severity: v.severity,
+                direct: Boolean(v.isDirect),
+                range: v.range || null,
+                effects: v.effects || [],
+                fixAvailable: v.fixAvailable,
+                advisories: (v.via || []).filter(x => x && typeof x === "object")
+                  .map(x => ({ title: x.title, url: x.url, severity: x.severity, range: x.range }))
+              }));
+            }
+            console.log("AUDIT_PACKAGE_LIST_END", label);
+          }
+          NODE
