@@ -4,10 +4,30 @@
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "X-Frame-Options", "value": "DENY" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(), geolocation=(), microphone=(self)" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "X-Frame-Options",
+          "value": "DENY"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(), geolocation=(), microphone=(self)"
+        },
+        {
+          "key": "Reporting-Endpoints",
+          "value": "csp-endpoint=\"https://solo-ai-v2-mu.vercel.app/api/csp-report\""
+        },
+        {
+          "key": "Content-Security-Policy-Report-Only",
+          "value": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; script-src 'self' 'unsafe-inline' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://vqbzyutqgjbfdwxjkplq.supabase.co wss://vqbzyutqgjbfdwxjkplq.supabase.co; worker-src 'self' blob:; child-src 'self' blob:; frame-src 'self' blob: data: https://vqbzyutqgjbfdwxjkplq.supabase.co; media-src 'self' data: blob:; manifest-src 'self'; report-uri /api/csp-report; report-to csp-endpoint"
+        }
       ]
     }
   ]
