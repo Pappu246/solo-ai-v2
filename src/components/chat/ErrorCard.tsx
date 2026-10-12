@@ -30,7 +30,7 @@ export function ErrorCard({ error, onRetry, onDismiss }: Props) {
                 {open ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
                 Details
               </button>
-              {open && <pre className="mt-1.5 text-[11px] text-fg-muted whitespace-pre-wrap break-words font-mono bg-surface rounded-lg border border-border p-2.5 max-h-40 overflow-auto">{error.detail}</pre>}
+              {open && <pre className="mt-1.5 text-[11px] text-fg-muted whitespace-pre-wrap wrap-break-word font-mono bg-surface rounded-lg border border-border p-2.5 max-h-40 overflow-auto">{error.detail}</pre>}
             </div>
           )}
         </div>

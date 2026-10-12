@@ -54,7 +54,7 @@ export function FilePickerDialog({ open, files, projects, alreadySelected, onCon
           placeholder="Filter by name"
           aria-label="Filter files by name"
           autoFocus
-          className="w-full h-9 pl-8 pr-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong"
+          className="w-full h-9 pl-8 pr-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong"
         />
       </label>
       <div className="rounded-xl border border-border px-1 max-h-[50vh] overflow-y-auto">

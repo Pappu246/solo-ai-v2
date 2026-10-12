@@ -28,7 +28,7 @@ export function EmptyState({ onSuggestion, userName }: Props) {
       {/* Ambient glow behind the greeting (dark theme only). */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[42rem] h-[26rem] rounded-full opacity-70 dark:opacity-100"
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-2xl h-104 rounded-full opacity-70 dark:opacity-100"
         style={{ background: 'radial-gradient(closest-side, rgb(var(--accent) / 0.14), transparent 70%)' }}
       />
       <div className="w-full max-w-2xl text-center animate-rise-in relative">
@@ -51,7 +51,7 @@ export function EmptyState({ onSuggestion, userName }: Props) {
               key={s.label}
               type="button"
               onClick={() => onSuggestion(s.text)}
-              className="group glass-card flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200 ease-[var(--ease-soft)] hover:-translate-y-1 hover:border-accent/60 hover:ring-1 hover:ring-accent/45 hover:shadow-[0_2px_6px_rgb(0_0_0/0.2),0_16px_32px_rgb(0_0_0/0.35)] dark:hover:shadow-[0_2px_6px_rgb(0_0_0/0.55),0_20px_44px_rgb(0_0_0/0.65)]"
+              className="group glass-card flex items-start gap-3 rounded-xl border p-3.5 text-left transition-all duration-200 ease-(--ease-soft) hover:-translate-y-1 hover:border-accent/60 hover:ring-1 hover:ring-accent/45 hover:shadow-[0_2px_6px_rgb(0_0_0/0.2),0_16px_32px_rgb(0_0_0/0.35)] dark:hover:shadow-[0_2px_6px_rgb(0_0_0/0.55),0_20px_44px_rgb(0_0_0/0.65)]"
             >
               <s.icon className="w-4 h-4 text-fg-muted mt-0.5 shrink-0 group-hover:text-accent transition-colors" />
               <span className="min-w-0">

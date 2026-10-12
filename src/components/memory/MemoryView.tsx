@@ -80,7 +80,7 @@ export function MemoryView({ memories, projects, projectId, onOpenConversation }
         <div className="flex flex-col sm:flex-row sm:items-center gap-2">
           <label className="text-xs text-fg-muted flex items-center gap-2">
             <span className="sr-only sm:not-sr-only">Scope</span>
-            <select value={scope} onChange={e => setScope(e.target.value)} aria-label="Scope" className="h-8 px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-none focus:border-border-strong">
+            <select value={scope} onChange={e => setScope(e.target.value)} aria-label="Scope" className="h-8 px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong">
               <option value="all">All memories</option>
               <option value="global">Every chat</option>
               {activeProjects.map(p => <option key={p.id} value={p.id}>Project: {p.name}</option>)}
@@ -173,7 +173,7 @@ function MemoryRow({ memory: m, project, onEdit, onDelete, onOpenConversation }:
   return (
     <li className="group flex items-start gap-3 px-4 py-3">
       <div className="flex-1 min-w-0">
-        <p className="text-sm text-fg whitespace-pre-wrap break-words">{m.content}</p>
+        <p className="text-sm text-fg whitespace-pre-wrap wrap-break-word">{m.content}</p>
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-1.5 text-[11px] text-fg-subtle">
           <span className="inline-flex items-center rounded-md border border-border bg-surface-2 px-1.5 py-0.5 font-medium text-fg-muted">{MEMORY_TYPES[m.type].label}</span>
           <span className="inline-flex items-center gap-1">

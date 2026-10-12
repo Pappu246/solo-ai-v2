@@ -111,7 +111,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                   value={settings.preferred_model ?? ''}
                   onChange={e => onUpdate({ preferred_model: e.target.value || null })}
                   aria-label="Default model"
-                  className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-none focus:border-border-strong"
+                  className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong"
                 >
                   <option value="">Auto (recommended)</option>
                   {models.map(m => <option key={m.id} value={m.id}>{m.name} · {m.provider}</option>)}

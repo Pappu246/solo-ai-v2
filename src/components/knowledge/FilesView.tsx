@@ -90,7 +90,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
               onChange={e => setQuery(e.target.value)}
               placeholder="Filter by name"
               aria-label="Filter files by name"
-              className="w-full h-9 pl-8 pr-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong"
+              className="w-full h-9 pl-8 pr-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong"
             />
           </label>
         </div>

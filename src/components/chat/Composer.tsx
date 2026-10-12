@@ -275,7 +275,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             rows={1}
             disabled={disabled}
             aria-label="Message"
-            className="w-full bg-transparent resize-none outline-none px-4 pt-3.5 pb-2 text-[0.95rem] text-fg placeholder:text-fg-subtle disabled:opacity-50 max-h-[220px]"
+            className="w-full bg-transparent resize-none outline-hidden px-4 pt-3.5 pb-2 text-[0.95rem] text-fg placeholder:text-fg-subtle disabled:opacity-50 max-h-[220px]"
           />
 
           <div className="flex items-center justify-between px-2 pb-2">
@@ -361,7 +361,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           </div>
         </div>
 
-        <div className="flex items-center justify-between min-h-[1.25rem] mt-1.5 px-1 text-[11px] text-fg-subtle">
+        <div className="flex items-center justify-between min-h-5 mt-1.5 px-1 text-[11px] text-fg-subtle">
           <span className={cn(fileError && 'text-danger')} aria-live="polite">
             {fileError || (speech.listening ? 'Listening…' : processing ? 'Reading files…' : pendingKnowledge ? 'Preparing files…' : hint || '')}
           </span>

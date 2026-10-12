@@ -22,7 +22,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
-      <div aria-live="polite" aria-atomic="false" className="fixed bottom-4 right-4 z-[60] flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
+      <div aria-live="polite" aria-atomic="false" className="fixed bottom-4 right-4 z-60 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm pointer-events-none">
         {items.map(t => <ToastView key={t.id} item={t} onDismiss={() => dismiss(t.id)} />)}
       </div>
     </ToastContext.Provider>
@@ -37,7 +37,7 @@ function ToastView({ item, onDismiss }: { item: ToastItem; onDismiss: () => void
       <Icon className={cn('w-4 h-4 mt-0.5 shrink-0', iconTone)} />
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium text-fg">{item.title}</p>
-        {item.description && <p className="text-xs text-fg-muted mt-0.5 break-words">{item.description}</p>}
+        {item.description && <p className="text-xs text-fg-muted mt-0.5 wrap-break-word">{item.description}</p>}
         {item.action && (
           <button onClick={() => { item.action?.onClick(); onDismiss(); }} className="mt-2 text-xs font-medium text-accent hover:underline">
             {item.action.label}

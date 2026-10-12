@@ -45,7 +45,7 @@ export const Message = memo(function Message({
         ) : (
           <>
             <div className="flex items-end gap-2 max-w-[85%]">
-              {message.content && <div className="rounded-2xl rounded-br-md bg-gradient-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap break-words">{message.content}</div>}
+              {message.content && <div className="rounded-2xl rounded-br-md bg-linear-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap wrap-break-word">{message.content}</div>}
               {isFirstInGroup && <UserAvatar initial={userInitial} className="mb-0.5" />}
             </div>
             <div className="flex items-center gap-1 pr-8">
@@ -120,7 +120,7 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
                 alt={image.title}
                 loading="lazy"
                 referrerPolicy="no-referrer"
-                className="aspect-[4/3] w-full object-cover transition-transform duration-200 group-hover/image:scale-[1.02]"
+                className="aspect-4/3 w-full object-cover transition-transform duration-200 group-hover/image:scale-[1.02]"
                 onError={() => setFailed(prev => new Set(prev).add(image.url))}
               />
               <div className="px-2 py-1.5 text-[11px] text-fg-muted">
@@ -163,7 +163,7 @@ function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: s
   const canSave = value.trim().length > 0 && value.trim() !== initial.trim();
   return (
     <div className="w-full max-w-[85%] rounded-2xl border border-accent/40 bg-surface p-2 shadow-md">
-      <textarea ref={ref} value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canSave) onSave(value); }} rows={Math.min(8, Math.max(2, value.split('\n').length))} className="w-full bg-transparent resize-none outline-none text-[0.95rem] text-fg px-2 py-1" aria-label="Edit your message" />
+      <textarea ref={ref} value={value} onChange={e => setValue(e.target.value)} onKeyDown={e => { if (e.key === 'Escape') onCancel(); if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && canSave) onSave(value); }} rows={Math.min(8, Math.max(2, value.split('\n').length))} className="w-full bg-transparent resize-none outline-hidden text-[0.95rem] text-fg px-2 py-1" aria-label="Edit your message" />
       <div className="flex items-center justify-end gap-2 mt-1"><Button size="sm" variant="ghost" onClick={onCancel}>Cancel</Button><Button size="sm" variant="primary" disabled={!canSave} onClick={() => onSave(value)}>Save & resend</Button></div>
     </div>
   );

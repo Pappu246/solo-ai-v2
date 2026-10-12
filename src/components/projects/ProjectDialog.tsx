@@ -39,7 +39,7 @@ export function ProjectDialog({ open, initial, onSave, onClose }: Props) {
     finally { setSaving(false); }
   };
 
-  const input = 'w-full px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong';
+  const input = 'w-full px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong';
 
   return (
     <Dialog

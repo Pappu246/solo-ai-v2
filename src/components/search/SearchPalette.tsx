@@ -54,7 +54,7 @@ export function SearchPalette({ open, onClose, onOpenResult }: Props) {
 
   return (
     <Dialog open={open} onClose={onClose} title="Search" hideHeader size="lg" className="sm:mt-[-10vh]">
-      <div className="-mx-5 -mt-0 flex flex-col max-h-[70vh]" onKeyDown={onKeyDown}>
+      <div className="-mx-5 mt-0 flex flex-col max-h-[70vh]" onKeyDown={onKeyDown}>
         <label className="relative flex items-center border-b border-border px-4">
           <Search className="w-4 h-4 text-fg-subtle shrink-0" aria-hidden />
           <input
@@ -69,7 +69,7 @@ export function SearchPalette({ open, onClose, onOpenResult }: Props) {
             aria-controls="search-results"
             aria-activedescendant={ordered[active] ? `search-result-${ordered[active].kind}-${ordered[active].id}` : undefined}
             autoFocus
-            className="flex-1 h-12 px-3 bg-transparent text-[0.95rem] text-fg placeholder:text-fg-subtle outline-none"
+            className="flex-1 h-12 px-3 bg-transparent text-[0.95rem] text-fg placeholder:text-fg-subtle outline-hidden"
           />
           {search.status === 'searching' ? <Spinner className="w-4 h-4 text-fg-subtle" /> : <Kbd>Esc</Kbd>}
         </label>
@@ -116,7 +116,7 @@ export function SearchPalette({ open, onClose, onOpenResult }: Props) {
                         <span className="block text-sm text-fg truncate">{r.title}</span>
                         {r.snippet && (
                           <span className="block text-xs text-fg-muted mt-0.5 line-clamp-2">
-                            {splitHighlights(r.snippet).map((p, j) => p.hit ? <mark key={j} className="bg-accent/20 text-fg rounded-sm px-px">{p.text}</mark> : <span key={j}>{p.text}</span>)}
+                            {splitHighlights(r.snippet).map((p, j) => p.hit ? <mark key={j} className="bg-accent/20 text-fg rounded-xs px-px">{p.text}</mark> : <span key={j}>{p.text}</span>)}
                           </span>
                         )}
                       </span>

@@ -120,7 +120,7 @@ export function Sidebar({
             onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); (e.target as HTMLInputElement).blur(); } }}
             placeholder="Filter chats"
             aria-label="Filter chats"
-            className="w-full h-9 pl-8 pr-14 rounded-lg bg-transparent text-sm text-fg placeholder:text-fg-subtle hover:bg-surface-2 focus:bg-surface-2 outline-none transition-colors"
+            className="w-full h-9 pl-8 pr-14 rounded-lg bg-transparent text-sm text-fg placeholder:text-fg-subtle hover:bg-surface-2 focus:bg-surface-2 outline-hidden transition-colors"
           />
           {!query && !onOpenSearch && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5 pointer-events-none"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>}
         </label>
@@ -288,14 +288,14 @@ export function Sidebar({
 
   return (
     <>
-      {mobileOpen && !isDesktop && <div className="fixed inset-0 z-40 bg-overlay/60 backdrop-blur-sm animate-fade-in" onClick={onCloseMobile} aria-hidden />}
+      {mobileOpen && !isDesktop && <div className="fixed inset-0 z-40 bg-overlay/60 backdrop-blur-xs animate-fade-in" onClick={onCloseMobile} aria-hidden />}
       <aside
         aria-label="Sidebar"
         aria-hidden={hidden}
         // `inert` keeps the closed mobile drawer out of the tab order.
         {...({ inert: hidden ? '' : undefined } as Record<string, unknown>)}
         className={cn(
-          'fixed inset-y-0 left-0 z-50 w-[280px] glass-sidebar border-r overflow-hidden transition-[transform,width] duration-200 ease-[var(--ease-soft)] shadow-lg',
+          'fixed inset-y-0 left-0 z-50 w-[280px] glass-sidebar border-r overflow-hidden transition-[transform,width] duration-200 ease-(--ease-soft) shadow-lg',
           mobileOpen ? 'translate-x-0' : '-translate-x-full',
           'md:static md:z-auto md:translate-x-0 md:shrink-0 md:shadow-none',
           collapsed ? 'md:w-[68px]' : 'md:w-[272px]',
@@ -382,7 +382,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
           onBlur={commitRename}
           onKeyDown={e => { if (e.key === 'Enter') commitRename(); if (e.key === 'Escape') { setDraft(c.title); setRenaming(false); } }}
           aria-label="Rename chat"
-          className="w-full h-8 px-2.5 rounded-lg bg-surface-2 border border-accent/50 text-sm text-fg outline-none"
+          className="w-full h-8 px-2.5 rounded-lg bg-surface-2 border border-accent/50 text-sm text-fg outline-hidden"
         />
       </li>
     );
