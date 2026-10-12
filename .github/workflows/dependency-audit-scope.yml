@@ -1,0 +1,78 @@
+name: Dependency Audit — Production vs Development
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    branches: ["main", "audit/production-vs-dev-dependencies"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Production dependency security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked packages
+        run: npm ci
+      - name: Compare full-tree and production-only audit results
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm audit --json > "$RUNNER_TEMP/audit-all.json" || true
+          npm audit --omit=dev --json > "$RUNNER_TEMP/audit-prod.json" || true
+          node - "$RUNNER_TEMP/audit-all.json" "$RUNNER_TEMP/audit-prod.json" <<'NODE'
+          const fs = require("node:fs");
+          function read(file) {
+            try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+            catch { return null; }
+          }
+          const all = read(process.argv[2]);
+          const prod = read(process.argv[3]);
+          if (!all || !prod || !all.metadata?.vulnerabilities || !prod.metadata?.vulnerabilities) {
+            console.error("AUDIT_JSON_PARSE_FAILED; no clean result may be inferred.");
+            process.exit(2);
+          }
+          const counts = report => report.metadata.vulnerabilities;
+          const allCounts = counts(all);
+          const prodCounts = counts(prod);
+          console.log("AUDIT_ALL_COUNTS", JSON.stringify(allCounts));
+          console.log("AUDIT_PRODUCTION_ONLY_COUNTS", JSON.stringify(prodCounts));
+          for (const [label, report] of [["ALL", all], ["PRODUCTION_ONLY", prod]]) {
+            console.log("AUDIT_PACKAGE_LIST_BEGIN", label);
+            for (const [name, v] of Object.entries(report.vulnerabilities || {})) {
+              console.log(JSON.stringify({
+                package: name,
+                severity: v.severity,
+                direct: Boolean(v.isDirect),
+                range: v.range || null,
+                effects: v.effects || [],
+                fixAvailable: v.fixAvailable,
+                advisories: (v.via || []).filter(x => x && typeof x === "object")
+                  .map(x => ({ title: x.title, url: x.url, severity: x.severity, range: x.range }))
+              }));
+            }
+            console.log("AUDIT_PACKAGE_LIST_END", label);
+          }
+          const blocking = ["critical", "high", "moderate"].filter(severity => (prodCounts[severity] || 0) > 0);
+          if (blocking.length) {
+            console.error("PRODUCTION_AUDIT_GATE=FAIL", JSON.stringify(Object.fromEntries(blocking.map(s => [s, prodCounts[s]]))));
+            process.exit(1);
+          }
+          console.log("PRODUCTION_AUDIT_GATE=PASS", JSON.stringify({
+            critical: prodCounts.critical || 0,
+            high: prodCounts.high || 0,
+            moderate: prodCounts.moderate || 0,
+            low: prodCounts.low || 0
+          }));
+          NODE
