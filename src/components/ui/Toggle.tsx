@@ -38,7 +38,7 @@ export function Toggle({ checked, onChange, label, description, disabled }: Togg
           aria-hidden
           className={cn(
             'absolute top-0.5 w-5 h-5 rounded-full bg-white shadow-sm transition-transform',
-            checked ? 'translate-x-[18px] left-0.5' : 'translate-x-0 left-[1px]',
+            checked ? 'translate-x-[18px] left-0.5' : 'translate-x-0 left-px',
           )}
         />
       </button>

@@ -153,7 +153,7 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
                   <ul className="rounded-xl glass border border-border divide-y divide-border shadow-sm" aria-label="Project memories">
                     {projectMemories.map(m => (
                       <li key={m.id} className="px-4 py-3">
-                        <p className="text-sm text-fg whitespace-pre-wrap break-words">{m.content}</p>
+                        <p className="text-sm text-fg whitespace-pre-wrap wrap-break-word">{m.content}</p>
                         <p className="text-[11px] text-fg-subtle mt-1">{MEMORY_TYPES[m.type].label} · importance {m.importance}/5</p>
                       </li>
                     ))}

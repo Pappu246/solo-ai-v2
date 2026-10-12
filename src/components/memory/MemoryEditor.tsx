@@ -78,7 +78,7 @@ export function MemoryEditor({ open, initial, defaultProjectId = null, defaultCo
             autoFocus
             maxLength={MAX + 200}
             placeholder="e.g. I write in British English and prefer short answers with examples."
-            className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong resize-y"
+            className="w-full px-3 py-2 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong resize-y"
           />
           <div className="flex items-center justify-between mt-1 text-[11px]">
             <span className="text-fg-subtle">Avoid passwords or other sensitive details.</span>
@@ -111,7 +111,7 @@ export function MemoryEditor({ open, initial, defaultProjectId = null, defaultCo
             <select
               value={draft.project_id ?? ''}
               onChange={e => setDraft(d => ({ ...d, project_id: e.target.value || null }))}
-              className="w-full h-9 px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-none focus:border-border-strong"
+              className="w-full h-9 px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong"
             >
               <option value="">Every chat</option>
               {projects.map(p => <option key={p.id} value={p.id}>Project: {p.name}</option>)}

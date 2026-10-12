@@ -43,7 +43,7 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
       {/* Ambient glow behind the card. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[34rem] h-[30rem] rounded-full"
+        className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-136 h-120 rounded-full"
         style={{ background: 'radial-gradient(closest-side, rgb(var(--accent) / 0.12), transparent 70%)' }}
       />
       <div className="w-full max-w-sm animate-rise-in relative">
@@ -77,7 +77,7 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
                   <input
                     type="email" value={email} onChange={e => setEmail(e.target.value)}
                     autoComplete="email" required autoFocus inputMode="email"
-                    className="w-full h-10 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong"
+                    className="w-full h-10 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong"
                     placeholder="you@example.com"
                   />
                 </label>
@@ -87,7 +87,7 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
                     <input
                       type={showPassword ? 'text' : 'password'} value={password} onChange={e => setPassword(e.target.value)}
                       autoComplete={mode === 'signup' ? 'new-password' : 'current-password'} required minLength={6}
-                      className="w-full h-10 pl-3 pr-10 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-none focus:border-border-strong"
+                      className="w-full h-10 pl-3 pr-10 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong"
                       placeholder={mode === 'signup' ? 'At least 6 characters' : '••••••••'}
                     />
                     <button type="button" onClick={() => setShowPassword(v => !v)} aria-label={showPassword ? 'Hide password' : 'Show password'} className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-fg-subtle hover:text-fg">

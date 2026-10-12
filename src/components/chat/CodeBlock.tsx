@@ -49,7 +49,7 @@ export function CodeBlock({ code, language, live }: CodeBlockProps) {
   return (
     <div className="relative my-3 rounded-xl overflow-hidden text-[0.9em] border border-[rgb(var(--code-border))] bg-[rgb(var(--code-bg))] shadow-sm">
       {/* Gold hairline across the top edge. */}
-      <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
+      <span aria-hidden className="absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-accent/60 to-transparent" />
       <div className="flex items-center justify-between gap-3 px-3.5 h-9 border-b border-[rgb(var(--code-border))] bg-[rgb(var(--code-header))]">
         <span className="text-[11px] font-medium text-fg-muted font-mono lowercase">{language || 'text'}</span>
         <button

@@ -111,7 +111,7 @@ export function FileDetailDialog({ file, projects, onClose, onDelete, onRetry, o
                     disabled={busy === 'project'}
                     onChange={e => run('project', () => onAssignProject(file, e.target.value || null))}
                     aria-label="Project"
-                    className="h-8 max-w-full px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-none focus:border-border-strong disabled:opacity-50"
+                    className="h-8 max-w-full px-2 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong disabled:opacity-50"
                   >
                     <option value="">No project</option>
                     {projects.filter(p => !p.archived || p.id === file.project_id).map(p => <option key={p.id} value={p.id}>{p.name}{p.archived ? ' (archived)' : ''}</option>)}
@@ -143,7 +143,7 @@ export function FileDetailDialog({ file, projects, onClose, onDelete, onRetry, o
               {chunks && chunks.length > 0 && (
                 <div className="space-y-2">
                   {chunks.map(c => (
-                    <pre key={c.id} className="text-[12px] leading-relaxed text-fg-muted whitespace-pre-wrap break-words font-sans bg-surface-2/60 border border-border rounded-lg p-3 max-h-40 overflow-auto">
+                    <pre key={c.id} className="text-[12px] leading-relaxed text-fg-muted whitespace-pre-wrap wrap-break-word font-sans bg-surface-2/60 border border-border rounded-lg p-3 max-h-40 overflow-auto">
                       {c.content.length > 900 ? `${c.content.slice(0, 900)}…` : c.content}
                     </pre>
                   ))}
@@ -198,7 +198,7 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
       <dt className="text-fg-subtle whitespace-nowrap pt-0.5">{label}</dt>
-      <dd className="text-fg min-w-0 break-words">{children}</dd>
+      <dd className="text-fg min-w-0 wrap-break-word">{children}</dd>
     </>
   );
 }
