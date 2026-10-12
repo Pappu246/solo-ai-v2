@@ -1,0 +1,42 @@
+name: KaTeX Override Compatibility Probe
+
+on:
+  push:
+    branches: ["security/katex-nested-override"]
+
+permissions:
+  contents: write
+
+jobs:
+  regenerate-lock-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Regenerate lockfile for the reviewed override
+        run: npm install --package-lock-only --ignore-scripts
+      - name: Ensure only the lockfile was regenerated
+        run: |
+          git diff --exit-code -- package.json
+          git diff --stat -- package-lock.json
+      - name: Install exactly the updated lockfile
+        run: npm ci
+      - name: Run typecheck, lint, unit tests, and build
+        run: npm run check
+      - name: Commit lockfile only after checks pass
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- package-lock.json; then
+            echo "LOCKFILE_ALREADY_MATCHED_OVERRIDE"
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add package-lock.json
+            git commit -m "security(deps): lock deduplicated KaTeX version"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
