@@ -1,0 +1,50 @@
+name: One-time Tailwind v4 migration
+on:
+  push:
+    branches:
+      - security/tailwind-v4-hardening
+permissions:
+  contents: write
+jobs:
+  migrate:
+    if: github.ref == 'refs/heads/security/tailwind-v4-hardening'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/tailwind-v4-hardening
+          persist-credentials: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - name: Verify starting branch is clean and install dependencies
+        run: npm ci
+      - name: Apply official Tailwind v4 migration
+        run: npx --yes @tailwindcss/upgrade
+      - name: Install migrated dependencies cleanly
+        run: npm ci
+      - name: Install Chromium and Linux browser libraries
+        run: npx playwright install --with-deps chromium
+      - name: Run typecheck, lint, unit tests, and build
+        run: npm run check
+      - name: Run browser E2E tests
+        run: npm run test:e2e
+      - name: Audit all dependencies and production dependencies
+        run: |
+          npm audit
+          npm audit --omit=dev
+      - name: Commit only verified migration on this branch
+        run: |
+          git diff --check
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git rm .github/workflows/bootstrap-tailwind-v4.yml
+          if git diff --cached --quiet; then
+            echo "No migration changes were produced."
+            exit 1
+          fi
+          git commit -m "fix: migrate Tailwind CSS v4 and clear dev dependency advisories"
+          git push origin HEAD:security/tailwind-v4-hardening
