@@ -21,6 +21,17 @@ beforeEach(() => {
 });
 
 describe('useChat per-conversation model choice', () => {
+  it('resets a saved default to Auto when the server reports that model unavailable', async () => {
+    vi.stubGlobal('fetch', mockChatFetch('ok', {
+      models: [{ id: 'gpt-4o', available: false }],
+    }));
+    const { result } = renderHook(() => useChat(user, {
+      settings: { auto_title: true, preferred_model: 'gpt-4o' },
+    }));
+    await waitFor(() => expect(result.current.conversationsStatus).toBe('ready'));
+    await waitFor(() => expect(result.current.selectedModel).toBeNull());
+  });
+
   it('sends the selected model in the API request and persists it on a new chat', async () => {
     const bodies: Array<Record<string, unknown>> = [];
     vi.stubGlobal('fetch', mockChatFetch('ok', { onRequest: b => bodies.push(b) }));
