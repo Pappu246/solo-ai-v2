@@ -84,6 +84,12 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setSelectedModel(preferredModel);
   }, [preferredModel]);
 
+  useEffect(() => {
+    if (!selectedModel) return;
+    const selected = availableModels.find(model => model.id === selectedModel);
+    if (selected?.available === false) setSelectedModel(null);
+  }, [availableModels, selectedModel]);
+
   const loadModels = useCallback(async () => {
     try { setAvailableModels(await fetchModels()); }
     catch { /* model list is optional; Auto still works without it */ }
