@@ -24,6 +24,7 @@ import {
   readProviderEvents,
   redactSecrets,
   resolveModel,
+  selectAutoModel,
   statusForCode,
   streamWithFallback,
   toSSEBody,
@@ -248,6 +249,12 @@ Deno.test("google: the API key travels in a header, never in the URL", () => {
   // Preview id is applied provider-side only.
   const pro = buildProviderRequest(model("gemini-3.1-pro"), [{ role: "user", content: "hi" }], "k");
   assertStringIncludes(pro.url, "gemini-3.1-pro-preview:streamGenerateContent");
+
+  // DeepSeek Flash now uses the canonical model id instead of the retired V4 alias.
+  const flash = model("deepseek-v4-flash");
+  const flashRequest = buildProviderRequest(flash, [{ role: "user", content: "hi" }], "k");
+  assertEquals(JSON.parse(String(flashRequest.init.body)).model, "deepseek-flash");
+  assert(flash.supports_vision, "DeepSeek Flash is vision-capable");
 });
 
 Deno.test("redaction: keys never survive into log lines", () => {
@@ -581,10 +588,10 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
 });
 
 Deno.test("availability: the browser catalog reflects model blocks and provider cooldowns", () => {
-  // No tracker → every model available, internal fields still stripped.
-  const plain = publicModelAvailability(null);
+  // With all test keys configured, a null health tracker keeps all models available.
+  const plain = publicModelAvailability(null, env);
   assertEquals(plain.length, publicModels().length);
-  assert(plain.every(m => m.available), "null health should mark everything available");
+  assert(plain.every(m => m.available), "all configured providers should be available");
   assert(plain.every(m => !("provider_model" in m)), "provider_model must never reach the browser");
 
   // One blocked model, one cooling-down provider → exactly those go dark.
@@ -592,7 +599,7 @@ Deno.test("availability: the browser catalog reflects model blocks and provider 
     isHealthy: (provider: string) => provider !== "openai",
     isModelAvailable: (modelId: string) => modelId !== "gpt-4o",
   };
-  const annotated = publicModelAvailability(health);
+  const annotated = publicModelAvailability(health, env);
   assertEquals(annotated.length, publicModels().length);
   for (const m of annotated) {
     assertEquals(
@@ -608,6 +615,22 @@ Deno.test("availability: the browser catalog reflects model blocks and provider 
   const recovered = publicModelAvailability({
     isHealthy: () => true,
     isModelAvailable: () => true,
-  });
+  }, env);
   assert(recovered.every(m => m.available), "recovered health should mark everything available");
+});
+
+Deno.test("availability: models without configured provider keys are hidden from the catalog", () => {
+  const googleOnly: EnvReader = name => name === "GOOGLE_API_KEY" ? KEYS.GOOGLE_API_KEY : undefined;
+  const models = publicModelAvailability(null, googleOnly);
+  assert(models.filter(m => m.provider === "google").every(m => m.available));
+  assert(models.filter(m => m.provider !== "google").every(m => !m.available));
+});
+
+Deno.test("routing: auto-selection and fallback skip providers without configured keys", () => {
+  const configured = (provider: string) => provider === "google" || provider === "groq";
+  const picked = selectAutoModel("conversation", { isProviderConfigured: configured });
+  assert(configured(picked.provider), `selected unconfigured provider ${picked.provider}`);
+  const chain = fallbackChain(model("gpt-oss-120b"), false, { isProviderConfigured: configured });
+  assertEquals(chain[0].id, "gpt-oss-120b", "explicit primary stays first for compatibility");
+  assert(chain.slice(1).every(m => configured(m.provider)), "unconfigured provider was included as a fallback");
 });

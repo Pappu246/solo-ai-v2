@@ -19,7 +19,8 @@ interface Props {
 export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
-  const current = selected ? models.find(m => m.id === selected) : null;
+  const selectableModels = models.filter(m => m.available !== false);
+  const current = selected ? selectableModels.find(m => m.id === selected) : null;
 
   useEffect(() => {
     if (!open) return;
@@ -30,7 +31,7 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
     return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
   }, [open]);
 
-  const grouped = models.reduce<Record<string, AIModel[]>>((acc, m) => { (acc[m.category] ||= []).push(m); return acc; }, {});
+  const grouped = selectableModels.reduce<Record<string, AIModel[]>>((acc, m) => { (acc[m.category] ||= []).push(m); return acc; }, {});
   const order: ModelCategory[] = ['conversation', 'fast', 'coding', 'reasoning', 'research', 'vision', 'creative', 'free'];
 
   return (
@@ -61,30 +62,25 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
             subtitle="Solo picks the best model for each message"
             icon={<Sparkles className="w-3.5 h-3.5 text-accent" />}
           />
-          {models.length === 0 && (
-            <p className="px-3 py-3 text-xs text-fg-subtle">Model list unavailable. Auto still works.</p>
+          {selectableModels.length === 0 && (
+            <p className="px-3 py-3 text-xs text-fg-subtle">No configured models are available. Auto will use any server-configured provider.</p>
           )}
           {order.filter(c => grouped[c]?.length).map(cat => (
             <div key={cat} className="mt-1">
               <p className="px-2.5 pt-2 pb-1 text-[10px] font-semibold uppercase tracking-wider text-fg-subtle">{MODEL_CATEGORIES[cat]?.label ?? cat}</p>
-              {grouped[cat].map(m => {
-                const unavailable = m.available === false;
-                return (
-                  <Option
-                    key={m.id}
-                    selected={selected === m.id}
-                    disabled={unavailable}
-                    onClick={() => { if (unavailable) return; onSelect(m.id); setOpen(false); }}
-                    title={m.name}
-                    subtitle={[
-                      m.provider,
-                      m.supports_vision ? 'vision' : null,
-                      `${Math.round(m.context_length / 1000)}K context`,
-                      unavailable ? 'temporarily unavailable' : null,
-                    ].filter(Boolean).join(' · ')}
-                  />
-                );
-              })}
+              {grouped[cat].map(m => (
+                <Option
+                  key={m.id}
+                  selected={selected === m.id}
+                  onClick={() => { onSelect(m.id); setOpen(false); }}
+                  title={m.name}
+                  subtitle={[
+                    m.provider,
+                    m.supports_vision ? 'vision' : null,
+                    `${Math.round(m.context_length / 1000)}K context`,
+                  ].filter(Boolean).join(' · ')}
+                />
+              ))}
             </div>
           ))}
         </div>
