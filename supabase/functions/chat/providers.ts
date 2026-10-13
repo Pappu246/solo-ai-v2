@@ -86,7 +86,7 @@ export const MODELS: readonly ModelSpec[] = [
   { id: "gpt-oss-20b", name: "GPT OSS 20B", provider: "groq", category: "fast", speed: 5, quality: 4, cost: 1, free: false, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Fast", provider_model: "openai/gpt-oss-20b" },
   { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "groq", category: "conversation", speed: 5, quality: 5, cost: 2, free: false, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Best", provider_model: "openai/gpt-oss-120b" },
   { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "deepseek", category: "reasoning", speed: 4, quality: 5, cost: 2, free: false, context_length: 1000000, supports_vision: false, supports_tools: true, tag: "Latest" },
-  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", provider: "deepseek", category: "fast", speed: 5, quality: 4, cost: 1, free: false, context_length: 1000000, supports_vision: false, supports_tools: true, tag: "Fast" },
+  { id: "deepseek-v4-flash", name: "DeepSeek V4.1 Flash", provider: "deepseek", category: "fast", speed: 5, quality: 4, cost: 1, free: false, context_length: 1000000, supports_vision: true, supports_tools: true, tag: "Fast", provider_model: "deepseek-flash" },
 ];
 
 /** Retired / provider-native ids → the catalog id that replaces them. */
@@ -100,6 +100,7 @@ export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   "openai/gpt-oss-120b": "gpt-oss-120b",
   "openai/gpt-oss-20b": "gpt-oss-20b",
   "gemini-3.1-pro-preview": "gemini-3.1-pro",
+  "deepseek-flash": "deepseek-v4-flash",
 };
 
 /** Catalog as sent to the browser (internal fields stripped). */
@@ -114,20 +115,22 @@ export function publicModels(): Array<Omit<ModelSpec, "provider_model">> {
 /**
  * Catalog annotated with live availability for the model picker (Phase 15).
  *
- * A model reports `available: false` exactly when routing would skip it: its
- * catalog entry is blocked (the provider retired it) or its provider is
- * cooling down after repeated failures. Like the health snapshot, this only
- * exposes booleans — never keys, request data or error bodies. `null` health
- * means "no tracker" (all available), which keeps call sites and tests simple.
+ * A model is available only when its provider secret is configured and the
+ * provider/model are not temporarily blocked by health tracking. The response
+ * only exposes booleans — never keys, request data or error bodies.
  */
-export function publicModelAvailability(health: {
-  isHealthy(provider: string): boolean;
-  isModelAvailable?(modelId: string): boolean;
-} | null): Array<Omit<ModelSpec, "provider_model"> & { available: boolean }> {
+export function publicModelAvailability(
+  health: {
+    isHealthy(provider: string): boolean;
+    isModelAvailable?(modelId: string): boolean;
+  } | null,
+  env: EnvReader = denoEnv,
+): Array<Omit<ModelSpec, "provider_model"> & { available: boolean }> {
   return publicModels().map((model) => ({
     ...model,
-    available: health === null
-      || ((health.isModelAvailable?.(model.id) ?? true) && health.isHealthy(model.provider)),
+    available: Boolean(apiKeyFor(model.provider, env))
+      && (health === null
+        || ((health.isModelAvailable?.(model.id) ?? true) && health.isHealthy(model.provider))),
   }));
 }
 
@@ -165,6 +168,8 @@ export interface RoutingOptions {
   estimatedContextTokens?: number;
   /** Health tracker; `null`/omitted keeps plain capability-based routing. */
   health?: HealthTracker | null;
+  /** Exclude providers whose required API credential is not configured. */
+  isProviderConfigured?: (provider: ProviderId) => boolean;
 }
 
 /** Auto-route category → preferred catalog id (kept from the original router). */
@@ -184,6 +189,7 @@ function fitsRequest(model: ModelSpec, options: RoutingOptions): boolean {
   if (tokens > 0 && model.context_length < tokens) return false;
   const health = options.health;
   if (health?.isModelAvailable && !health.isModelAvailable(model.id)) return false;
+  if (options.isProviderConfigured && !options.isProviderConfigured(model.provider)) return false;
   return true;
 }
 
@@ -205,9 +211,14 @@ export function selectAutoModel(route: string, options: RoutingOptions = {}): Mo
   const preferredId = ROUTE_PREFERENCE[route] ?? ROUTE_PREFERENCE.conversation;
 
   const capable = MODELS.filter(m => fitsRequest(m, options));
-  // Degradation: relax context/availability filters (never the image one —
-  // the provider would reject the request anyway) rather than returning null.
-  const pool = capable.length ? capable : MODELS.filter(m => !options.hasImages || m.supports_vision);
+  // Keep graceful degradation for legacy callers without a configuration
+  // predicate. When configuration is known, prefer configured candidates and
+  // never knowingly select a model from an unconfigured provider.
+  const unrestricted = MODELS.filter(m => !options.hasImages || m.supports_vision);
+  const configured = options.isProviderConfigured
+    ? unrestricted.filter(m => options.isProviderConfigured!(m.provider))
+    : unrestricted;
+  const pool = capable.length ? capable : (configured.length ? configured : unrestricted);
 
   const ranked = [...pool].sort((a, b) => {
     const healthyA = health && !health.isHealthy(a.provider) ? 1 : 0;
