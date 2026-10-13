@@ -108,16 +108,13 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
             <Group title="AI">
               <Field label="Default model" hint="Auto lets Solo choose the best model for each message. You can still change it per chat from the top bar.">
                 <select
-                  value={settings.preferred_model ?? ''}
+                  value={settings.preferred_model && models.some(m => m.id === settings.preferred_model && m.available !== false) ? settings.preferred_model : ''}
                   onChange={e => onUpdate({ preferred_model: e.target.value || null })}
                   aria-label="Default model"
                   className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong"
                 >
                   <option value="">Auto (recommended)</option>
-                  {models.map(m => <option key={m.id} value={m.id}>{m.name} · {m.provider}</option>)}
-                  {settings.preferred_model && !models.some(m => m.id === settings.preferred_model) && (
-                    <option value={settings.preferred_model}>{settings.preferred_model}</option>
-                  )}
+                  {models.filter(m => m.available !== false).map(m => <option key={m.id} value={m.id}>{m.name} · {m.provider}</option>)}
                 </select>
               </Field>
               <p className="text-xs text-fg-subtle leading-relaxed">
