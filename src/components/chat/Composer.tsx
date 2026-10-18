@@ -81,6 +81,20 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   const pendingKnowledge = attachments.some(a => a.file_id && (a.status === 'uploading' || a.status === 'processing'));
   const canSend = (value.trim().length > 0 || attachments.length > 0) && !isGenerating && !disabled && !processing && !pendingKnowledge && !offline;
 
+  const sendButtonTitle = isGenerating
+    ? 'Stop generating'
+    : offline
+      ? 'Offline — reconnect to send message'
+      : disabled
+        ? 'Messaging is disabled'
+        : processing
+          ? 'Reading attached files…'
+          : pendingKnowledge
+            ? 'Preparing attached files…'
+            : !value.trim() && attachments.length === 0
+              ? 'Enter a message or attach a file'
+              : 'Send message';
+
   const submit = useCallback(() => {
     if (!canSend) return;
     // Failed knowledge files are dropped rather than sent as empty context.
@@ -336,7 +350,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
               onClick={isGenerating ? onStop : submit}
               disabled={!isGenerating && !canSend}
               aria-label={isGenerating ? 'Stop generating' : 'Send message'}
-              title={isGenerating ? 'Stop generating' : 'Send message'}
+              title={sendButtonTitle}
               className="relative inline-flex items-center justify-center w-11 h-11 -m-0.5 rounded-full disabled:cursor-not-allowed"
             >
               <span
