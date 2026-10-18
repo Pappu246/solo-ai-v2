@@ -413,7 +413,7 @@ function Shell() {
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <EmptyState onSuggestion={sendMessage} userName={user.email} />
+                <EmptyState onSuggestion={sendMessage} />
               </div>
             )}
 
