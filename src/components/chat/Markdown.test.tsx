@@ -59,10 +59,11 @@ describe('Markdown', () => {
 
   it('never turns javascript:/data: links into live hrefs', () => {
     const { container } = render(
-      <Markdown content={'[go](javascript:alert(1)) and [bad](data:text/html,x) and [ok](https://example.com)'} />,
+      <Markdown content={'[go](javascript:alert(1)) and [bad](data:text/html,x) and [proto](//evil.example) and [ok](https://example.com)'} />,
     );
     expect(container.querySelector('a[href^="javascript"]')).toBeNull();
     expect(container.querySelector('a[href^="data:"]')).toBeNull();
+    expect(container.querySelector('a[href="//evil.example"]')).toBeNull();
     expect(container.querySelector('a[href="https://example.com"]')).not.toBeNull();
   });
 
