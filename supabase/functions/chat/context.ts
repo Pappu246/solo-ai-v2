@@ -1,7 +1,42 @@
 import type { Message, ModelSpec } from "./providers.ts";
-export interface ContextBuildResult{messages:Message[];compacted:boolean;droppedTurns:number;sourceChars:number;contextChars:number}
-const RECENT_TURNS=12,ABSOLUTE_INPUT_CHARS=180000,SUMMARY_CHARS=18000;
-const chars=(m:Message[])=>m.reduce((n,x)=>n+String(x.content).length,0);
-function modelCharBudget(model:ModelSpec){const tokenBudget=Math.max(12000,Math.min(Math.floor(model.context_length*.68),90000));return Math.min(ABSOLUTE_INPUT_CHARS,tokenBudget*4)}
-function summarizeTurns(turns:Message[]){return turns.map((m,i)=>`${i+1}. ${m.role.toUpperCase()}: ${String(m.content).replace(/\s+/g," ").trim()}`).join("\n").slice(0,SUMMARY_CHARS)}
-export function buildModelContext(source:Message[],model:ModelSpec):ContextBuildResult{const sourceChars=chars(source),budget=modelCharBudget(model);if(source.length<=24&&sourceChars<=budget)return{messages:source,compacted:false,droppedTurns:0,sourceChars,contextChars:sourceChars};const recent=source.slice(-RECENT_TURNS),older=source.slice(0,-RECENT_TURNS),summaryMessage:Message={role:"system",content:`Conversation history summary. Older turns remain in the database; this summary is only for the current model request. Preserve important facts, decisions, constraints and unresolved tasks.\n${summarizeTurns(older)}`};let selected=[summaryMessage,...recent];while(selected.length>2&&chars(selected)>budget)selected=[summaryMessage,...selected.slice(2)];return{messages:selected,compacted:true,droppedTurns:Math.max(0,source.length-(selected.length-1)),sourceChars,contextChars:chars(selected)}}
+export interface ContextBuildResult {
+  messages: Message[];
+  compacted: boolean;
+  droppedTurns: number;
+  sourceChars: number;
+  contextChars: number;
+}
+const RECENT_TURNS = 12, ABSOLUTE_INPUT_CHARS = 180000, SUMMARY_CHARS = 18000;
+const chars = (m: Message[]) => m.reduce((n, x) => n + String(x.content).length, 0);
+function modelCharBudget(model: ModelSpec) {
+  const tokenBudget = Math.max(12000, Math.min(Math.floor(model.context_length * .68), 90000));
+  return Math.min(ABSOLUTE_INPUT_CHARS, tokenBudget * 4);
+}
+function summarizeTurns(turns: Message[]) {
+  return turns.map((m, i) => `${i + 1}. ${m.role.toUpperCase()}: ${String(m.content).replace(/\s+/g, " ").trim()}`)
+    .join("\n").slice(0, SUMMARY_CHARS);
+}
+export function buildModelContext(source: Message[], model: ModelSpec): ContextBuildResult {
+  const sourceChars = chars(source), budget = modelCharBudget(model);
+  if (source.length <= 24 && sourceChars <= budget) {
+    return { messages: source, compacted: false, droppedTurns: 0, sourceChars, contextChars: sourceChars };
+  }
+  const recent = source.slice(-RECENT_TURNS),
+    older = source.slice(0, -RECENT_TURNS),
+    summaryMessage: Message = {
+      role: "system",
+      content:
+        `Conversation history summary. Older turns remain in the database; this summary is only for the current model request. Preserve important facts, decisions, constraints and unresolved tasks.\n${
+          summarizeTurns(older)
+        }`,
+    };
+  let selected = [summaryMessage, ...recent];
+  while (selected.length > 2 && chars(selected) > budget) selected = [summaryMessage, ...selected.slice(2)];
+  return {
+    messages: selected,
+    compacted: true,
+    droppedTurns: Math.max(0, source.length - (selected.length - 1)),
+    sourceChars,
+    contextChars: chars(selected),
+  };
+}
