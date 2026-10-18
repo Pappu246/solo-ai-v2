@@ -96,6 +96,7 @@ const KEYS: Record<string, string> = {
   GOOGLE_API_KEY: "AIzaTESTGOOGLEKEY000000",
   GROQ_API_KEY: "gsk_testgroqkey000000",
   DEEPSEEK_API_KEY: "sk-deepseek-test-key-000",
+  OPENROUTER_API_KEY: "sk-or-test-key-000000",
 };
 const env: EnvReader = (name) => KEYS[name];
 const noKeys: EnvReader = () => undefined;
@@ -201,8 +202,8 @@ Deno.test("fallback chain: unique, vision-safe and primary-first", () => {
   const chain = fallbackChain(model("gpt-oss-120b"), false).map(m => m.id);
   assertEquals(chain[0], "gpt-oss-120b");
   assertEquals(new Set(chain).size, chain.length);
-  const vision = fallbackChain(model("gpt-4o"), true);
-  assertEquals(vision[0].id, "gpt-4o");
+  const vision = fallbackChain(model("gemini-3.7-flash"), true);
+  assertEquals(vision[0].id, "gemini-3.7-flash");
   assert(vision.every(m => m.supports_vision));
 });
 
@@ -246,15 +247,13 @@ Deno.test("google: the API key travels in a header, never in the URL", () => {
   assert(!request.url.includes(KEYS.GOOGLE_API_KEY));
   assertEquals((request.init.headers as Record<string, string>)["x-goog-api-key"], KEYS.GOOGLE_API_KEY);
   assertStringIncludes(request.url, "alt=sse");
-  // Preview id is applied provider-side only.
-  const pro = buildProviderRequest(model("gemini-3.1-pro"), [{ role: "user", content: "hi" }], "k");
-  assertStringIncludes(pro.url, "gemini-3.1-pro-preview:streamGenerateContent");
 
-  // DeepSeek Flash now uses the canonical model id instead of the retired V4 alias.
-  const flash = model("deepseek-v4-flash");
-  const flashRequest = buildProviderRequest(flash, [{ role: "user", content: "hi" }], "k");
-  assertEquals(JSON.parse(String(flashRequest.init.body)).model, "deepseek-flash");
-  assert(flash.supports_vision, "DeepSeek Flash is vision-capable");
+  // OpenRouter free models use the provider-side `:free` id and a Bearer header.
+  const coder = model("openrouter-qwen3-coder");
+  const coderRequest = buildProviderRequest(coder, [{ role: "user", content: "hi" }], "k");
+  assertStringIncludes(coderRequest.url, "openrouter.ai/api/v1/chat/completions");
+  assertEquals(JSON.parse(String(coderRequest.init.body)).model, "qwen/qwen3-coder:free");
+  assertEquals((coderRequest.init.headers as Record<string, string>).Authorization, "Bearer k");
 });
 
 Deno.test("redaction: keys never survive into log lines", () => {
@@ -582,7 +581,9 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
   assertEquals(error.retryable, false);
 
   const { fetchImpl, calls } = scriptedFetch([() => sseResponse([textDelta("ok"), "data: [DONE]\n\n"])]);
-  const result = await openModelStream(model("gpt-4o"), [{ role: "user", content: "look" }], [image], { env, fetchImpl, guards });
+  // The catalog is free-only, so exercise the OpenAI-style image shape with a synthetic spec.
+  const openaiVision: ModelSpec = { ...model("gemini-3.7-flash"), id: "test-openai-vision", provider: "openai", provider_model: "gpt-test" };
+  const result = await openModelStream(openaiVision, [{ role: "user", content: "look" }], [image], { env, fetchImpl, guards });
   await drain(result.events);
   assertStringIncludes(String(calls[0].init?.body), "image_url");
 });
@@ -596,15 +597,15 @@ Deno.test("availability: the browser catalog reflects model blocks and provider 
 
   // One blocked model, one cooling-down provider → exactly those go dark.
   const health = {
-    isHealthy: (provider: string) => provider !== "openai",
-    isModelAvailable: (modelId: string) => modelId !== "gpt-4o",
+    isHealthy: (provider: string) => provider !== "google",
+    isModelAvailable: (modelId: string) => modelId !== "gpt-oss-120b",
   };
   const annotated = publicModelAvailability(health, env);
   assertEquals(annotated.length, publicModels().length);
   for (const m of annotated) {
     assertEquals(
       m.available,
-      m.id !== "gpt-4o" && m.provider !== "openai",
+      m.id !== "gpt-oss-120b" && m.provider !== "google",
       `${m.id} (${m.provider}) availability`,
     );
   }

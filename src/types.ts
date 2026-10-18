@@ -186,7 +186,7 @@ export interface ChatMessage {
 
 // ─── AI Model Types ──────────────────────────────────────────────────────────
 
-export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'deepseek';
+export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'deepseek' | 'openrouter';
 export type ModelCategory = 'coding' | 'conversation' | 'fast' | 'research' | 'reasoning' | 'free' | 'vision' | 'creative';
 
 export interface AIModel {

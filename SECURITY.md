@@ -5,11 +5,9 @@
 AI provider credentials must live in Supabase Edge Function secrets, never in Vite variables, localStorage, or source control. Supabase recommends publishable keys for browser code and secret keys only for backend components.
 
 Recommended Edge Function secrets:
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GOOGLE_API_KEY`
 - `GROQ_API_KEY`
-- `DEEPSEEK_API_KEY`
+- `GOOGLE_API_KEY`
+- `OPENROUTER_API_KEY`
 - `APP_ORIGIN`
 
 ## Browser keys

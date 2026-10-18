@@ -172,14 +172,17 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 
 Provider API keys belong in Supabase Edge Function secrets, not in the frontend or GitHub repository.
 
+SOLO AI is **free-only**: the model catalog contains just free-tier models. Add any of these
+keys (all have a free tier; limits change, so check each provider's current terms):
+
 ```text
-OPENAI_API_KEY
-ANTHROPIC_API_KEY
-GOOGLE_API_KEY
-GROQ_API_KEY
-DEEPSEEK_API_KEY
+GROQ_API_KEY          # GPT OSS 120B / 20B (https://console.groq.com)
+GOOGLE_API_KEY        # Gemini Flash, vision (https://aistudio.google.com/apikey)
+OPENROUTER_API_KEY    # ":free" models + backup router (https://openrouter.ai/keys)
 APP_ORIGIN
 ```
+
+Models whose provider key is missing are greyed out, and Auto routing only picks configured ones.
 
 For the Smart Image Search feature (optional), also add:
 
