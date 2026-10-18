@@ -4,7 +4,6 @@
  */
 import {
   agentBudgets,
-  anthropicTools,
   googleTools,
   openAITools,
   parseToolCalls,
@@ -28,9 +27,9 @@ function assertIncludes(actual: string, expected: string): void {
 }
 
 const model = (overrides: Partial<ModelSpec> = {}): ModelSpec => ({
-  id: "gpt-4o-mini",
-  name: "GPT-4o Mini",
-  provider: "openai",
+  id: "gpt-oss-20b",
+  name: "GPT OSS 20B",
+  provider: "groq",
   category: "conversation",
   speed: 5,
   quality: 4,
@@ -112,7 +111,7 @@ Deno.test("single round: tool call executes and results become a prompt block", 
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl: scriptedFetch([
       toolCallResponse("current_time", { timezone: "Europe/Berlin" }),
       finalResponse("It is noon."),
@@ -141,7 +140,7 @@ Deno.test("loop stops at maxRounds even if the model keeps calling tools", async
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl: scriptedFetch([
       toolCallResponse("echo", { text: "one" }, "c1"),
       toolCallResponse("echo", { text: "two" }, "c2"),
@@ -168,7 +167,7 @@ Deno.test("deadline stops the loop before the provider is called again", async (
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl,
     requested: true,
     registry: testRegistry(),
@@ -187,7 +186,7 @@ Deno.test("provider failure degrades to a plain answer, never throws", async () 
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl,
     requested: true,
     registry: testRegistry(),
@@ -203,7 +202,7 @@ Deno.test("tool failures are recorded but do not break the loop", async () => {
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl: scriptedFetch([
       toolCallResponse("does_not_exist", {}),
       finalResponse("answered anyway"),
@@ -226,24 +225,15 @@ Deno.test("env budgets are clamped to safe ranges", () => {
   assertEquals(agentBudgets(() => undefined).deadlineMs, 15_000);
 });
 
-Deno.test("parseToolCalls handles all three provider shapes", () => {
-  const openai = parseToolCalls("openai", toolCallResponse("echo", { text: "hi" }));
+Deno.test("parseToolCalls handles the OpenAI-compatible and Google shapes", () => {
+  const openai = parseToolCalls("groq", toolCallResponse("echo", { text: "hi" }));
   assertEquals(openai.calls[0].name, "echo");
   assertEquals(openai.calls[0].args, { text: "hi" });
 
-  const malformed = parseToolCalls("openai", {
+  const malformed = parseToolCalls("groq", {
     choices: [{ message: { content: "plain", tool_calls: [{ id: "x", type: "function", function: { name: "echo", arguments: "{broken" } }] } }],
   });
   assertEquals(malformed.calls[0].args, {}, "malformed arguments become {} for the tool's parse");
-
-  const anthropic = parseToolCalls("anthropic", {
-    content: [
-      { type: "text", text: "Let me check." },
-      { type: "tool_use", id: "tu_1", name: "current_time", input: { timezone: "UTC" } },
-    ],
-  });
-  assertEquals(anthropic.text, "Let me check.");
-  assertEquals(anthropic.calls[0], { id: "tu_1", name: "current_time", args: { timezone: "UTC" } });
 
   const google = parseToolCalls("google", {
     candidates: [{ content: { parts: [{ text: "hi" }, { functionCall: { name: "echo", args: { text: "g" } } }] } }],
@@ -251,8 +241,8 @@ Deno.test("parseToolCalls handles all three provider shapes", () => {
   assertEquals(google.calls[0].name, "echo");
   assertEquals(google.calls[0].args, { text: "g" });
 
-  assertEquals(parseToolCalls("openai", { choices: [{ message: { content: "just text" } }] }).calls.length, 0);
-  assertEquals(parseToolCalls("openai", {}).calls.length, 0, "garbage payloads parse to no calls");
+  assertEquals(parseToolCalls("groq", { choices: [{ message: { content: "just text" } }] }).calls.length, 0);
+  assertEquals(parseToolCalls("groq", {}).calls.length, 0, "garbage payloads parse to no calls");
 });
 
 Deno.test("tool declaration shapes match each provider", () => {
@@ -260,10 +250,6 @@ Deno.test("tool declaration shapes match each provider", () => {
     { type: "function", function: { name: "current_time", description: "d", parameters: { type: "object", properties: {} } } },
   ];
   assertEquals(openAITools(declarations), declarations);
-  const anthropic = anthropicTools(declarations) as Array<Record<string, unknown>>;
-  assertEquals(anthropic[0].name, "current_time");
-  assertEquals(anthropic[0].input_schema, { type: "object", properties: {} });
-  assert(!("parameters" in anthropic[0]));
   const google = googleTools(declarations) as { functionDeclarations: Array<Record<string, unknown>> };
   assertEquals(google.functionDeclarations.length, 1);
   assertEquals(google.functionDeclarations[0].name, "current_time");
@@ -305,7 +291,7 @@ Deno.test("cancellation before the first round never reaches the provider", asyn
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl: async () => { fetched = true; return new Response("{}", { status: 200 }); },
     requested: true,
     registry: testRegistry(),
@@ -344,7 +330,7 @@ Deno.test("cancellation between tool calls stops queued tools and the next round
     model: model(),
     messages,
     ctx: ctx(),
-    env: name => (name === "OPENAI_API_KEY" ? "sk-test-key" : undefined),
+    env: name => (name === "GROQ_API_KEY" ? "sk-test-key" : undefined),
     fetchImpl: async () => { fetches += 1; return new Response(JSON.stringify(twoCalls), { status: 200 }); },
     requested: true,
     registry,

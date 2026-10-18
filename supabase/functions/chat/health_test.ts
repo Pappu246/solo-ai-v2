@@ -40,11 +40,8 @@ function assertEquals<T>(actual: T, expected: T, message?: string): void {
 // ── helpers ────────────────────────────────────────────────────────────────
 
 const KEYS: Record<string, string> = {
-  OPENAI_API_KEY: "sk-openai-test-key-000000",
-  ANTHROPIC_API_KEY: "sk-ant-test-key-000000",
   GOOGLE_API_KEY: "AIzaTESTGOOGLEKEY000000",
   GROQ_API_KEY: "gsk_testgroqkey000000",
-  DEEPSEEK_API_KEY: "sk-deepseek-test-key-000",
   OPENROUTER_API_KEY: "sk-or-test-key-000000",
 };
 const env: EnvReader = (name) => KEYS[name];
@@ -71,12 +68,6 @@ function sseResponse(chunks: string[]): Response {
 function okFor(url: string, text = "ok"): Response {
   if (url.includes("generativelanguage")) {
     return sseResponse([`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: "STOP" }] })}\n\n`]);
-  }
-  if (url.includes("api.anthropic.com")) {
-    return sseResponse([
-      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { text } })}\n\n`,
-      `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
-    ]);
   }
   return sseResponse([
     `data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`,

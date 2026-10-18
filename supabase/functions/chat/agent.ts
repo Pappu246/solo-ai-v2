@@ -108,15 +108,6 @@ export function openAITools(declarations: unknown[]): unknown {
   return declarations;
 }
 
-/** Anthropic `tools` array (input_schema instead of parameters). */
-export function anthropicTools(declarations: Array<{ function: { name: string; description: string; parameters: unknown } }>): unknown {
-  return declarations.map(d => ({
-    name: d.function.name,
-    description: d.function.description,
-    input_schema: d.function.parameters,
-  }));
-}
-
 /** Google `functionDeclarations` wrapper (already one object; see providers.ts). */
 export function googleTools(declarations: Array<{ function: { name: string; description: string; parameters: unknown } }>): unknown {
   return {
@@ -134,22 +125,6 @@ export function parseToolCalls(provider: ModelSpec["provider"], payload: unknown
   const calls: AgentToolCall[] = [];
   let text = "";
 
-  if (provider === "anthropic") {
-    const content = Array.isArray(record.content) ? record.content : [];
-    for (const block of content) {
-      const b = (block && typeof block === "object" ? block : {}) as Record<string, unknown>;
-      if (b.type === "text" && typeof b.text === "string") text += b.text;
-      if (b.type === "tool_use") {
-        calls.push({
-          id: String(b.id ?? `tool_${calls.length}`),
-          name: String(b.name ?? ""),
-          args: (b.input && typeof b.input === "object" ? b.input : {}) as Record<string, unknown>,
-        });
-      }
-    }
-    return { text, calls: calls.filter(c => c.name) };
-  }
-
   if (provider === "google") {
     const candidates = Array.isArray(record.candidates) ? record.candidates : [];
     const parts = ((candidates[0] as Record<string, unknown> | undefined)?.content as Record<string, unknown> | undefined)?.parts;
@@ -164,7 +139,7 @@ export function parseToolCalls(provider: ModelSpec["provider"], payload: unknown
     return { text, calls };
   }
 
-  // openai / groq / deepseek
+  // OpenAI-compatible (groq / openrouter)
   const choices = Array.isArray(record.choices) ? record.choices : [];
   const message = (choices[0] as Record<string, unknown> | undefined)?.message as Record<string, unknown> | undefined;
   if (message) {
@@ -274,21 +249,11 @@ export async function runAgentLoop(options: AgentOptions): Promise<AgentResult> 
 // ── Transcript shaping ──────────────────────────────────────────────────────
 
 function toolsFor(model: ModelSpec, declarations: unknown[]): unknown {
-  if (model.provider === "anthropic") return anthropicTools(declarations as Array<{ function: { name: string; description: string; parameters: unknown } }>);
   if (model.provider === "google") return googleTools(declarations as Array<{ function: { name: string; description: string; parameters: unknown } }>);
   return openAITools(declarations);
 }
 
 function assistantTurn(provider: ModelSpec["provider"], text: string, calls: AgentToolCall[]): Message {
-  if (provider === "anthropic") {
-    return {
-      role: "assistant",
-      content: [
-        ...(text ? [{ type: "text", text }] : []),
-        ...calls.map(c => ({ type: "tool_use", id: c.id, name: c.name, input: c.args })),
-      ],
-    };
-  }
   if (provider === "google") {
     return {
       role: "assistant",
@@ -309,9 +274,6 @@ function assistantTurn(provider: ModelSpec["provider"], text: string, calls: Age
 
 function toolTurn(provider: ModelSpec["provider"], call: AgentToolCall, result: { ok: boolean; output?: string; error?: string }): Message {
   const content = result.ok ? (result.output ?? "[]") : JSON.stringify({ error: result.error });
-  if (provider === "anthropic") {
-    return { role: "user", content: [{ type: "tool_result", tool_use_id: call.id, content }] };
-  }
   if (provider === "google") {
     return { role: "user", content: [{ functionResponse: { name: call.name, response: { result: content } } }] };
   }

@@ -91,11 +91,8 @@ async function assertRejects<T extends Error>(fn: () => Promise<unknown>, ctor: 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 const KEYS: Record<string, string> = {
-  OPENAI_API_KEY: "sk-openai-test-key-000000",
-  ANTHROPIC_API_KEY: "sk-ant-test-key-000000",
   GOOGLE_API_KEY: "AIzaTESTGOOGLEKEY000000",
   GROQ_API_KEY: "gsk_testgroqkey000000",
-  DEEPSEEK_API_KEY: "sk-deepseek-test-key-000",
   OPENROUTER_API_KEY: "sk-or-test-key-000000",
 };
 const env: EnvReader = (name) => KEYS[name];
@@ -122,12 +119,6 @@ function textDelta(text: string): string {
 function okFor(url: string, text = "ok"): Response {
   if (url.includes("generativelanguage")) {
     return sseResponse([`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: "STOP" }] })}\n\n`]);
-  }
-  if (url.includes("api.anthropic.com")) {
-    return sseResponse([
-      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { text } })}\n\n`,
-      `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
-    ]);
   }
   return sseResponse([textDelta(text), "data: [DONE]\n\n"]);
 }
@@ -257,7 +248,7 @@ Deno.test("google: the API key travels in a header, never in the URL", () => {
 });
 
 Deno.test("redaction: keys never survive into log lines", () => {
-  const leak = `Bearer ${KEYS.OPENAI_API_KEY} groq=${KEYS.GROQ_API_KEY} google key=${KEYS.GOOGLE_API_KEY}`;
+  const leak = `Bearer ${KEYS.OPENROUTER_API_KEY} groq=${KEYS.GROQ_API_KEY} google key=${KEYS.GOOGLE_API_KEY}`;
   const safe = redactSecrets(leak, Object.values(KEYS));
   for (const key of Object.values(KEYS)) assert(!safe.includes(key), `leaked ${key}`);
   // Unknown-shaped keys are caught by the pattern rules too.
@@ -266,9 +257,9 @@ Deno.test("redaction: keys never survive into log lines", () => {
 
 Deno.test("credentials: a missing key is a provider failure, not a crash", async () => {
   const { fetchImpl, calls } = scriptedFetch([() => sseResponse([textDelta("x"), "data: [DONE]\n\n"])]);
-  assertEquals(apiKeyFor("openai", noKeys), "");
+  assertEquals(apiKeyFor("groq", noKeys), "");
   const error = await assertRejects(
-    () => openModelStream(model("gpt-4o"), [{ role: "user", content: "hi" }], [], { env: noKeys, fetchImpl, guards }),
+    () => openModelStream(model("gpt-oss-120b"), [{ role: "user", content: "hi" }], [], { env: noKeys, fetchImpl, guards }),
     ProviderError,
   );
   assertEquals(error.code, "provider_not_configured");
@@ -522,16 +513,7 @@ Deno.test("stream: a clean OpenAI-style stream ends with [DONE]", async () => {
   assert(!body.includes("event: error"));
 });
 
-Deno.test("stream: anthropic and google dialects normalise to the same events", async () => {
-  const anthropic = [
-    `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { text: "A" } })}\n\n`,
-    `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
-  ];
-  assertEquals(await drain(readProviderEvents(sseResponse(anthropic).body!, adapterFor("anthropic"), guards)), [
-    { type: "delta", text: "A" },
-    { type: "done" },
-  ]);
-
+Deno.test("stream: the google dialect normalises to the standard events", async () => {
   const google = [
     `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "G" }] } }] })}\n\n`,
     `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "!" }] }, finishReason: "STOP" }] })}\n\n`,
@@ -558,7 +540,7 @@ Deno.test("stream: frames split across chunk boundaries are reassembled", async 
       controller.close();
     },
   });
-  assertEquals(await drain(readProviderEvents(stream, adapterFor("openai"), guards)), [
+  assertEquals(await drain(readProviderEvents(stream, adapterFor("groq"), guards)), [
     { type: "delta", text: "नमस्ते" },
     { type: "done" },
   ]);
@@ -580,12 +562,10 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
   assertEquals(error.code, "images_unsupported");
   assertEquals(error.retryable, false);
 
-  const { fetchImpl, calls } = scriptedFetch([() => sseResponse([textDelta("ok"), "data: [DONE]\n\n"])]);
-  // The catalog is free-only, so exercise the OpenAI-style image shape with a synthetic spec.
-  const openaiVision: ModelSpec = { ...model("gemini-3.7-flash"), id: "test-openai-vision", provider: "openai", provider_model: "gpt-test" };
-  const result = await openModelStream(openaiVision, [{ role: "user", content: "look" }], [image], { env, fetchImpl, guards });
+  const googleOk = scriptedFetch([(url: string) => okFor(url)]);
+  const result = await openModelStream(model("gemini-3.7-flash"), [{ role: "user", content: "look" }], [image], { env, fetchImpl: googleOk.fetchImpl, guards });
   await drain(result.events);
-  assertStringIncludes(String(calls[0].init?.body), "image_url");
+  assertStringIncludes(String(googleOk.calls[0].init?.body), "inlineData");
 });
 
 Deno.test("availability: the browser catalog reflects model blocks and provider cooldowns", () => {

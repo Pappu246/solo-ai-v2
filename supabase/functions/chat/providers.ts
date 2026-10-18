@@ -17,7 +17,7 @@
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type ProviderId = "openai" | "anthropic" | "google" | "groq" | "deepseek" | "openrouter";
+export type ProviderId = "google" | "groq" | "openrouter";
 
 export interface ModelSpec {
   id: string;
@@ -285,11 +285,8 @@ export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: R
 // ── Secrets & redaction ─────────────────────────────────────────────────────
 
 export const API_KEY_ENV: Readonly<Record<ProviderId, string>> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
   google: "GOOGLE_API_KEY",
   groq: "GROQ_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
 };
 
@@ -538,23 +535,6 @@ const OPENAI_STYLE: Omit<SSEAdapter, "provider"> = {
 };
 
 export function adapterFor(provider: ProviderId): SSEAdapter {
-  if (provider === "anthropic") {
-    return {
-      provider,
-      requiresTerminal: true,
-      delta(data) {
-        const delta = data.delta as { text?: unknown } | undefined;
-        return data.type === "content_block_delta" && typeof delta?.text === "string" ? delta.text : null;
-      },
-      finished(data, event) {
-        return event === "message_stop" || data.type === "message_stop";
-      },
-      error(data, event) {
-        if (event !== "error" && data.type !== "error") return null;
-        return classifyStreamError(data);
-      },
-    };
-  }
   if (provider === "google") {
     return {
       provider,
@@ -726,8 +706,6 @@ export function providerMessages(messages: Message[], provider: ProviderId, imag
   const lastUser = messages.map(m => m.role).lastIndexOf("user");
   return messages.map((m, i) => {
     if (i !== lastUser || typeof m.content !== "string") return m;
-    if (provider === "openai") return { ...m, content: [{ type: "text", text: m.content }, ...images.map(x => ({ type: "image_url", image_url: { url: `data:${x.mime_type};base64,${x.base64}` } }))] };
-    if (provider === "anthropic") return { ...m, content: [...images.map(x => ({ type: "image", source: { type: "base64", media_type: x.mime_type, data: x.base64 } })), { type: "text", text: m.content }] };
     if (provider === "google") return { ...m, content: [{ text: m.content }, ...images.map(x => ({ inlineData: { mimeType: x.mime_type, data: x.base64 } }))] };
     return m;
   });
@@ -750,19 +728,6 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
   // Provider-shaped `tools` value (built by the caller, see agent.ts).
   const tools = options.tools === undefined ? undefined : options.tools;
 
-  if (model.provider === "anthropic") {
-    const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n") || "You are a helpful AI assistant.";
-    return {
-      url: "https://api.anthropic.com/v1/messages",
-      init: {
-        method: "POST",
-        headers: { ...jsonHeaders, "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: providerModel, system, messages: messages.filter(m => m.role !== "system"), max_tokens: MAX_OUTPUT_TOKENS, stream: streaming, ...(tools ? { tools } : {}) }),
-      },
-      adapter,
-    };
-  }
-
   if (model.provider === "google") {
     const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n");
     const contents = messages.filter(m => m.role !== "system").map(m => ({
@@ -780,10 +745,8 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
     };
   }
 
-  const endpoints: Record<"openai" | "groq" | "deepseek" | "openrouter", string> = {
-    openai: "https://api.openai.com/v1/chat/completions",
+  const endpoints: Record<"groq" | "openrouter", string> = {
     groq: "https://api.groq.com/openai/v1/chat/completions",
-    deepseek: "https://api.deepseek.com/v1/chat/completions",
     openrouter: "https://openrouter.ai/api/v1/chat/completions",
   };
   return {
