@@ -4,7 +4,6 @@ export interface Conversation {
   id: string;
   title: string;
   user_id: string;
-  folder_id?: string | null;
   /** Phase 2: conversations can live inside a project. */
   project_id?: string | null;
   pinned: boolean;
@@ -51,8 +50,6 @@ export interface Message {
   images?: ImageSearchImage[] | null;
   /** Web research sources attached to this assistant reply (Phase 5). */
   web_sources?: WebSearchSource[] | null;
-  tokens_used?: number | null;
-  reaction?: 'like' | 'dislike' | null;
   created_at: string;
 }
 
@@ -181,14 +178,6 @@ export interface SearchResult {
   rank: number;
 }
 
-export interface Folder {
-  id: string;
-  name: string;
-  color: string;
-  user_id: string;
-  created_at: string;
-}
-
 /** Wire format sent to the chat Edge Function. */
 export interface ChatMessage {
   role: MessageRole;
@@ -197,7 +186,7 @@ export interface ChatMessage {
 
 // ─── AI Model Types ──────────────────────────────────────────────────────────
 
-export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'deepseek' | 'mistral' | 'openrouter';
+export type ModelProvider = 'openai' | 'anthropic' | 'google' | 'groq' | 'deepseek';
 export type ModelCategory = 'coding' | 'conversation' | 'fast' | 'research' | 'reasoning' | 'free' | 'vision' | 'creative';
 
 export interface AIModel {

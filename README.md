@@ -2,7 +2,7 @@
 
 A premium AI workspace built with React, TypeScript, Vite, Tailwind CSS and Supabase.
 
-SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. Tools and agents arrive in later phases.
+SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. It also includes opt-in **web research** with cited sources and a bounded **agent tool loop** (time, calculator, web search, chat and file search).
 
 ## Features
 
@@ -251,7 +251,7 @@ See [SECURITY.md](./SECURITY.md) for deployment notes.
 
 ## Status
 
-This is a learning and portfolio project.
+Open source under the MIT License (see [LICENSE](./LICENSE)).
 
 ## Author
 
