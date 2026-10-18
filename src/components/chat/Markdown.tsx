@@ -6,6 +6,7 @@ import rehypeKatex, { type Options as KatexOptions } from 'rehype-katex';
 import 'katex/dist/katex.min.css';
 import { CodeBlock } from './CodeBlock';
 import { SvgFigure } from './SvgFigure';
+import { safeHref } from '../../lib/url';
 import { isSvgSource } from '../../lib/svgSanitize';
 import { normalizeMathDelimiters, splitMarkdownSegments } from '../../lib/markdown';
 
@@ -37,7 +38,7 @@ function buildComponents(live?: boolean): Components {
       return <CodeBlock code={code} language={language} live={live} />;
     },
     a({ href, children }) {
-      return <a href={href} target="_blank" rel="noopener noreferrer nofollow">{children}</a>;
+      return <a href={safeHref(href)} target="_blank" rel="noopener noreferrer nofollow">{children}</a>;
     },
     img({ src, alt }) {
       // Never render model-generated placeholder/relative image paths. Smart
