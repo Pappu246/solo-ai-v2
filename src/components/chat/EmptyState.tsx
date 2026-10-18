@@ -44,7 +44,7 @@ export function EmptyState({ onSuggestion }: Props) {
   return (
     <div className="h-full min-h-[420px] flex items-center justify-center overflow-y-auto px-4 py-6 sm:px-8">
       <section className="w-full max-w-4xl animate-rise-in">
-        <header className="flex items-center justify-between gap-4 border-b border-border/80 pb-5">
+        <div className="flex items-center justify-between gap-4 border-b border-border/80 pb-5">
           <div className="flex min-w-0 items-center gap-3">
             <Logo size={34} className="shrink-0 rounded-lg" />
             <div className="min-w-0">
@@ -56,7 +56,7 @@ export function EmptyState({ onSuggestion }: Props) {
             <Sparkles className="h-3.5 w-3.5 text-accent" aria-hidden />
             <span>Write · Build · Research · Plan</span>
           </div>
-        </header>
+        </div>
 
         <div className="max-w-2xl pt-8 sm:pt-10">
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-accent">Start something new</p>
