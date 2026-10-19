@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useCallback, memo } from 'react';
 import {
   SquarePen, Search, Settings, Pin, PinOff, Pencil, Archive, ArchiveRestore, Trash2,
   MoreHorizontal, X, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, FolderKanban, FileText, Brain, Plus, FolderInput,
@@ -65,8 +65,10 @@ export function Sidebar({
     return () => window.removeEventListener('solo:focus-search', handler);
   }, []);
 
-  const activeProjects = projects.filter(p => !p.archived);
-  const projectName = (id: string | null | undefined) => (id ? projects.find(p => p.id === id)?.name ?? null : null);
+  // Memoize active projects and O(1) project name map to avoid repeated linear scans.
+  const activeProjects = useMemo(() => projects.filter(p => !p.archived), [projects]);
+  const projectMap = useMemo(() => new Map(projects.map(p => [p.id, p.name])), [projects]);
+  const projectName = useCallback((id: string | null | undefined) => (id ? projectMap.get(id) ?? null : null), [projectMap]);
 
   const { pinned, recent, archived } = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -79,7 +81,24 @@ export function Sidebar({
     };
   }, [conversations, query]);
 
-  const itemProps = { activeId, onSelect: (c: Conversation) => { onSelect(c); onCloseMobile(); }, onRename, onPin, onArchive, onDeleteRequest, projects: activeProjects, onMoveToProject, projectName };
+  const handleSelectConversation = useCallback((c: Conversation) => {
+    onSelect(c);
+    onCloseMobile();
+  }, [onSelect, onCloseMobile]);
+
+  // Stable itemProps identity allows memoized ConversationItem rows to skip re-rendering
+  // when query or other un-related sidebar state changes.
+  const itemProps = useMemo(() => ({
+    activeId,
+    onSelect: handleSelectConversation,
+    onRename,
+    onPin,
+    onArchive,
+    onDeleteRequest,
+    projects: activeProjects,
+    onMoveToProject,
+    projectName,
+  }), [activeId, handleSelectConversation, onRename, onPin, onArchive, onDeleteRequest, activeProjects, onMoveToProject, projectName]);
 
   const content = (
     <div className="flex flex-col h-full">
@@ -347,7 +366,7 @@ function NavButton({ icon, active, onClick, children }: { icon: React.ReactNode;
   );
 }
 
-function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin, onArchive, onDeleteRequest, projects = [], onMoveToProject, projectName }: ItemProps) {
+const ConversationItem = memo(function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin, onArchive, onDeleteRequest, projects = [], onMoveToProject, projectName }: ItemProps) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -456,7 +475,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
       </div>
     </li>
   );
-}
+});
 
 function MenuItem({ icon, children, onClick, danger }: { icon: React.ReactNode; children: React.ReactNode; onClick: () => void; danger?: boolean }) {
   return (
