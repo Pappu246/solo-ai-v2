@@ -193,6 +193,22 @@ GOOGLE_CSE_ENGINE_ID      # Custom Search Engine ID (cx parameter)
 
 Get credentials from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (API key) and [Programmable Search Engine](https://programmablesearchengine.google.com/) (engine ID). The free tier includes 100 image search queries per day.
 
+### Optional: approve who can use your app (keeps your free quota yours)
+
+By default anyone who signs up can chat. To make the app invite-only without touching Vercel:
+
+1. Sign up in the app with **your own email** first.
+2. Set these Edge Function secrets in Supabase: `OWNER_EMAIL` (that email), `APPROVAL_SECRET`
+   (any long random string, e.g. `openssl rand -hex 32`) and `RESEND_API_KEY` (free at resend.com).
+3. Apply the migration `20261019000100_access_control.sql` and deploy the functions
+   (`chat`, `image-search`, `request-access`, `access-approve`).
+
+Your account is always allowed. A new user sees "Waiting for approval" and you receive an email with
+**Approve** and **Reject** buttons; the link opens a confirmation page in the app (nothing changes until you
+click, so link scanners cannot approve anyone). Without `OWNER_EMAIL` the app behaves exactly as before.
+The email arrives from Resend's test sender, which can deliver only to the email your Resend account was
+created with, so use that same address as `OWNER_EMAIL` (or verify your own domain and set `MAIL_FROM`).
+
 ### 5. Start the app
 
 ```bash

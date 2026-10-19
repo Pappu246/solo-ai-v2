@@ -10,11 +10,14 @@ import { useProjects, type ProjectInput } from './hooks/useProjects';
 import { useMemories } from './hooks/useMemories';
 import { useKnowledge } from './hooks/useKnowledge';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
+import { useAccess } from './hooks/useAccess';
 import { isSupabaseConfigured } from './lib/supabase';
 import { retrieveKnowledge, selectMemories, buildChatContext } from './lib/knowledge/retriever';
 import { toFriendlyError } from './lib/errors';
 import { AuthScreen } from './components/auth/AuthScreen';
 import { SetupScreen } from './components/auth/SetupScreen';
+import { PendingApprovalScreen } from './components/auth/PendingApprovalScreen';
+import { ApproveScreen } from './components/auth/ApproveScreen';
 import { Sidebar as SidebarBase, type SidebarView } from './components/layout/Sidebar';
 import { Topbar as TopbarBase } from './components/layout/Topbar';
 import { MessageList } from './components/chat/MessageList';
@@ -42,6 +45,9 @@ const Composer = memo(ComposerBase);
 
 export default function App() {
   if (!isSupabaseConfigured) return <SetupScreen />;
+  // Opened from the owner's approval email: the signed token in the link authorizes it.
+  const approveToken = new URLSearchParams(window.location.search).get('approve');
+  if (approveToken) return <ApproveScreen token={approveToken} />;
   return (
     <ToastProvider>
       <Shell />
@@ -285,6 +291,7 @@ function Shell() {
   // Connectivity drives the offline banner and the composer hint. It must be
   // called before any early return so the hook order never changes.
   const online = useOnlineStatus();
+  const access = useAccess(user);
 
   if (authLoading) {
     return (
@@ -295,6 +302,17 @@ function Shell() {
   }
 
   if (!user) return <AuthScreen onSignIn={signIn} onSignUp={signUp} />;
+
+  if (access.status === 'checking') {
+    return (
+      <div className="h-screen flex items-center justify-center" aria-busy="true" aria-label="Checking access">
+        <Logo size={40} className="animate-pulse" />
+      </div>
+    );
+  }
+  if (access.status === 'pending' || access.status === 'blocked') {
+    return <PendingApprovalScreen blocked={access.status === 'blocked'} email={user.email} onRecheck={access.recheck} onSignOut={handleSignOut} />;
+  }
 
   const hasMessages = chat.messages.length > 0 || chat.isGenerating || chat.messagesStatus === 'loading';
   const activeModelName = chat.selectedModel

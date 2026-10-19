@@ -24,6 +24,7 @@ import { classifyRoute } from "./routing.ts";
 import { createUsageController, limitsFromEnv, ProviderConcurrency, type UsageController } from "../shared/usage.ts";
 import { FixedWindowRateLimiter } from "../shared/fixed_window_rate_limit.ts";
 import { corsHeaders } from "../shared/cors.ts";
+import { accessDeniedMessage, type QueryClient, resolveAccess, storeFromClient } from "../shared/access.ts";
 import { buildModelContext } from "./context.ts";
 import { decideImageSearch } from "../image-search/decision.ts";
 import { createImageSearchProvider, filterResults, type ImageResult } from "../image-search/providers.ts";
@@ -84,6 +85,17 @@ function rateLimit(id: string) {
   if (!localRateLimit.allow(id)) {
     throw Object.assign(new Error("Rate limit exceeded"), { status: 429, code: "rate_limited" });
   }
+}
+// Approval gate (see shared/access.ts): only active when OWNER_EMAIL is set.
+async function accessStatusFor(req: Request, user: Parameters<typeof resolveAccess>[0]) {
+  const auth = req.headers.get("Authorization") || "";
+  const client = supabaseUrl && publishableKey && auth
+    ? createClient(supabaseUrl, publishableKey, {
+      auth: { persistSession: false },
+      global: { headers: { Authorization: auth } },
+    })
+    : null;
+  return await resolveAccess(user, (n) => Deno.env.get(n), storeFromClient(client as unknown as QueryClient | null));
 }
 const usageLimits = limitsFromEnv((n) => Deno.env.get(n));
 const providerConcurrency = new ProviderConcurrency(8);
@@ -236,6 +248,16 @@ Deno.serve(async (req) => {
     if (req.method !== "POST") return fail(req, "method_not_allowed", "Method not allowed", 405, id);
     startRequest(id);
     rateLimit(user.id);
+    const access = await accessStatusFor(req, user);
+    if (access !== "approved") {
+      return fail(
+        req,
+        access === "blocked" ? "access_blocked" : "access_pending",
+        accessDeniedMessage(access),
+        403,
+        id,
+      );
+    }
     const usage = usageForRequest(req, id);
     const usageDecision = await usage.checkChat(user.id);
     if (!usageDecision.allowed) {

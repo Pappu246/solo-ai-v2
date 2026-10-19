@@ -61,3 +61,9 @@ export function corsHeaders(
 
   return headers;
 }
+
+/** First configured origin (used to build links back to the app); falls back to the production origin. */
+export function primaryOrigin(configuredOrigins: string | undefined): string {
+  const first = (configuredOrigins ?? "").split(",").map((v) => v.trim()).filter(Boolean)[0];
+  return (first ? normalizeOrigin(first) : null) ?? [...DEFAULT_ALLOWED_ORIGINS][0];
+}

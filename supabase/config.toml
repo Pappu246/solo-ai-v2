@@ -6,3 +6,10 @@ verify_jwt = true
 
 [functions.image-proxy]
 verify_jwt = false
+
+[functions.request-access]
+verify_jwt = true
+
+# Public on purpose: the signed, expiring token in the email link authorizes it.
+[functions.access-approve]
+verify_jwt = false
