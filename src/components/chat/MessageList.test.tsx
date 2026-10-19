@@ -16,12 +16,16 @@ import type { Message as MessageType } from '../../types';
 const counters = vi.hoisted(() => ({ messageRenders: 0 }));
 
 vi.mock('./Message', async () => {
+  const actual = await vi.importActual<typeof import('./Message')>('./Message');
   const { memo } = await import('react');
-  const Message = memo(function Message() {
+  const MessageMock = memo(function Message() {
     counters.messageRenders += 1;
     return <div data-testid="message-row" />;
   });
-  return { Message };
+  return {
+    ...actual,
+    Message: MessageMock,
+  };
 });
 
 // Defined once at module scope so their identities are stable across
@@ -89,5 +93,37 @@ describe('MessageList while streaming', () => {
       <MessageList {...baseProps} onEdit={vi.fn()} streamingContent="Hello there, friend!" />,
     );
     expect(counters.messageRenders).toBeGreaterThan(afterMessagesChange);
+  });
+
+  it('renders image search results with safe rel="noopener noreferrer" link attributes', async () => {
+    const { Message: RealMessage } = await vi.importActual<typeof import('./Message')>('./Message');
+    const msg: MessageType = {
+      id: 'm_img',
+      conversation_id: 'c1',
+      role: 'assistant',
+      content: 'Here is an image',
+      created_at: '2026-01-01T00:00:00.000Z',
+      images: [
+        {
+          title: 'Test Image',
+          url: 'https://example.com/image.jpg',
+          thumbnail: 'https://example.com/thumb.jpg',
+          sourceUrl: 'https://example.com/source',
+          sourceName: 'Example',
+        },
+      ],
+    };
+
+    const { container } = render(
+      <RealMessage
+        message={msg}
+        isFirstInGroup={true}
+      />
+    );
+
+    const link = container.querySelector('a[title="Test Image"]');
+    expect(link).not.toBeNull();
+    expect(link?.getAttribute('target')).toBe('_blank');
+    expect(link?.getAttribute('rel')).toBe('noopener noreferrer');
   });
 });

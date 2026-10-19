@@ -114,7 +114,7 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
           const src = getImageSrc(image);
           if (!src) return null;
           return (
-            <a key={image.url} href={safeHref(image.sourceUrl || image.url)} target="_blank" rel="noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
+            <a key={image.url} href={safeHref(image.sourceUrl || image.url)} target="_blank" rel="noopener noreferrer" className="group/image overflow-hidden rounded-xl border border-border bg-surface-2/60 hover:border-border-strong transition-colors" title={image.title}>
               <img
                 src={src}
                 alt={image.title}
