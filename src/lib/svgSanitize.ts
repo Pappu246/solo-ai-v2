@@ -121,10 +121,16 @@ function baseName(node: Element): string {
   return node.nodeName.replace(/^.*:/, '').toLowerCase();
 }
 
+const ALLOWED_ATTRS_CACHE = new Map<string, Set<string>>();
+
 function allowedAttributes(element: string): Set<string> {
-  const set = new Set(GLOBAL_ATTRIBUTES);
-  for (const a of ELEMENT_ATTRIBUTES[element] ?? []) set.add(a);
-  if (element.startsWith('fe') || element === 'filter') for (const a of PRIMITIVE_ATTRIBUTES) set.add(a);
+  let set = ALLOWED_ATTRS_CACHE.get(element);
+  if (!set) {
+    set = new Set(GLOBAL_ATTRIBUTES);
+    for (const a of ELEMENT_ATTRIBUTES[element] ?? []) set.add(a);
+    if (element.startsWith('fe') || element === 'filter') for (const a of PRIMITIVE_ATTRIBUTES) set.add(a);
+    ALLOWED_ATTRS_CACHE.set(element, set);
+  }
   return set;
 }
 
