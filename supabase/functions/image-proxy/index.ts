@@ -1,9 +1,15 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { corsHeaders } from "../shared/cors.ts";
 
 const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com", "upload.wikimedia.org", "thumb.wikimedia.org"]);
 const MAX_BYTES = 5 * 1024 * 1024;
 function isAllowedHost(hostname: string) { const host = hostname.toLowerCase().replace(/\.$/, ""); return [...ALLOWED_HOSTS].some(base => host === base || host.endsWith(`.${base}`)); }
-function cors(req: Request): HeadersInit { return { "Access-Control-Allow-Origin": req.headers.get("Origin") || "*", "Vary": "Origin", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable" }; }
+function cors(req: Request): HeadersInit {
+  return corsHeaders(req, Deno.env.get("APP_ORIGIN"), {
+    allowMethods: "GET, OPTIONS",
+    allowHeaders: "Content-Type",
+  });
+}
 function log(requestId: string, event: string, fields: Record<string, unknown> = {}) { console.log(JSON.stringify({ at: new Date().toISOString(), fn: "image-proxy", request_id: requestId, event, ...fields })); }
 Deno.serve(async req => {
   const requestId = crypto.randomUUID();
