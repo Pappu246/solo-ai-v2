@@ -140,7 +140,16 @@ function CopyButton({ text }: { text: string }) {
   const copy = useCallback(async () => {
     try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { /* clipboard unavailable */ }
   }, [text]);
-  return <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}</IconButton>;
+  return (
+    <IconButton
+      label={copied ? 'Copied to clipboard' : 'Copy message'}
+      size="sm"
+      onClick={copy}
+      aria-live="polite"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+    </IconButton>
+  );
 }
 
 function SpeakButton({ text, rate }: { text: string; rate: number }) {
