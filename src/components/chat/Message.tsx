@@ -140,7 +140,16 @@ function CopyButton({ text }: { text: string }) {
   const copy = useCallback(async () => {
     try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { /* clipboard unavailable */ }
   }, [text]);
-  return <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}</IconButton>;
+  return (
+    <>
+      <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>
+        {copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}
+      </IconButton>
+      <span className="sr-only" role="status" aria-live="polite">
+        {copied ? 'Message copied to clipboard' : ''}
+      </span>
+    </>
+  );
 }
 
 function SpeakButton({ text, rate }: { text: string; rate: number }) {
@@ -159,6 +168,7 @@ function SpeakButton({ text, rate }: { text: string; rate: number }) {
 function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(value.length, value.length); }, []);
   const canSave = value.trim().length > 0 && value.trim() !== initial.trim();
   return (
