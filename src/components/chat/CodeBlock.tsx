@@ -61,6 +61,9 @@ export function CodeBlock({ code, language, live }: CodeBlockProps) {
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
           {copied ? 'Copied' : 'Copy'}
         </button>
+        <span className="sr-only" role="status" aria-live="polite">
+          {copied ? 'Code copied to clipboard' : ''}
+        </span>
       </div>
       <pre className="p-4 overflow-x-auto leading-relaxed">
         {html ? (
