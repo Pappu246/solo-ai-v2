@@ -1,9 +1,14 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { corsHeaders } from "../shared/cors.ts";
 
 const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com", "upload.wikimedia.org", "thumb.wikimedia.org"]);
 const MAX_BYTES = 5 * 1024 * 1024;
 function isAllowedHost(hostname: string) { const host = hostname.toLowerCase().replace(/\.$/, ""); return [...ALLOWED_HOSTS].some(base => host === base || host.endsWith(`.${base}`)); }
-function cors(req: Request): HeadersInit { return { "Access-Control-Allow-Origin": req.headers.get("Origin") || "*", "Vary": "Origin", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type", "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable" }; }
+const cors = (req: Request) => corsHeaders(req, Deno.env.get("APP_ORIGIN"), {
+  allowMethods: "GET, OPTIONS",
+  allowHeaders: "Content-Type",
+  exposeHeaders: "X-Request-Id",
+});
 function log(requestId: string, event: string, fields: Record<string, unknown> = {}) { console.log(JSON.stringify({ at: new Date().toISOString(), fn: "image-proxy", request_id: requestId, event, ...fields })); }
 Deno.serve(async req => {
   const requestId = crypto.randomUUID();
@@ -28,6 +33,6 @@ Deno.serve(async req => {
     while (true) { const { done, value } = await reader.read(); if (done) break; total += value.byteLength; if (total > MAX_BYTES) { await reader.cancel(); return new Response("Image too large", { status: 413, headers: { ...cors(req), "X-Request-Id": requestId } }); } chunks.push(value); }
     const bytes = new Uint8Array(total); let offset = 0; for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.byteLength; }
     log(requestId, "success", { bytes: total, content_type: contentType.split(";")[0] });
-    return new Response(bytes, { headers: { ...cors(req), "Content-Type": contentType.split(";")[0], "Content-Length": String(bytes.byteLength), "X-Content-Type-Options": "nosniff", "X-Request-Id": requestId } });
+    return new Response(bytes, { headers: { ...cors(req), "Content-Type": contentType.split(";")[0], "Content-Length": String(bytes.byteLength), "X-Content-Type-Options": "nosniff", "X-Request-Id": requestId, "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable" } });
   } catch (error) { log(requestId, "fetch_failed", { error: error instanceof Error ? error.name : "unknown" }); return new Response("Image fetch failed", { status: 502, headers: { ...cors(req), "X-Request-Id": requestId } }); }
 });
