@@ -113,9 +113,7 @@ const PRIMITIVE_ATTRIBUTES = new Set([
 ]);
 
 /** URL schemes that must never appear in an attribute value. */
-const DANGEROUS_URL = /javascript:|vbscript:|data:text\/html|data:application\/xml|data:image\/svg/i;
-/** `url(...)` values are allowed only when they reference an in-document fragment. */
-const URL_VALUE = /url\(\s*(['"]?)([^)'"]*)\1\s*\)/i;
+const DANGEROUS_URL = /javascript\s*:|vbscript\s*:|data:text\/html|data:application\/xml|data:image\/svg/i;
 
 function baseName(node: Element): string {
   return node.nodeName.replace(/^.*:/, '').toLowerCase();
@@ -153,8 +151,11 @@ function cleanAttributes(node: Element): void {
 function isSafeValue(value: string): boolean {
   const v = value.trim();
   if (DANGEROUS_URL.test(v)) return false;
-  const url = URL_VALUE.exec(v);
-  if (url && !url[2].startsWith('#')) return false; // url(http…) / url(data…) → external fetch
+  // url(...) values are allowed only when every reference targets an in-document fragment.
+  const matches = v.matchAll(/url\(\s*(['"]?)([^)'"]*)\1\s*\)/gi);
+  for (const match of matches) {
+    if (!match[2].trim().startsWith('#')) return false; // url(http…) / url(data…) → external fetch
+  }
   return true;
 }
 

@@ -66,6 +66,14 @@ describe('sanitizeSvg', () => {
     expect(out).not.toContain('evil.example');
   });
 
+  it('strips multi-url attributes containing external or non-fragment URLs', () => {
+    const out = sanitizeSvg(`<svg xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" filter="url(#f) url(https://evil.example/leak)"/></svg>`);
+    expect(out).toBeTruthy();
+    expect(out).not.toContain('evil.example');
+    const svg = parse(out!);
+    expect(svg.querySelector('rect')!.hasAttribute('filter')).toBe(false);
+  });
+
   it('strips external hrefs and javascript: URLs', () => {
     const out = sanitizeSvg(
       `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
