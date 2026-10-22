@@ -61,7 +61,13 @@ export function MessageList({
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [conversationKey]);
 
-  const lastAssistantIdx = (() => { for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return i; return -1; })();
+  // Memoize search for the last assistant message index so searching through
+  // the array is skipped on streaming token updates.
+  const lastAssistantIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return i;
+    return -1;
+  }, [messages]);
+
   // Grouping only depends on the messages array — skip it while streaming
   // tokens re-render this component with a fresh streamingContent string.
   const grouped = useMemo(() => groupMessages(messages), [messages]);

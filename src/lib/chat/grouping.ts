@@ -15,21 +15,33 @@ export interface GroupedMessage {
 /**
  * Group consecutive same-role messages that are close in time, so a rapid
  * back-and-forth reads as two conversations instead of a wall of avatars.
+ *
+ * Performance optimization: Pre-parse ISO timestamps into a primitive number array
+ * once to avoid instantiating up to 4 Date objects per message row during group calculations.
  */
 export function groupMessages(messages: Message[]): GroupedMessage[] {
+  const timestamps = messages.map(m => Date.parse(m.created_at));
+
   return messages.map((message, index) => {
     const prev = index > 0 ? messages[index - 1] : null;
     const sameRoleAsPrev = prev !== null && prev.role === message.role;
+    const prevTime = index > 0 ? timestamps[index - 1] : NaN;
+    const currTime = timestamps[index];
     const closeInTime =
       prev !== null &&
-      Math.abs(new Date(message.created_at).getTime() - new Date(prev.created_at).getTime()) < GROUP_GAP_MS;
+      !Number.isNaN(currTime) &&
+      !Number.isNaN(prevTime) &&
+      Math.abs(currTime - prevTime) < GROUP_GAP_MS;
     const isFirstInGroup = !sameRoleAsPrev || !closeInTime;
 
     const next = index < messages.length - 1 ? messages[index + 1] : null;
     const sameRoleAsNext = next !== null && next.role === message.role;
+    const nextTime = index < messages.length - 1 ? timestamps[index + 1] : NaN;
     const closeToNext =
       next !== null &&
-      Math.abs(new Date(next.created_at).getTime() - new Date(message.created_at).getTime()) < GROUP_GAP_MS;
+      !Number.isNaN(currTime) &&
+      !Number.isNaN(nextTime) &&
+      Math.abs(nextTime - currTime) < GROUP_GAP_MS;
     const isLastInGroup = !sameRoleAsNext || !closeToNext;
 
     return { message, index, isFirstInGroup, isLastInGroup };
