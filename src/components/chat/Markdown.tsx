@@ -70,7 +70,15 @@ const rehypePlugins = [katexPlugin];
  * HTML is never rendered (`skipHtml`).
  */
 export const Markdown = memo(function Markdown({ content, live }: MarkdownProps) {
-  const segments = useMemo(() => splitMarkdownSegments(content), [content]);
+  // Pre-process markdown segments and normalize math delimiters within useMemo,
+  // preventing re-execution of math delimiter normalization on re-renders.
+  const segments = useMemo(() => {
+    return splitMarkdownSegments(content).map(segment => ({
+      ...segment,
+      normalizedText: segment.kind === 'md' ? normalizeMathDelimiters(segment.text) : segment.text,
+    }));
+  }, [content]);
+
   const components = live ? liveComponents : staticComponents;
   return (
     <div className="prose-chat text-[0.95rem]">
@@ -79,7 +87,7 @@ export const Markdown = memo(function Markdown({ content, live }: MarkdownProps)
           ? <SvgFigure key={i} code={segment.text} live={live} />
           : (
             <ReactMarkdown key={i} remarkPlugins={remarkPlugins} rehypePlugins={rehypePlugins} components={components} skipHtml>
-              {normalizeMathDelimiters(segment.text)}
+              {segment.normalizedText}
             </ReactMarkdown>
           )
       ))}
