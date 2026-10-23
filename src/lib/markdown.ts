@@ -29,23 +29,12 @@ export interface MarkdownSegment {
 export function splitMarkdownSegments(content: string): MarkdownSegment[] {
   const lines = content.split('\n');
 
-  // Mask fenced-code regions (``` or ~~~ fences, including the fence lines
-  // themselves) so SVG extraction never runs inside them. An unterminated
-  // fence (mid-stream) masks everything to the end, which is correct: that
-  // text is code-in-progress, not markdown.
-  let fenceOpen = false;
-  let fenceChar = '';
-  const inFence = lines.map(line => {
-    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
-    if (!m) return fenceOpen;
-    if (!fenceOpen) { fenceOpen = true; fenceChar = m[1][0]; return true; }
-    if (m[1][0] === fenceChar) fenceOpen = false;
-    return true; // this line is inside (or closes) the fence
-  });
-
   const out: MarkdownSegment[] = [];
   let buf: string[] = [];
+  let fenceOpen = false;
+  let fenceChar = '';
   let bufIsFence = false;
+
   const flush = () => {
     if (!buf.length) return;
     const text = buf.join('\n');
@@ -53,9 +42,28 @@ export function splitMarkdownSegments(content: string): MarkdownSegment[] {
     else extractSvgBlocks(text, out);
     buf = [];
   };
+
+  // Single pass through lines to compute fence boundaries without extra allocations.
   for (let i = 0; i < lines.length; i++) {
-    if (inFence[i] !== bufIsFence) { flush(); bufIsFence = inFence[i]; }
-    buf.push(lines[i]);
+    const line = lines[i];
+    const m = /^[ \t]*(`{3,}|~{3,})/.exec(line);
+    let lineInFence: boolean;
+    if (!m) {
+      lineInFence = fenceOpen;
+    } else if (!fenceOpen) {
+      fenceOpen = true;
+      fenceChar = m[1][0];
+      lineInFence = true;
+    } else {
+      if (m[1][0] === fenceChar) fenceOpen = false;
+      lineInFence = true;
+    }
+
+    if (lineInFence !== bufIsFence) {
+      flush();
+      bufIsFence = lineInFence;
+    }
+    buf.push(line);
   }
   flush();
   return out;
@@ -110,6 +118,9 @@ function extractSvgBlocks(text: string, out: MarkdownSegment[]): void {
  * because `'$'`/`'$$'` in replacement *strings* are escape sequences.
  */
 export function normalizeMathDelimiters(text: string): string {
+  // Fast path: if text contains no backslash or dollar sign, no math delimiters exist.
+  if (!text.includes('\\') && !text.includes('$')) return text;
+
   return text
     .split(/(`+[^`]*?`+)/g)
     .map((part, i) => {
