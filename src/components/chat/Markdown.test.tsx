@@ -51,6 +51,23 @@ describe('Markdown', () => {
     expect(screen.getByText('const x = 1;')).toBeInTheDocument();
   });
 
+  it('announces screen reader polite status feedback when copying code', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: writeTextMock },
+      configurable: true,
+      writable: true,
+    });
+
+    render(<Markdown content={'```ts\nconst x = 1;\n```'} />);
+    const copyButton = screen.getByRole('button', { name: /copy code/i });
+    await user.click(copyButton);
+
+    expect(writeTextMock).toHaveBeenCalledWith('const x = 1;');
+    expect(screen.getByText('Code copied to clipboard')).toBeInTheDocument();
+  });
+
   it('never renders raw HTML', () => {
     const { container } = render(<Markdown content={'<img src=x onerror="alert(1)">hello'} />);
     expect(container.querySelector('img')).toBeNull();
