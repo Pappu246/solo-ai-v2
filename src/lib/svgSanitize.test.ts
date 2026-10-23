@@ -66,6 +66,24 @@ describe('sanitizeSvg', () => {
     expect(out).not.toContain('evil.example');
   });
 
+  it('strips attributes with multiple url() targets if any external url, data: or blob: is present', () => {
+    const out = sanitizeSvg(
+      `<svg xmlns="http://www.w3.org/2000/svg">
+        <rect width="10" height="10" fill="url(#valid) url(https://evil.example/pixel.png)"/>
+        <circle r="5" fill="data:text/javascript,alert(1)"/>
+        <path d="M0 0" stroke="blob:https://evil.example/123"/>
+      </svg>`,
+    );
+    expect(out).toBeTruthy();
+    expect(out).not.toContain('evil.example');
+    expect(out).not.toContain('data:text');
+    expect(out).not.toContain('blob:');
+    const svg = parse(out!);
+    expect(svg.querySelector('rect')!.hasAttribute('fill')).toBe(false);
+    expect(svg.querySelector('circle')!.hasAttribute('fill')).toBe(false);
+    expect(svg.querySelector('path')!.hasAttribute('stroke')).toBe(false);
+  });
+
   it('strips external hrefs and javascript: URLs', () => {
     const out = sanitizeSvg(
       `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
