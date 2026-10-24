@@ -16,7 +16,12 @@ import { verifyDecision } from "../shared/access.ts";
 
 const env = (n: string) => Deno.env.get(n);
 const cors = (req: Request) =>
-  corsHeaders(req, env("APP_ORIGIN"), { allowMethods: "POST, OPTIONS", allowHeaders: "Content-Type" });
+  corsHeaders(req, env("APP_ORIGIN"), {
+    allowMethods: "POST, OPTIONS",
+    // The app sends `apikey` on every Supabase call; without it in this list
+    // the browser's preflight fails and the page reports "could not reach server".
+    allowHeaders: "Content-Type, Authorization, X-Client-Info, Apikey",
+  });
 const json = (req: Request, body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
