@@ -25,6 +25,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
       className={cn(
         'inline-flex items-center justify-center rounded-lg transition-colors',
         'disabled:opacity-40 disabled:cursor-not-allowed disabled:pointer-events-none',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg',
         sizes[size],
         tone === 'danger'
           ? 'text-fg-muted hover:text-danger hover:bg-danger/10'

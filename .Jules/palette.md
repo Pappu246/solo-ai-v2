@@ -1,0 +1,3 @@
+## 2026-10-19 - Focus Rings on Overflow-Hidden Containers
+**Learning:** In design systems where icon buttons reside inside `overflow-hidden` containers (like sidebars, attachment chips, or composer inputs), defaulting to CSS `outline-offset: 2px` causes focus outlines to be visually clipped by parent bounds. Using `focus-visible:ring-2 focus-visible:ring-accent` draws the focus ring within element boundaries while keeping it sharp.
+**Action:** Always apply `focus-visible:ring-2 focus-visible:ring-accent` to reusable `IconButton` components to ensure focus rings are visible regardless of parent container overflow rules.
