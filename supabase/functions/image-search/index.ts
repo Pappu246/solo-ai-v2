@@ -39,6 +39,7 @@ import {
 import { imageSearchCache, type ImageSearchResult } from "./cache.ts";
 import { createUsageController, limitsFromEnv } from "../shared/usage.ts";
 import { corsHeaders } from "../shared/cors.ts";
+import { accessDeniedMessage, type QueryClient, resolveAccess, storeFromClient } from "../shared/access.ts";
 
 // ── CORS ────────────────────────────────────────────────────────────────────
 
@@ -84,6 +85,14 @@ function rateLimit(userId: string) {
 
 // Persistent budgets (shared across isolates) with an in-memory fallback —
 // see supabase/functions/shared/usage.ts and the usage_controls migration.
+// Approval gate (see shared/access.ts): only active when OWNER_EMAIL is set.
+async function accessStatusFor(req: Request, user: Parameters<typeof resolveAccess>[0]) {
+  const auth = req.headers.get("Authorization") || "";
+  const client = supabaseUrl && publishableKey && auth
+    ? createClient(supabaseUrl, publishableKey, { auth: { persistSession: false }, global: { headers: { Authorization: auth } } })
+    : null;
+  return await resolveAccess(user, (n) => Deno.env.get(n), storeFromClient(client as unknown as QueryClient | null));
+}
 const usageLimits = limitsFromEnv(n => Deno.env.get(n));
 function usageForRequest(req: Request, requestId: string) {
   const auth = req.headers.get("Authorization") || "";
@@ -115,6 +124,15 @@ Deno.serve(async req => {
     }
 
     rateLimit(user.id);
+
+    const access = await accessStatusFor(req, user);
+    if (access !== "approved") {
+      return json(req, {
+        error: accessDeniedMessage(access),
+        code: access === "blocked" ? "access_blocked" : "access_pending",
+        request_id: requestId,
+      }, 403, requestId);
+    }
 
     // Persistent per-user budgets (minute + daily), with graceful degradation.
     const usageDecision = await usageForRequest(req, requestId).checkImageSearch(user.id);

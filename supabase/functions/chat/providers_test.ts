@@ -91,11 +91,9 @@ async function assertRejects<T extends Error>(fn: () => Promise<unknown>, ctor: 
 // ── helpers ────────────────────────────────────────────────────────────────
 
 const KEYS: Record<string, string> = {
-  OPENAI_API_KEY: "sk-openai-test-key-000000",
-  ANTHROPIC_API_KEY: "sk-ant-test-key-000000",
   GOOGLE_API_KEY: "AIzaTESTGOOGLEKEY000000",
   GROQ_API_KEY: "gsk_testgroqkey000000",
-  DEEPSEEK_API_KEY: "sk-deepseek-test-key-000",
+  OPENROUTER_API_KEY: "sk-or-test-key-000000",
 };
 const env: EnvReader = (name) => KEYS[name];
 const noKeys: EnvReader = () => undefined;
@@ -121,12 +119,6 @@ function textDelta(text: string): string {
 function okFor(url: string, text = "ok"): Response {
   if (url.includes("generativelanguage")) {
     return sseResponse([`data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text }] }, finishReason: "STOP" }] })}\n\n`]);
-  }
-  if (url.includes("api.anthropic.com")) {
-    return sseResponse([
-      `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { text } })}\n\n`,
-      `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
-    ]);
   }
   return sseResponse([textDelta(text), "data: [DONE]\n\n"]);
 }
@@ -201,8 +193,8 @@ Deno.test("fallback chain: unique, vision-safe and primary-first", () => {
   const chain = fallbackChain(model("gpt-oss-120b"), false).map(m => m.id);
   assertEquals(chain[0], "gpt-oss-120b");
   assertEquals(new Set(chain).size, chain.length);
-  const vision = fallbackChain(model("gpt-4o"), true);
-  assertEquals(vision[0].id, "gpt-4o");
+  const vision = fallbackChain(model("gemini-3.7-flash"), true);
+  assertEquals(vision[0].id, "gemini-3.7-flash");
   assert(vision.every(m => m.supports_vision));
 });
 
@@ -246,19 +238,17 @@ Deno.test("google: the API key travels in a header, never in the URL", () => {
   assert(!request.url.includes(KEYS.GOOGLE_API_KEY));
   assertEquals((request.init.headers as Record<string, string>)["x-goog-api-key"], KEYS.GOOGLE_API_KEY);
   assertStringIncludes(request.url, "alt=sse");
-  // Preview id is applied provider-side only.
-  const pro = buildProviderRequest(model("gemini-3.1-pro"), [{ role: "user", content: "hi" }], "k");
-  assertStringIncludes(pro.url, "gemini-3.1-pro-preview:streamGenerateContent");
 
-  // DeepSeek Flash now uses the canonical model id instead of the retired V4 alias.
-  const flash = model("deepseek-v4-flash");
-  const flashRequest = buildProviderRequest(flash, [{ role: "user", content: "hi" }], "k");
-  assertEquals(JSON.parse(String(flashRequest.init.body)).model, "deepseek-flash");
-  assert(flash.supports_vision, "DeepSeek Flash is vision-capable");
+  // OpenRouter free models use the provider-side `:free` id and a Bearer header.
+  const coder = model("openrouter-qwen3-coder");
+  const coderRequest = buildProviderRequest(coder, [{ role: "user", content: "hi" }], "k");
+  assertStringIncludes(coderRequest.url, "openrouter.ai/api/v1/chat/completions");
+  assertEquals(JSON.parse(String(coderRequest.init.body)).model, "qwen/qwen3-coder:free");
+  assertEquals((coderRequest.init.headers as Record<string, string>).Authorization, "Bearer k");
 });
 
 Deno.test("redaction: keys never survive into log lines", () => {
-  const leak = `Bearer ${KEYS.OPENAI_API_KEY} groq=${KEYS.GROQ_API_KEY} google key=${KEYS.GOOGLE_API_KEY}`;
+  const leak = `Bearer ${KEYS.OPENROUTER_API_KEY} groq=${KEYS.GROQ_API_KEY} google key=${KEYS.GOOGLE_API_KEY}`;
   const safe = redactSecrets(leak, Object.values(KEYS));
   for (const key of Object.values(KEYS)) assert(!safe.includes(key), `leaked ${key}`);
   // Unknown-shaped keys are caught by the pattern rules too.
@@ -267,9 +257,9 @@ Deno.test("redaction: keys never survive into log lines", () => {
 
 Deno.test("credentials: a missing key is a provider failure, not a crash", async () => {
   const { fetchImpl, calls } = scriptedFetch([() => sseResponse([textDelta("x"), "data: [DONE]\n\n"])]);
-  assertEquals(apiKeyFor("openai", noKeys), "");
+  assertEquals(apiKeyFor("groq", noKeys), "");
   const error = await assertRejects(
-    () => openModelStream(model("gpt-4o"), [{ role: "user", content: "hi" }], [], { env: noKeys, fetchImpl, guards }),
+    () => openModelStream(model("gpt-oss-120b"), [{ role: "user", content: "hi" }], [], { env: noKeys, fetchImpl, guards }),
     ProviderError,
   );
   assertEquals(error.code, "provider_not_configured");
@@ -523,16 +513,7 @@ Deno.test("stream: a clean OpenAI-style stream ends with [DONE]", async () => {
   assert(!body.includes("event: error"));
 });
 
-Deno.test("stream: anthropic and google dialects normalise to the same events", async () => {
-  const anthropic = [
-    `event: content_block_delta\ndata: ${JSON.stringify({ type: "content_block_delta", delta: { text: "A" } })}\n\n`,
-    `event: message_stop\ndata: ${JSON.stringify({ type: "message_stop" })}\n\n`,
-  ];
-  assertEquals(await drain(readProviderEvents(sseResponse(anthropic).body!, adapterFor("anthropic"), guards)), [
-    { type: "delta", text: "A" },
-    { type: "done" },
-  ]);
-
+Deno.test("stream: the google dialect normalises to the standard events", async () => {
   const google = [
     `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "G" }] } }] })}\n\n`,
     `data: ${JSON.stringify({ candidates: [{ content: { parts: [{ text: "!" }] }, finishReason: "STOP" }] })}\n\n`,
@@ -559,7 +540,7 @@ Deno.test("stream: frames split across chunk boundaries are reassembled", async 
       controller.close();
     },
   });
-  assertEquals(await drain(readProviderEvents(stream, adapterFor("openai"), guards)), [
+  assertEquals(await drain(readProviderEvents(stream, adapterFor("groq"), guards)), [
     { type: "delta", text: "नमस्ते" },
     { type: "done" },
   ]);
@@ -581,10 +562,10 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
   assertEquals(error.code, "images_unsupported");
   assertEquals(error.retryable, false);
 
-  const { fetchImpl, calls } = scriptedFetch([() => sseResponse([textDelta("ok"), "data: [DONE]\n\n"])]);
-  const result = await openModelStream(model("gpt-4o"), [{ role: "user", content: "look" }], [image], { env, fetchImpl, guards });
+  const googleOk = scriptedFetch([(url: string) => okFor(url)]);
+  const result = await openModelStream(model("gemini-3.7-flash"), [{ role: "user", content: "look" }], [image], { env, fetchImpl: googleOk.fetchImpl, guards });
   await drain(result.events);
-  assertStringIncludes(String(calls[0].init?.body), "image_url");
+  assertStringIncludes(String(googleOk.calls[0].init?.body), "inlineData");
 });
 
 Deno.test("availability: the browser catalog reflects model blocks and provider cooldowns", () => {
@@ -596,15 +577,15 @@ Deno.test("availability: the browser catalog reflects model blocks and provider 
 
   // One blocked model, one cooling-down provider → exactly those go dark.
   const health = {
-    isHealthy: (provider: string) => provider !== "openai",
-    isModelAvailable: (modelId: string) => modelId !== "gpt-4o",
+    isHealthy: (provider: string) => provider !== "google",
+    isModelAvailable: (modelId: string) => modelId !== "gpt-oss-120b",
   };
   const annotated = publicModelAvailability(health, env);
   assertEquals(annotated.length, publicModels().length);
   for (const m of annotated) {
     assertEquals(
       m.available,
-      m.id !== "gpt-4o" && m.provider !== "openai",
+      m.id !== "gpt-oss-120b" && m.provider !== "google",
       `${m.id} (${m.provider}) availability`,
     );
   }

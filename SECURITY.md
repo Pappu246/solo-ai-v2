@@ -5,11 +5,9 @@
 AI provider credentials must live in Supabase Edge Function secrets, never in Vite variables, localStorage, or source control. Supabase recommends publishable keys for browser code and secret keys only for backend components.
 
 Recommended Edge Function secrets:
-- `OPENAI_API_KEY`
-- `ANTHROPIC_API_KEY`
-- `GOOGLE_API_KEY`
 - `GROQ_API_KEY`
-- `DEEPSEEK_API_KEY`
+- `GOOGLE_API_KEY`
+- `OPENROUTER_API_KEY`
 - `APP_ORIGIN`
 
 ## Browser keys
@@ -114,6 +112,23 @@ Model replies are untrusted input and are never injected as raw HTML:
 The authenticated `chat` and `image-search` Edge Functions use a strict origin allowlist. Set `APP_ORIGIN` to a comma-separated list of exact frontend origins (for example, the production origin and explicitly approved preview origins). A configured list replaces the fallback list; malformed non-empty configuration fails closed. When unset, the fallback is limited to `https://solo-ai-v2-mu.vercel.app` and the standard local Vite origins. Unlisted origins receive no `Access-Control-Allow-Origin` header; arbitrary request origins are never reflected and wildcard CORS is never emitted by these authenticated functions.
 
 CORS only controls browser cross-origin access and is not an authorization boundary. The chat and image-search handlers still verify a Supabase JWT, and database RLS/ownership checks remain necessary. The public `image-proxy` is intentionally a separate endpoint: its protection is a strict upstream-host allowlist and byte/content-type limits, not user authentication.
+
+## Approval-based access
+
+When `OWNER_EMAIL` is set, `chat` and `image-search` refuse (`403`, `access_pending` / `access_blocked`) any
+user who is not approved. The check runs on the server; the pending screen in the browser is only a courtesy.
+
+- `public.user_access` has RLS: a user can read their own row and insert their own `pending` row. There is no
+  client UPDATE/DELETE grant, so nobody can approve themselves.
+- The owner is recognised by a **confirmed** email equal to `OWNER_EMAIL`. Create the owner account before
+  opening the app to others (an email can only be registered once).
+- Approvals are written by the `access-approve` function using `SUPABASE_SERVICE_ROLE_KEY` (injected by
+  Supabase into Edge Functions; never in the browser). It is public (`verify_jwt = false`) on purpose: the
+  authorization is an HMAC-signed token (`APPROVAL_SECRET`) bound to one decision and one user, expiring in
+  7 days. The email link only opens an app page; the change happens on an explicit confirm click.
+- Lookup failures fail closed (treated as pending). If `APPROVAL_SECRET` is missing, no email links are sent.
+- Known limit: an unapproved but signed-in user can still read/write their own rows (chats, memories, files)
+  through the database API; only the AI functions are gated. Tighten RLS if that matters for your deployment.
 
 ## Production checklist
 

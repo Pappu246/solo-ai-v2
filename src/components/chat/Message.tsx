@@ -159,7 +159,7 @@ function SpeakButton({ text, rate }: { text: string; rate: number }) {
 function EditBox({ initial, onSave, onCancel }: { initial: string; onSave: (t: string) => void; onCancel: () => void }) {
   const [value, setValue] = useState(initial);
   const ref = useRef<HTMLTextAreaElement>(null);
-  useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(value.length, value.length); }, []);
+  useEffect(() => { ref.current?.focus(); ref.current?.setSelectionRange(initial.length, initial.length); }, [initial.length]);
   const canSave = value.trim().length > 0 && value.trim() !== initial.trim();
   return (
     <div className="w-full max-w-[85%] rounded-2xl border border-accent/40 bg-surface p-2 shadow-md">

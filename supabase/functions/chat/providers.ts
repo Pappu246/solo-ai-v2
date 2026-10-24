@@ -17,7 +17,7 @@
 
 // ── Types ───────────────────────────────────────────────────────────────────
 
-export type ProviderId = "openai" | "anthropic" | "google" | "groq" | "deepseek";
+export type ProviderId = "google" | "groq" | "openrouter";
 
 export interface ModelSpec {
   id: string;
@@ -76,17 +76,14 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
  * silently reconcile onto the recommended replacements.
  */
 export const MODELS: readonly ModelSpec[] = [
-  { id: "gpt-4o", name: "GPT-4o", provider: "openai", category: "conversation", speed: 4, quality: 5, cost: 4, free: false, context_length: 128000, supports_vision: true, supports_tools: true, tag: "Vision" },
-  { id: "gpt-4o-mini", name: "GPT-4o Mini", provider: "openai", category: "fast", speed: 5, quality: 4, cost: 2, free: false, context_length: 128000, supports_vision: true, supports_tools: true },
-  { id: "claude-sonnet-5", name: "Claude Sonnet 5", provider: "anthropic", category: "coding", speed: 4, quality: 5, cost: 4, free: false, context_length: 1000000, supports_vision: true, supports_tools: true, tag: "Top" },
-  { id: "claude-opus-5", name: "Claude Opus 5", provider: "anthropic", category: "reasoning", speed: 3, quality: 5, cost: 5, free: false, context_length: 1000000, supports_vision: true, supports_tools: true },
-  { id: "claude-haiku-4-5-20251001", name: "Claude Haiku 4.5", provider: "anthropic", category: "fast", speed: 5, quality: 4, cost: 2, free: false, context_length: 200000, supports_vision: true, supports_tools: true },
-  { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", provider: "google", category: "research", speed: 5, quality: 5, cost: 2, free: false, context_length: 1048576, supports_vision: true, supports_tools: true, tag: "Latest" },
-  { id: "gemini-3.1-pro", name: "Gemini 3.1 Pro", provider: "google", category: "reasoning", speed: 4, quality: 5, cost: 4, free: false, context_length: 1048576, supports_vision: true, supports_tools: true, tag: "Pro", provider_model: "gemini-3.1-pro-preview" },
-  { id: "gpt-oss-20b", name: "GPT OSS 20B", provider: "groq", category: "fast", speed: 5, quality: 4, cost: 1, free: false, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Fast", provider_model: "openai/gpt-oss-20b" },
-  { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "groq", category: "conversation", speed: 5, quality: 5, cost: 2, free: false, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Best", provider_model: "openai/gpt-oss-120b" },
-  { id: "deepseek-v4-pro", name: "DeepSeek V4 Pro", provider: "deepseek", category: "reasoning", speed: 4, quality: 5, cost: 2, free: false, context_length: 1000000, supports_vision: false, supports_tools: true, tag: "Latest" },
-  { id: "deepseek-v4-flash", name: "DeepSeek V4.1 Flash", provider: "deepseek", category: "fast", speed: 5, quality: 4, cost: 1, free: false, context_length: 1000000, supports_vision: true, supports_tools: true, tag: "Fast", provider_model: "deepseek-flash" },
+  // Free-only catalog: every entry below runs on a provider's free tier.
+  // Free-tier availability and limits change often; re-verify ids before release.
+  { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", provider: "google", category: "research", speed: 5, quality: 5, cost: 1, free: true, context_length: 1048576, supports_vision: true, supports_tools: true, tag: "Vision" },
+  { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "groq", category: "conversation", speed: 5, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Best", provider_model: "openai/gpt-oss-120b" },
+  { id: "gpt-oss-20b", name: "GPT OSS 20B", provider: "groq", category: "fast", speed: 5, quality: 4, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Fast", provider_model: "openai/gpt-oss-20b" },
+  { id: "openrouter-gpt-oss-120b", name: "GPT OSS 120B (OpenRouter)", provider: "openrouter", category: "reasoning", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, provider_model: "openai/gpt-oss-120b:free" },
+  { id: "openrouter-qwen3-coder", name: "Qwen3 Coder", provider: "openrouter", category: "coding", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Code", provider_model: "qwen/qwen3-coder:free" },
+  { id: "openrouter-free", name: "OpenRouter Free Router", provider: "openrouter", category: "free", speed: 3, quality: 3, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Backup", provider_model: "openrouter/free" },
 ];
 
 /** Retired / provider-native ids → the catalog id that replaces them. */
@@ -96,11 +93,21 @@ export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   "llama-3.3-70b-versatile": "gpt-oss-120b",
   "llama-3.1-8b": "gpt-oss-20b",
   "llama-3.1-8b-instant": "gpt-oss-20b",
+  // Paid models removed from the free-only catalog → closest free replacement,
+  // so saved `preferred_model` / `conversations.model_id` values keep working.
+  "gpt-4o": "gemini-3.7-flash",
+  "gpt-4o-mini": "gpt-oss-20b",
+  "claude-sonnet-5": "openrouter-qwen3-coder",
+  "claude-opus-5": "gpt-oss-120b",
+  "claude-haiku-4-5-20251001": "gpt-oss-20b",
+  "gemini-3.1-pro": "gemini-3.7-flash",
+  "gemini-3.1-pro-preview": "gemini-3.7-flash",
+  "deepseek-v4-pro": "gpt-oss-120b",
+  "deepseek-v4-flash": "gpt-oss-20b",
+  "deepseek-flash": "gpt-oss-20b",
   // Provider-native ids that users may have pasted into settings.
   "openai/gpt-oss-120b": "gpt-oss-120b",
   "openai/gpt-oss-20b": "gpt-oss-20b",
-  "gemini-3.1-pro-preview": "gemini-3.1-pro",
-  "deepseek-flash": "deepseek-v4-flash",
 };
 
 /** Catalog as sent to the browser (internal fields stripped). */
@@ -174,8 +181,8 @@ export interface RoutingOptions {
 
 /** Auto-route category → preferred catalog id (kept from the original router). */
 export const ROUTE_PREFERENCE: Readonly<Record<string, string>> = {
-  coding: "claude-sonnet-5",
-  reasoning: "deepseek-v4-pro",
+  coding: "openrouter-qwen3-coder",
+  reasoning: "gpt-oss-120b",
   research: "gemini-3.7-flash",
   fast: "gpt-oss-20b",
   conversation: "gpt-oss-120b",
@@ -248,8 +255,8 @@ export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: R
   // The explicit parameter is authoritative for vision filtering.
   const opts: RoutingOptions = { ...options, hasImages };
   const preferredIds = hasImages
-    ? ["gemini-3.7-flash", "gpt-4o", "claude-haiku-4-5-20251001"]
-    : ["gpt-oss-120b", "gemini-3.7-flash", "deepseek-v4-flash", "gpt-4o-mini"];
+    ? ["gemini-3.7-flash"]
+    : ["gpt-oss-120b", "gemini-3.7-flash", "openrouter-gpt-oss-120b", "gpt-oss-20b", "openrouter-free"];
   const health = opts.health ?? null;
 
   const preferred = preferredIds
@@ -278,11 +285,9 @@ export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: R
 // ── Secrets & redaction ─────────────────────────────────────────────────────
 
 export const API_KEY_ENV: Readonly<Record<ProviderId, string>> = {
-  openai: "OPENAI_API_KEY",
-  anthropic: "ANTHROPIC_API_KEY",
   google: "GOOGLE_API_KEY",
   groq: "GROQ_API_KEY",
-  deepseek: "DEEPSEEK_API_KEY",
+  openrouter: "OPENROUTER_API_KEY",
 };
 
 /** Reads Deno env without throwing when the permission is not granted (tests). */
@@ -530,23 +535,6 @@ const OPENAI_STYLE: Omit<SSEAdapter, "provider"> = {
 };
 
 export function adapterFor(provider: ProviderId): SSEAdapter {
-  if (provider === "anthropic") {
-    return {
-      provider,
-      requiresTerminal: true,
-      delta(data) {
-        const delta = data.delta as { text?: unknown } | undefined;
-        return data.type === "content_block_delta" && typeof delta?.text === "string" ? delta.text : null;
-      },
-      finished(data, event) {
-        return event === "message_stop" || data.type === "message_stop";
-      },
-      error(data, event) {
-        if (event !== "error" && data.type !== "error") return null;
-        return classifyStreamError(data);
-      },
-    };
-  }
   if (provider === "google") {
     return {
       provider,
@@ -718,8 +706,6 @@ export function providerMessages(messages: Message[], provider: ProviderId, imag
   const lastUser = messages.map(m => m.role).lastIndexOf("user");
   return messages.map((m, i) => {
     if (i !== lastUser || typeof m.content !== "string") return m;
-    if (provider === "openai") return { ...m, content: [{ type: "text", text: m.content }, ...images.map(x => ({ type: "image_url", image_url: { url: `data:${x.mime_type};base64,${x.base64}` } }))] };
-    if (provider === "anthropic") return { ...m, content: [...images.map(x => ({ type: "image", source: { type: "base64", media_type: x.mime_type, data: x.base64 } })), { type: "text", text: m.content }] };
     if (provider === "google") return { ...m, content: [{ text: m.content }, ...images.map(x => ({ inlineData: { mimeType: x.mime_type, data: x.base64 } }))] };
     return m;
   });
@@ -742,19 +728,6 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
   // Provider-shaped `tools` value (built by the caller, see agent.ts).
   const tools = options.tools === undefined ? undefined : options.tools;
 
-  if (model.provider === "anthropic") {
-    const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n") || "You are a helpful AI assistant.";
-    return {
-      url: "https://api.anthropic.com/v1/messages",
-      init: {
-        method: "POST",
-        headers: { ...jsonHeaders, "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: providerModel, system, messages: messages.filter(m => m.role !== "system"), max_tokens: MAX_OUTPUT_TOKENS, stream: streaming, ...(tools ? { tools } : {}) }),
-      },
-      adapter,
-    };
-  }
-
   if (model.provider === "google") {
     const system = messages.filter(m => m.role === "system").map(m => String(m.content)).join("\n");
     const contents = messages.filter(m => m.role !== "system").map(m => ({
@@ -772,10 +745,9 @@ export function buildProviderRequest(model: ModelSpec, messages: Message[], apiK
     };
   }
 
-  const endpoints: Record<"openai" | "groq" | "deepseek", string> = {
-    openai: "https://api.openai.com/v1/chat/completions",
+  const endpoints: Record<"groq" | "openrouter", string> = {
     groq: "https://api.groq.com/openai/v1/chat/completions",
-    deepseek: "https://api.deepseek.com/v1/chat/completions",
+    openrouter: "https://openrouter.ai/api/v1/chat/completions",
   };
   return {
     url: endpoints[model.provider],

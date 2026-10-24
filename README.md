@@ -2,7 +2,7 @@
 
 A premium AI workspace built with React, TypeScript, Vite, Tailwind CSS and Supabase.
 
-SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. Tools and agents arrive in later phases.
+SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. It also includes opt-in **web research** with cited sources and a bounded **agent tool loop** (time, calculator, web search, chat and file search).
 
 ## Features
 
@@ -172,14 +172,17 @@ VITE_SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
 
 Provider API keys belong in Supabase Edge Function secrets, not in the frontend or GitHub repository.
 
+SOLO AI is **free-only**: the model catalog contains just free-tier models. Add any of these
+keys (all have a free tier; limits change, so check each provider's current terms):
+
 ```text
-OPENAI_API_KEY
-ANTHROPIC_API_KEY
-GOOGLE_API_KEY
-GROQ_API_KEY
-DEEPSEEK_API_KEY
+GROQ_API_KEY          # GPT OSS 120B / 20B (https://console.groq.com)
+GOOGLE_API_KEY        # Gemini Flash, vision (https://aistudio.google.com/apikey)
+OPENROUTER_API_KEY    # ":free" models + backup router (https://openrouter.ai/keys)
 APP_ORIGIN
 ```
+
+Models whose provider key is missing are greyed out, and Auto routing only picks configured ones.
 
 For the Smart Image Search feature (optional), also add:
 
@@ -189,6 +192,22 @@ GOOGLE_CSE_ENGINE_ID      # Custom Search Engine ID (cx parameter)
 ```
 
 Get credentials from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (API key) and [Programmable Search Engine](https://programmablesearchengine.google.com/) (engine ID). The free tier includes 100 image search queries per day.
+
+### Optional: approve who can use your app (keeps your free quota yours)
+
+By default anyone who signs up can chat. To make the app invite-only without touching Vercel:
+
+1. Sign up in the app with **your own email** first.
+2. Set these Edge Function secrets in Supabase: `OWNER_EMAIL` (that email), `APPROVAL_SECRET`
+   (any long random string, e.g. `openssl rand -hex 32`) and `RESEND_API_KEY` (free at resend.com).
+3. Apply the migration `20261019000100_access_control.sql` and deploy the functions
+   (`chat`, `image-search`, `request-access`, `access-approve`).
+
+Your account is always allowed. A new user sees "Waiting for approval" and you receive an email with
+**Approve** and **Reject** buttons; the link opens a confirmation page in the app (nothing changes until you
+click, so link scanners cannot approve anyone). Without `OWNER_EMAIL` the app behaves exactly as before.
+The email arrives from Resend's test sender, which can deliver only to the email your Resend account was
+created with, so use that same address as `OWNER_EMAIL` (or verify your own domain and set `MAIL_FROM`).
 
 ### 5. Start the app
 
@@ -251,7 +270,7 @@ See [SECURITY.md](./SECURITY.md) for deployment notes.
 
 ## Status
 
-This is a learning and portfolio project.
+Open source under the MIT License (see [LICENSE](./LICENSE)).
 
 ## Author
 

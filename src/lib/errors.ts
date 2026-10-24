@@ -42,6 +42,8 @@ const SERVER_CODES: Record<string, { title: string; message: string; retryable: 
   provider_payment: UNAVAILABLE,
   network_error: { title: 'Connection problem', message: 'Could not reach the AI. Check your connection and try again.', retryable: true },
   provider_timeout: { title: 'Took too long', message: 'The AI took too long to respond. Please try again.', retryable: true },
+  access_pending: { title: 'Waiting for approval', message: 'Your access request has not been approved yet.', retryable: false },
+  access_blocked: { title: 'Access turned off', message: 'The owner has turned off access for this account.', retryable: false },
   rate_limited: { title: 'Slow down', message: 'You are sending messages too quickly. Wait a moment and try again.', retryable: true },
   usage_limit: { title: 'Limit reached', message: 'You have reached your usage limit for now. Please try again later.', retryable: true },
   model_unavailable: { title: 'Model unavailable', message: 'That model is not available right now. Switch to Auto or pick another model.', retryable: true },

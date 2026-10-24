@@ -8,7 +8,7 @@ const MODELS: AIModel[] = [
   {
     id: 'gpt-4o',
     name: 'GPT-4o',
-    provider: 'openai',
+    provider: 'groq',
     category: 'conversation',
     speed: 4,
     quality: 5,
@@ -21,7 +21,7 @@ const MODELS: AIModel[] = [
   {
     id: 'claude-3',
     name: 'Claude 3',
-    provider: 'anthropic',
+    provider: 'google',
     category: 'conversation',
     speed: 3,
     quality: 5,
