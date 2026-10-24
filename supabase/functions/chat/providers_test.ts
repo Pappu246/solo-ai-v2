@@ -240,10 +240,10 @@ Deno.test("google: the API key travels in a header, never in the URL", () => {
   assertStringIncludes(request.url, "alt=sse");
 
   // OpenRouter free models use the provider-side `:free` id and a Bearer header.
-  const coder = model("openrouter-qwen3-coder");
+  const coder = model("openrouter-flint");
   const coderRequest = buildProviderRequest(coder, [{ role: "user", content: "hi" }], "k");
   assertStringIncludes(coderRequest.url, "openrouter.ai/api/v1/chat/completions");
-  assertEquals(JSON.parse(String(coderRequest.init.body)).model, "qwen/qwen3-coder:free");
+  assertEquals(JSON.parse(String(coderRequest.init.body)).model, "recursive/flint-v1.0:free");
   assertEquals((coderRequest.init.headers as Record<string, string>).Authorization, "Bearer k");
 });
 

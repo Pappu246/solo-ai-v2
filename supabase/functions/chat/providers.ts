@@ -82,7 +82,7 @@ export const MODELS: readonly ModelSpec[] = [
   { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "groq", category: "conversation", speed: 5, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Best", provider_model: "openai/gpt-oss-120b" },
   { id: "gpt-oss-20b", name: "GPT OSS 20B", provider: "groq", category: "fast", speed: 5, quality: 4, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Fast", provider_model: "openai/gpt-oss-20b" },
   { id: "openrouter-gpt-oss-120b", name: "GPT OSS 120B (OpenRouter)", provider: "openrouter", category: "reasoning", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, provider_model: "openai/gpt-oss-120b:free" },
-  { id: "openrouter-qwen3-coder", name: "Qwen3 Coder", provider: "openrouter", category: "coding", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Code", provider_model: "qwen/qwen3-coder:free" },
+  { id: "openrouter-flint", name: "Flint Coder", provider: "openrouter", category: "coding", speed: 3, quality: 5, cost: 1, free: true, context_length: 262144, supports_vision: false, supports_tools: false, tag: "Code", provider_model: "recursive/flint-v1.0:free" },
   { id: "openrouter-free", name: "OpenRouter Free Router", provider: "openrouter", category: "free", speed: 3, quality: 3, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Backup", provider_model: "openrouter/free" },
 ];
 
@@ -97,7 +97,10 @@ export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   // so saved `preferred_model` / `conversations.model_id` values keep working.
   "gpt-4o": "gemini-3.7-flash",
   "gpt-4o-mini": "gpt-oss-20b",
-  "claude-sonnet-5": "openrouter-qwen3-coder",
+  "claude-sonnet-5": "openrouter-flint",
+  // Qwen3 Coder lost its free tier on OpenRouter (404); keep saved ids working.
+  "openrouter-qwen3-coder": "openrouter-flint",
+  "qwen/qwen3-coder:free": "openrouter-flint",
   "claude-opus-5": "gpt-oss-120b",
   "claude-haiku-4-5-20251001": "gpt-oss-20b",
   "gemini-3.1-pro": "gemini-3.7-flash",
@@ -181,7 +184,7 @@ export interface RoutingOptions {
 
 /** Auto-route category → preferred catalog id (kept from the original router). */
 export const ROUTE_PREFERENCE: Readonly<Record<string, string>> = {
-  coding: "openrouter-qwen3-coder",
+  coding: "openrouter-flint",
   reasoning: "gpt-oss-120b",
   research: "gemini-3.7-flash",
   fast: "gpt-oss-20b",
