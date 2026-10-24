@@ -84,6 +84,7 @@ export const MODELS: readonly ModelSpec[] = [
   { id: "openrouter-gpt-oss-120b", name: "GPT OSS 120B (OpenRouter)", provider: "openrouter", category: "reasoning", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, provider_model: "openai/gpt-oss-120b:free" },
   { id: "openrouter-flint", name: "Flint Coder", provider: "openrouter", category: "coding", speed: 3, quality: 5, cost: 1, free: true, context_length: 262144, supports_vision: false, supports_tools: false, tag: "Code", provider_model: "recursive/flint-v1.0:free" },
   { id: "openrouter-free", name: "OpenRouter Free Router", provider: "openrouter", category: "free", speed: 3, quality: 3, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Backup", provider_model: "openrouter/free" },
+  { id: "openrouter-nemotron-vl", name: "Nemotron Vision", provider: "openrouter", category: "vision", speed: 3, quality: 4, cost: 1, free: true, context_length: 262144, supports_vision: true, supports_tools: false, tag: "Vision backup", provider_model: "nvidia/nemotron-3.5-super-vl:free" },
 ];
 
 /** Retired / provider-native ids → the catalog id that replaces them. */
@@ -258,7 +259,7 @@ export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: R
   // The explicit parameter is authoritative for vision filtering.
   const opts: RoutingOptions = { ...options, hasImages };
   const preferredIds = hasImages
-    ? ["gemini-3.7-flash"]
+    ? ["gemini-3.7-flash", "openrouter-nemotron-vl"]
     : ["gpt-oss-120b", "gemini-3.7-flash", "openrouter-gpt-oss-120b", "gpt-oss-20b", "openrouter-free"];
   const health = opts.health ?? null;
 
@@ -710,7 +711,8 @@ export function providerMessages(messages: Message[], provider: ProviderId, imag
   return messages.map((m, i) => {
     if (i !== lastUser || typeof m.content !== "string") return m;
     if (provider === "google") return { ...m, content: [{ text: m.content }, ...images.map(x => ({ inlineData: { mimeType: x.mime_type, data: x.base64 } }))] };
-    return m;
+    // OpenAI-compatible providers (Groq, OpenRouter) take data-URL image parts.
+    return { ...m, content: [{ type: "text", text: m.content }, ...images.map(x => ({ type: "image_url", image_url: { url: `data:${x.mime_type};base64,${x.base64}` } }))] };
   });
 }
 
