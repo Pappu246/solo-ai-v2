@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { Markdown } from './Markdown';
 
 describe('Markdown', () => {
@@ -69,24 +69,24 @@ describe('Markdown', () => {
 
   // ── Math (KaTeX) ─────────────────────────────────────────────────────────────
 
-  it('renders inline $…$ math with KaTeX', () => {
+  it('renders inline $…$ math with KaTeX (loaded on demand)', async () => {
     const { container } = render(<Markdown content={'The answer is $E = mc^2$, clearly.'} />);
-    expect(container.querySelector('.katex')).not.toBeNull();
+    await waitFor(() => expect(container.querySelector('.katex')).not.toBeNull());
     expect(container.textContent).toContain('The answer is');
     expect(container.querySelector('.katex-display')).toBeNull(); // inline, not display
   });
 
-  it('renders $$…$$ display math as a centered block', () => {
+  it('renders $$…$$ display math as a centered block', async () => {
     const { container } = render(<Markdown content={'Intro:\n\n$$\\int_0^1 x^2\\,dx = \\tfrac{1}{3}$$\n\nOutro.'} />);
-    expect(container.querySelector('.katex-display')).not.toBeNull();
+    await waitFor(() => expect(container.querySelector('.katex-display')).not.toBeNull());
     expect(container.querySelector('.katex-display .katex')).not.toBeNull();
     expect(container.textContent).toContain('Intro:');
     expect(container.textContent).toContain('Outro.');
   });
 
-  it('normalizes \\(…\\) and \\[…\\] delimiters to KaTeX', () => {
+  it('normalizes \\(…\\) and \\[…\\] delimiters to KaTeX', async () => {
     const { container } = render(<Markdown content={'Inline \\(a+b\\) and display\n\n\\[c = d^2\\]\n\ndone.'} />);
-    expect(container.querySelector('.katex')).not.toBeNull();
+    await waitFor(() => expect(container.querySelector('.katex')).not.toBeNull());
     expect(container.querySelector('.katex-display')).not.toBeNull();
   });
 
