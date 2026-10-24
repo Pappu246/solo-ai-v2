@@ -27,6 +27,12 @@ export interface MarkdownSegment {
  * inside a sentence are left for react-markdown to strip as usual.
  */
 export function splitMarkdownSegments(content: string): MarkdownSegment[] {
+  // Fast path: the overwhelming majority of markdown messages contain no SVG
+  // markup. Avoid splitting lines, allocating arrays, and scanning code fences.
+  if (!content.includes('<svg')) {
+    return [{ kind: 'md', text: content }];
+  }
+
   const lines = content.split('\n');
 
   // Mask fenced-code regions (``` or ~~~ fences, including the fence lines
@@ -110,6 +116,12 @@ function extractSvgBlocks(text: string, out: MarkdownSegment[]): void {
  * because `'$'`/`'$$'` in replacement *strings* are escape sequences.
  */
 export function normalizeMathDelimiters(text: string): string {
+  // Fast path: if text has no backslashes or dollar signs, it cannot contain
+  // LaTeX math delimiters (\(, \[, $$) or currency dollar signs.
+  if (!text.includes('\\') && !text.includes('$')) {
+    return text;
+  }
+
   return text
     .split(/(`+[^`]*?`+)/g)
     .map((part, i) => {
