@@ -29,3 +29,7 @@ create policy "user_access: request own"
 
 revoke all on public.user_access from anon, authenticated;
 grant select, insert on public.user_access to authenticated;
+
+-- The access-approve Edge Function writes decisions with the service role.
+-- Tables created via the SQL editor do not always inherit these privileges.
+grant select, insert, update, delete on public.user_access to service_role;
