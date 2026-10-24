@@ -73,6 +73,37 @@ Deno.test("access: owner is always approved, matched case-insensitively and only
   );
 });
 
+Deno.test("access: APPROVED_EMAILS are exempt, but only with a confirmed email", async () => {
+  const env = ENV({
+    OWNER_EMAIL: "owner@example.com",
+    APPROVED_EMAILS: " Ci@Example.com , other@x.com",
+  });
+  const ci = {
+    id: "c",
+    email: "ci@example.com",
+    email_confirmed_at: "2026-01-01",
+  };
+  eq(
+    await resolveAccess(ci, env, store("throw")),
+    "approved",
+    "never depends on the database",
+  );
+  eq(
+    await resolveAccess({ ...ci, email_confirmed_at: null }, env, store(null)),
+    "pending",
+  );
+  eq(await resolveAccess(stranger, env, store(null)), "pending");
+  eq(
+    await resolveAccess(
+      ci,
+      ENV({ OWNER_EMAIL: "owner@example.com" }),
+      store(null),
+    ),
+    "pending",
+    "unset list = nobody",
+  );
+});
+
 Deno.test("access: others need approval, and every failure is closed", async () => {
   const env = ENV({ OWNER_EMAIL: "owner@example.com" });
   eq(await resolveAccess(stranger, env, store("approved")), "approved");

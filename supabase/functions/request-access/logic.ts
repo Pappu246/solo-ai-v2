@@ -6,7 +6,7 @@ import {
   approvalTtlMs,
   type EnvReader,
   isApprovalExpired,
-  isOwner,
+  isExempt,
   ownerEmail,
   signDecision,
   TOKEN_TTL_SECONDS,
@@ -35,7 +35,7 @@ export interface RequestAccessDeps {
 export async function requestAccess(
   d: RequestAccessDeps,
 ): Promise<{ status: AccessStatus }> {
-  if (!approvalRequired(d.env) || isOwner(d.user, d.env)) {
+  if (!approvalRequired(d.env) || isExempt(d.user, d.env)) {
     return { status: "approved" };
   }
 
