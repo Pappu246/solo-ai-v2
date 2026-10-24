@@ -566,6 +566,20 @@ Deno.test("requests: images are shaped per provider and rejected on text-only mo
   const result = await openModelStream(model("gemini-3.7-flash"), [{ role: "user", content: "look" }], [image], { env, fetchImpl: googleOk.fetchImpl, guards });
   await drain(result.events);
   assertStringIncludes(String(googleOk.calls[0].init?.body), "inlineData");
+
+  // The free vision backup (OpenRouter) gets OpenAI-style data-URL image parts.
+  const orOk = scriptedFetch([(url: string) => okFor(url)]);
+  const backup = await openModelStream(model("openrouter-nemotron-vl"), [{ role: "user", content: "look" }], [image], { env, fetchImpl: orOk.fetchImpl, guards });
+  await drain(backup.events);
+  const body = JSON.parse(String(orOk.calls[0].init?.body));
+  assertEquals(body.model, "nvidia/nemotron-3.5-super-vl:free");
+  assertEquals(body.messages.at(-1).content[1], { type: "image_url", image_url: { url: "data:image/png;base64,AAAA" } });
+});
+
+Deno.test("fallback: a photo request has a second, free vision model behind Gemini", () => {
+  const chain = fallbackChain(model("gemini-3.7-flash"), true).map(m => m.id);
+  assertEquals(chain.slice(0, 2), ["gemini-3.7-flash", "openrouter-nemotron-vl"]);
+  assert(fallbackChain(model("gemini-3.7-flash"), true).every(m => m.supports_vision));
 });
 
 Deno.test("availability: the browser catalog reflects model blocks and provider cooldowns", () => {
