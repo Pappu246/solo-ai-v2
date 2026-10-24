@@ -56,7 +56,8 @@ export function CodeBlock({ code, language, live }: CodeBlockProps) {
           type="button"
           onClick={copy}
           className={cn('inline-flex items-center gap-1.5 text-[11px] font-medium rounded-md px-1.5 py-0.5 transition-colors hover:bg-[rgb(var(--code-bg))]', copied ? 'text-success' : 'text-fg-muted hover:text-fg')}
-          aria-label={copied ? 'Copied' : 'Copy code'}
+          aria-label={copied ? 'Copied code to clipboard' : 'Copy code'}
+          aria-live="polite"
         >
           {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
           {copied ? 'Copied' : 'Copy'}
