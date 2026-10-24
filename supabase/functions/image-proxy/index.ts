@@ -1,4 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { corsHeaders } from "../shared/cors.ts";
+import { FixedWindowRateLimiter } from "../shared/fixed_window_rate_limit.ts";
 
 const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com", "upload.wikimedia.org", "thumb.wikimedia.org"]);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -6,14 +8,22 @@ function isAllowedHost(hostname: string) {
   const host = hostname.toLowerCase().replace(/\.$/, "");
   return [...ALLOWED_HOSTS].some((base) => host === base || host.endsWith(`.${base}`));
 }
+// Only APP_ORIGIN (or the known production/dev origins) may read responses
+// cross-origin. Plain <img> loads do not need CORS, so nothing else is allowed.
 function cors(req: Request): HeadersInit {
   return {
-    "Access-Control-Allow-Origin": req.headers.get("Origin") || "*",
-    "Vary": "Origin",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    ...corsHeaders(req, Deno.env.get("APP_ORIGIN"), {
+      allowMethods: "GET, OPTIONS",
+      allowHeaders: "Content-Type",
+    }),
     "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
   };
+}
+// Per-isolate safety net against hotlinking/abuse (the endpoint is public).
+const limiter = new FixedWindowRateLimiter({ limit: 120, windowMs: 60_000, maxEntries: 20_000 });
+function clientKey(req: Request): string {
+  const forwarded = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  return forwarded || req.headers.get("cf-connecting-ip") || "unknown";
 }
 function log(requestId: string, event: string, fields: Record<string, unknown> = {}) {
   console.log(
@@ -25,6 +35,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
   if (req.method !== "GET") {
     return new Response("Method not allowed", { status: 405, headers: { ...cors(req), "X-Request-Id": requestId } });
+  }
+  if (!limiter.allow(clientKey(req))) {
+    return new Response("Too many requests", {
+      status: 429,
+      headers: { ...cors(req), "Retry-After": "60", "X-Request-Id": requestId },
+    });
   }
   const raw = new URL(req.url).searchParams.get("url");
   if (!raw) {
