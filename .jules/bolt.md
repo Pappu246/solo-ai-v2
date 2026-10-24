@@ -1,0 +1,3 @@
+## 2026-06-01 - ISO Date Parsing in Message Grouping
+**Learning:** `groupMessages` was instantiating `new Date()` up to 4 times per message row to evaluate the 5-minute grouping gap. In chat apps with large conversation histories, this caused significant garbage collection pressure during streaming re-renders. Pre-parsing ISO timestamps with `Date.parse()` into a primitive number array once per list eliminates `Date` object allocations entirely ($0$ allocations vs $4N$).
+**Action:** Always pre-parse array date fields into primitive number arrays before iterating over list items for gap or delta calculations.

@@ -32,6 +32,8 @@ export const Message = memo(function Message({
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
 
+  const fullTime = isFirstInGroup ? formatMessageTimeFull(message.created_at) : '';
+
   if (isUser) {
     return (
       <div className="group flex flex-col items-end gap-1" data-role="user">
@@ -49,7 +51,7 @@ export const Message = memo(function Message({
               {isFirstInGroup && <UserAvatar initial={userInitial} className="mb-0.5" />}
             </div>
             <div className="flex items-center gap-1 pr-8">
-              {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">{formatMessageTime(message.created_at)}</time>}
+              {isFirstInGroup && <time dateTime={fullTime} title={fullTime} className="text-[10px] tabular-nums text-fg-subtle">{formatMessageTime(message.created_at)}</time>}
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <CopyButton text={message.content} />
                 {onEdit && <IconButton label="Edit message" size="sm" disabled={disabled} onClick={() => setEditing(true)}><Pencil className="w-3.5 h-3.5" /></IconButton>}
@@ -75,7 +77,7 @@ export const Message = memo(function Message({
         </div>
       </div>
       <div className="flex items-center gap-1 pl-[38px]">
-        {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
+        {isFirstInGroup && <time dateTime={fullTime} title={fullTime} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
         <span className={cn('flex items-center gap-0.5 transition-opacity', isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
           <CopyButton text={message.content} />
           {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
