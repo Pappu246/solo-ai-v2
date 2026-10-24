@@ -19,20 +19,31 @@ const cors = (req: Request) =>
     allowHeaders: "Content-Type, Authorization, X-Client-Info, Apikey",
   });
 const json = (req: Request, body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { ...cors(req), "Content-Type": "application/json" } });
+  new Response(JSON.stringify(body), {
+    status,
+    headers: { ...cors(req), "Content-Type": "application/json" },
+  });
 
 const supabaseUrl = env("SUPABASE_URL") || "";
 let publishableKey = "";
 try {
-  publishableKey = JSON.parse(env("SUPABASE_PUBLISHABLE_KEYS") || "{}").default || "";
+  publishableKey =
+    JSON.parse(env("SUPABASE_PUBLISHABLE_KEYS") || "{}").default || "";
 } catch {
   publishableKey = "";
 }
 publishableKey ||= env("SUPABASE_ANON_KEY") || "";
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
-  if (req.method !== "POST") return json(req, { error: "Method not allowed", code: "method_not_allowed" }, 405);
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: cors(req) });
+  }
+  if (req.method !== "POST") {
+    return json(req, {
+      error: "Method not allowed",
+      code: "method_not_allowed",
+    }, 405);
+  }
 
   const auth = req.headers.get("Authorization") ?? "";
   if (!auth.startsWith("Bearer ") || !supabaseUrl || !publishableKey) {
@@ -44,24 +55,50 @@ Deno.serve(async (req) => {
     global: { headers: { Authorization: auth } },
   });
   const { data, error } = await client.auth.getUser(auth.slice(7));
-  if (error || !data.user) return json(req, { error: "Unauthorized", code: "unauthorized" }, 401);
+  if (error || !data.user) {
+    return json(req, { error: "Unauthorized", code: "unauthorized" }, 401);
+  }
   const user = data.user;
 
   const reader = storeFromClient(client as unknown as QueryClient);
   const log = (event: string, fields: Record<string, unknown> = {}) =>
-    console.log(JSON.stringify({ at: new Date().toISOString(), fn: "request-access", event, ...fields }));
+    console.log(
+      JSON.stringify({
+        at: new Date().toISOString(),
+        fn: "request-access",
+        event,
+        ...fields,
+      }),
+    );
 
   try {
     const result = await requestAccess({
       user,
       env,
       store: {
-        getStatus: (id) => reader.getStatus(id),
+        getRecord: (id) => reader.getRecord(id),
         async insertPending(id) {
-          const { error: insertError } = await client.from("user_access").insert({ user_id: id, status: "pending" });
+          const { error: insertError } = await client.from("user_access")
+            .insert({ user_id: id, status: "pending" });
           if (!insertError) return "inserted";
-          if ((insertError as { code?: string }).code === "23505") return "exists"; // asked twice at once
+          if ((insertError as { code?: string }).code === "23505") {
+            return "exists"; // asked twice at once
+          }
           throw new Error("insert failed");
+        },
+        async resetToPending(id) {
+          // Clients cannot update their own row, so this one write uses the service role.
+          const serviceKey = env("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+          if (!serviceKey) throw new Error("no service key");
+          const admin = createClient(supabaseUrl, serviceKey, {
+            auth: { persistSession: false },
+          });
+          const { error: resetError } = await admin.from("user_access").update({
+            status: "pending",
+            decided_at: null,
+          })
+            .eq("user_id", id);
+          if (resetError) throw new Error("reset failed");
         },
       },
       sendEmail: (msg) => sendMail(fetch, env, msg),
@@ -71,6 +108,9 @@ Deno.serve(async (req) => {
     return json(req, result);
   } catch {
     log("request_access_failed");
-    return json(req, { error: "Could not check access right now.", code: "internal_error" }, 500);
+    return json(req, {
+      error: "Could not check access right now.",
+      code: "internal_error",
+    }, 500);
   }
 });

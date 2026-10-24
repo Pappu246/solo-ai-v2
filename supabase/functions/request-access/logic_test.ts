@@ -10,12 +10,14 @@ function setup(
   opts: {
     env?: Record<string, string>;
     existing?: "approved" | "pending" | "blocked" | null;
+    decidedAt?: string | null;
     user?: Partial<RequestAccessDeps["user"]>;
     mailOk?: boolean;
   } = {},
 ) {
   const sent: Array<{ to: string; text: string; subject: string }> = [];
   const inserts: string[] = [];
+  const resets: string[] = [];
   const logs: string[] = [];
   const env: Record<string, string> = {
     OWNER_EMAIL: "owner@example.com",
@@ -24,10 +26,29 @@ function setup(
     ...opts.env,
   };
   const deps: RequestAccessDeps = {
-    user: { id: UID, email: "new@user.com", email_confirmed_at: "x", ...opts.user },
+    user: {
+      id: UID,
+      email: "new@user.com",
+      email_confirmed_at: "x",
+      ...opts.user,
+    },
     env: (n) => env[n],
     store: {
-      getStatus: () => Promise.resolve(opts.existing ?? null),
+      getRecord: () =>
+        Promise.resolve(
+          opts.existing
+            ? {
+              status: opts.existing,
+              decidedAt: opts.decidedAt === undefined
+                ? new Date(1_000_000).toISOString()
+                : opts.decidedAt,
+            }
+            : null,
+        ),
+      resetToPending: (id) => {
+        resets.push(id);
+        return Promise.resolve();
+      },
       insertPending: (id) => {
         inserts.push(id);
         return Promise.resolve("inserted");
@@ -40,7 +61,7 @@ function setup(
     nowMs: () => 1_000_000,
     log: (e) => logs.push(e),
   };
-  return { deps, sent, inserts, logs };
+  return { deps, sent, inserts, resets, logs };
 }
 
 Deno.test("request-access: feature off => approved, no row, no email", async () => {
@@ -71,15 +92,47 @@ Deno.test("request-access: asking again does not insert or email again", async (
   const t = setup({ existing: "pending" });
   assert((await requestAccess(t.deps)).status === "pending");
   assert(t.inserts.length === 0 && t.sent.length === 0);
-  assert((await requestAccess(setup({ existing: "approved" }).deps)).status === "approved");
-  assert((await requestAccess(setup({ existing: "blocked" }).deps)).status === "blocked");
+  assert(
+    (await requestAccess(setup({ existing: "approved" }).deps)).status ===
+      "approved",
+  );
+  assert(
+    (await requestAccess(setup({ existing: "blocked" }).deps)).status ===
+      "blocked",
+  );
 });
 
 Deno.test("request-access: email trouble never blocks the request", async () => {
   const noSecret = setup({ env: { APPROVAL_SECRET: "" } });
   assert((await requestAccess(noSecret.deps)).status === "pending");
-  assert(noSecret.sent.length === 0 && noSecret.logs.includes("approval_email_skipped"));
+  assert(
+    noSecret.sent.length === 0 &&
+      noSecret.logs.includes("approval_email_skipped"),
+  );
   const failing = setup({ mailOk: false });
   assert((await requestAccess(failing.deps)).status === "pending");
   assert(failing.logs.includes("approval_email_failed"));
+});
+
+Deno.test("request-access: an expired approval goes back to pending and the owner is asked again", async () => {
+  const eightDays = 8 * 86_400_000;
+  const t = setup({
+    existing: "approved",
+    decidedAt: new Date(1_000_000 - eightDays).toISOString(),
+  });
+  assert((await requestAccess(t.deps)).status === "pending");
+  assert(
+    t.resets.length === 1 && t.inserts.length === 0,
+    "resets the row instead of inserting",
+  );
+  assert(t.sent.length === 1 && t.logs.includes("approval_expired"));
+  const fresh = setup({ existing: "approved" });
+  assert((await requestAccess(fresh.deps)).status === "approved");
+  assert(fresh.resets.length === 0 && fresh.sent.length === 0);
+  const blocked = setup({
+    existing: "blocked",
+    decidedAt: new Date(0).toISOString(),
+  });
+  assert((await requestAccess(blocked.deps)).status === "blocked");
+  assert(blocked.resets.length === 0);
 });

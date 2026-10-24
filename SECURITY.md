@@ -120,6 +120,8 @@ user who is not approved. The check runs on the server; the pending screen in th
 
 - `public.user_access` has RLS: a user can read their own row and insert their own `pending` row. There is no
   client UPDATE/DELETE grant, so nobody can approve themselves.
+- An approval lasts `APPROVAL_DAYS` (default 7, `0` = never). After that the user is pending again and the owner gets a
+  new email; blocking never expires.
 - The owner is recognised by a **confirmed** email equal to `OWNER_EMAIL`. Create the owner account before
   opening the app to others (an email can only be registered once).
 - Approvals are written by the `access-approve` function using `SUPABASE_SERVICE_ROLE_KEY` (injected by
