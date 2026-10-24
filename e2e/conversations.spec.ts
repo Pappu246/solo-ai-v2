@@ -122,7 +122,7 @@ test.describe('conversation actions', () => {
     await app.menuAction('Gamma chat', 'Delete');
     await page.getByRole('dialog', { name: 'Delete this chat?' }).getByRole('button', { name: 'Delete' }).click();
     await expect(app.chats.getByText(/No chats yet/)).toBeVisible();
-    await expect(page.getByText(/what would you like to get done/i)).toBeVisible();
+    await expect(page.getByText(/how can i help you today/i)).toBeVisible();
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect.poll(() => backend.tables.conversations).toHaveLength(0);
   });

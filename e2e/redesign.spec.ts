@@ -47,13 +47,13 @@ async function axeViolations(page: Page) {
 }
 
 test.describe('cinematic theme defaults', () => {
-  test('dark/gold is the default theme on a fresh profile', async ({ page, app }) => {
+  test('warm light is the default theme on a fresh profile', async ({ page, app }) => {
     await page.goto('/');
-    // Pre-paint script + applyTheme agree: dark, with the dark theme-color.
-    await expect(page.locator('html')).toHaveClass(/dark/);
+    // Pre-paint script + applyTheme agree: light, with the light theme-color.
+    await expect(page.locator('html')).not.toHaveClass(/dark/);
     await app.open();
-    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#0b0a0a');
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#faf9f5');
   });
 
   test('Light and System themes still work; System follows the OS', async ({ page, app }) => {
@@ -62,7 +62,7 @@ test.describe('cinematic theme defaults', () => {
 
     await dialog.getByRole('radio', { name: 'Light' }).click();
     await expect(page.locator('html')).not.toHaveClass(/dark/);
-    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#faf9f7');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#faf9f5');
 
     await dialog.getByRole('radio', { name: 'System' }).click();
     await page.emulateMedia({ colorScheme: 'dark' });
@@ -81,7 +81,7 @@ test.describe('cinematic theme defaults', () => {
     const dialog = await openSettings(page, 'Appearance');
     await dialog.getByRole('radio', { name: 'Blue' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'blue');
-    await dialog.getByRole('radio', { name: 'Amber' }).click();
+    await dialog.getByRole('radio', { name: 'Clay' }).click();
     await expect(page.locator('html')).toHaveAttribute('data-accent', 'amber');
     await page.keyboard.press('Escape');
   });
@@ -237,7 +237,7 @@ test.describe('reduced motion', () => {
 test.describe('axe (WCAG 2 AA)', () => {
   test('welcome screen has no violations', async ({ page, app }) => {
     await app.open();
-    await expect(page.getByText(/what would you like to get done/i)).toBeVisible();
+    await expect(page.getByText(/how can i help you today/i)).toBeVisible();
     expect(await axeViolations(page)).toEqual([]);
   });
 

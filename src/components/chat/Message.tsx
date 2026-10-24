@@ -3,7 +3,6 @@ import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as Ima
 import type { Message as MessageType, Attachment, KnowledgeSource, ImageSearchImage, WebSearchSource } from '../../types';
 import { Markdown } from './Markdown';
 import { IconButton, Button } from '../ui';
-import { AssistantAvatar, UserAvatar } from './Avatar';
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
@@ -27,7 +26,7 @@ interface MessageProps {
 
 export const Message = memo(function Message({
   message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1,
-  isFirstInGroup, userInitial = 'Y', onRegenerate, onEdit, onRemember, onOpenSource,
+  isFirstInGroup, onRegenerate, onEdit, onRemember, onOpenSource,
 }: MessageProps) {
   const isUser = message.role === 'user';
   const [editing, setEditing] = useState(false);
@@ -45,10 +44,10 @@ export const Message = memo(function Message({
         ) : (
           <>
             <div className="flex items-end gap-2 max-w-[85%]">
-              {message.content && <div className="rounded-2xl rounded-br-md bg-linear-to-br from-accent/20 to-accent/10 border border-accent/25 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap wrap-break-word">{message.content}</div>}
-              {isFirstInGroup && <UserAvatar initial={userInitial} className="mb-0.5" />}
+              {message.content && <div className="rounded-2xl bg-surface-2 px-4 py-2.5 text-[0.95rem] leading-relaxed text-fg whitespace-pre-wrap wrap-break-word">{message.content}</div>}
+              
             </div>
-            <div className="flex items-center gap-1 pr-8">
+            <div className="flex items-center gap-1">
               {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle">{formatMessageTime(message.created_at)}</time>}
               <span className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
                 <CopyButton text={message.content} />
@@ -63,10 +62,9 @@ export const Message = memo(function Message({
 
   return (
     <div className="group flex flex-col gap-1" data-role="assistant">
-      <div className="flex items-start gap-2.5">
-        {isFirstInGroup ? <AssistantAvatar className="mt-0.5" /> : <span aria-hidden className="w-7 shrink-0" />}
+      <div className="flex items-start">
         <div className="min-w-0 flex-1">
-          <div className="rounded-2xl rounded-tl-md bg-surface-2/60 border border-border px-4 py-3 shadow-sm">
+          <div className="py-1">
             <div className="text-fg"><Markdown content={message.content} /></div>
             {message.images && message.images.length > 0 && <ImageSearchGallery images={message.images} />}
           </div>
@@ -74,7 +72,7 @@ export const Message = memo(function Message({
           {message.web_sources && message.web_sources.length > 0 && <div className="mt-1.5"><WebSourceList sources={message.web_sources} /></div>}
         </div>
       </div>
-      <div className="flex items-center gap-1 pl-[38px]">
+      <div className="flex items-center gap-1">
         {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
         <span className={cn('flex items-center gap-0.5 transition-opacity', isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
           <CopyButton text={message.content} />

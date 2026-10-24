@@ -1,6 +1,5 @@
 import type { ModelInfo } from '../../types';
 import { Markdown } from './Markdown';
-import { AssistantAvatar } from './Avatar';
 
 interface Props {
   content: string;
@@ -12,12 +11,11 @@ interface Props {
 export function StreamingMessage({ content, model, showModelBadge }: Props) {
   if (!content) {
     return (
-      <div className="flex items-start gap-2.5" aria-busy="true">
-        <AssistantAvatar className="mt-0.5" />
+      <div className="flex items-start" aria-busy="true">
         <div
           role="status"
           aria-label="Solo AI is thinking"
-          className="flex items-center gap-1.5 h-9 px-4 rounded-2xl rounded-tl-md bg-surface-2/60 border border-border"
+          className="flex items-center gap-1.5 h-9"
         >
           <span className="bounce-dot w-1.5 h-1.5 rounded-full bg-accent" />
           <span className="bounce-dot w-1.5 h-1.5 rounded-full bg-accent" />
@@ -28,10 +26,9 @@ export function StreamingMessage({ content, model, showModelBadge }: Props) {
     );
   }
   return (
-    <div className="flex items-start gap-2.5" aria-live="polite" aria-busy="true">
-      <AssistantAvatar className="mt-0.5" />
+    <div className="flex items-start" aria-live="polite" aria-busy="true">
       <div className="min-w-0 flex-1">
-        <div className="rounded-2xl rounded-tl-md bg-surface-2/60 border border-border px-4 py-3">
+        <div className="py-1">
           <div className="text-fg">
             <Markdown content={content} live />
             <span className="typing-cursor" aria-hidden />

@@ -225,24 +225,24 @@ layer(base);
 
   :root {
     /* Accent (default: amber). Overridden by [data-accent]. */
-    --accent: 154 94 8;
-    --accent-fg: 255 253 248;
+    --accent: 176 82 50;
+    --accent-fg: 255 255 255;
 
-    /* Surfaces */
-    --bg: 250 249 247; /* app background */
-    --surface: 255 255 255; /* sidebar, cards, panels */
-    --surface-2: 245 243 240; /* nested surfaces, hover */
-    --surface-3: 232 229 225; /* pressed, code background */
+    /* Surfaces: warm paper */
+    --bg: 250 249 245; /* app background */
+    --surface: 244 243 237; /* sidebar, cards, panels */
+    --surface-2: 238 236 228; /* nested surfaces, hover */
+    --surface-3: 228 225 214; /* pressed, code background */
     --overlay: 0 0 0;
 
     /* Borders */
-    --border: 138 132 123;
-    --border-strong: 117 111 102;
+    --border: 216 212 200;
+    --border-strong: 176 171 158;
 
     /* Text */
-    --fg: 28 26 24;
-    --fg-muted: 87 82 76;
-    --fg-subtle: 117 111 102;
+    --fg: 38 37 34;
+    --fg-muted: 86 84 77;
+    --fg-subtle: 112 109 100;
 
     /* Status */
     --danger: 185 28 28;
@@ -262,7 +262,7 @@ layer(base);
 
     /* Ambient glow behind the app (very subtle in light) */
     --glow: var(--accent);
-    --glow-strength: 0.05;
+    --glow-strength: 0;
 
     /* Radius */
     --radius: 12px;
@@ -297,18 +297,18 @@ layer(base);
 
   /* ── Cinematic dark ───────────────────────────────────────────────────────── */
   .dark {
-    --bg: 11 10 10;
-    --surface: 21 19 17;
-    --surface-2: 30 27 24;
-    --surface-3: 43 38 33;
+    --bg: 38 38 36;
+    --surface: 31 30 29;
+    --surface-2: 48 48 45;
+    --surface-3: 61 60 56;
     --overlay: 0 0 0;
 
-    --border: 122 111 97;
-    --border-strong: 133 122 106;
+    --border: 74 73 68;
+    --border-strong: 104 102 94;
 
-    --fg: 240 236 229;
-    --fg-muted: 170 163 152;
-    --fg-subtle: 154 145 132;
+    --fg: 250 249 245;
+    --fg-muted: 194 192 182;
+    --fg-subtle: 156 154 144;
 
     --danger: 240 110 105;
     --success: 122 202 140;
@@ -323,7 +323,7 @@ layer(base);
     --glass-blur: 22px;
     --glass-edge: 255 255 255 / 0.07;
 
-    --glow-strength: 0.16;
+    --glow-strength: 0;
 
     --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.5);
     --shadow-md: 0 6px 16px rgb(0 0 0 / 0.5);
@@ -334,8 +334,8 @@ layer(base);
 
   /* Accent variants (light) */
   [data-accent='amber'] {
-    --accent: 154 94 8;
-    --accent-fg: 255 253 248;
+    --accent: 176 82 50;
+    --accent-fg: 255 255 255;
   }
   [data-accent='blue'] {
     --accent: 37 99 235;
@@ -361,8 +361,8 @@ layer(base);
   /* Accent variants (dark): brighter for contrast on near-black surfaces.
    Amber becomes a refined cinematic gold — the signature of the dark theme. */
   .dark[data-accent='amber'] {
-    --accent: 222 178 84;
-    --accent-fg: 24 17 6;
+    --accent: 217 119 87;
+    --accent-fg: 31 20 14;
   }
   .dark[data-accent='blue'] {
     --accent: 96 165 250;
@@ -615,3 +615,20 @@ layer(base);
 :root:not(.dark) .hljs-number, :root:not(.dark) .hljs-symbol, :root:not(.dark) .hljs-meta, :root:not(.dark) .hljs-link { color: #a65f1e; }
 :root:not(.dark) .hljs-title, :root:not(.dark) .hljs-section, :root:not(.dark) .hljs-name { color: #2f6bd8; }
 :root:not(.dark) .hljs-variable, :root:not(.dark) .hljs-attribute, :root:not(.dark) .hljs-tag, :root:not(.dark) .hljs-deletion { color: #b54538; }
+
+/* Claude-style calm surfaces: solid panels, no frosted glass or ambient glow. */
+@layer utilities {
+  :root .glass,
+  :root .glass-sidebar,
+  :root .glass-menu,
+  :root .glass-card {
+    background: rgb(var(--surface));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: rgb(var(--border));
+    box-shadow: none;
+  }
+  :root .glass-menu {
+    box-shadow: var(--shadow-md);
+  }
+}
