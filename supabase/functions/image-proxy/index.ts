@@ -1,4 +1,5 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
+import { corsHeaders } from "../shared/cors.ts";
 
 const ALLOWED_HOSTS = new Set(["gstatic.com", "googleusercontent.com", "upload.wikimedia.org", "thumb.wikimedia.org"]);
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -6,12 +7,12 @@ function isAllowedHost(hostname: string) {
   const host = hostname.toLowerCase().replace(/\.$/, "");
   return [...ALLOWED_HOSTS].some((base) => host === base || host.endsWith(`.${base}`));
 }
-function cors(req: Request): HeadersInit {
+function cors(req: Request): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": req.headers.get("Origin") || "*",
-    "Vary": "Origin",
-    "Access-Control-Allow-Methods": "GET, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    ...corsHeaders(req, Deno.env.get("APP_ORIGIN"), {
+      allowMethods: "GET, OPTIONS",
+      allowHeaders: "Content-Type",
+    }),
     "Cache-Control": "public, max-age=86400, s-maxage=604800, immutable",
   };
 }
