@@ -1,10 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Sun, Moon, Monitor, SlidersHorizontal, Palette, Sparkles, Volume2, UserRound, LogOut } from 'lucide-react';
 import type { UserSettings, Theme, FontSize, AIModel } from '../../types';
 import { ACCENT_OPTIONS } from '../../types';
 import { Dialog, Toggle, Button } from '../ui';
 import { speak, stop as stopSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
+import { fetchUsageToday, type UsageToday } from '../../lib/usage';
 
 type Section = 'general' | 'appearance' | 'ai' | 'voice' | 'account';
 
@@ -152,6 +153,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                 <p className="text-xs text-fg-subtle">Signed in as</p>
                 <p className="text-sm font-medium text-fg mt-0.5 break-all">{userEmail ?? '—'}</p>
               </div>
+              <UsageCard />
               <div className="pt-2">
                 <Button variant="danger" size="md" leftIcon={<LogOut className="w-4 h-4" />} onClick={onSignOut}>Sign out</Button>
               </div>
@@ -160,6 +162,29 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/** Today's own request counts. Free models also have provider limits; Solo AI switches model when one is busy. */
+function UsageCard() {
+  const [usage, setUsage] = useState<UsageToday | null | undefined>(undefined);
+  useEffect(() => {
+    let alive = true;
+    fetchUsageToday().then(u => { if (alive) setUsage(u); });
+    return () => { alive = false; };
+  }, []);
+  return (
+    <div className="rounded-xl border border-border p-4" aria-live="polite">
+      <p className="text-xs text-fg-subtle">Your usage today</p>
+      {usage === undefined && <p className="text-sm text-fg-muted mt-0.5">Loading…</p>}
+      {usage === null && <p className="text-sm text-fg-muted mt-0.5">Usage is not available right now.</p>}
+      {usage && (
+        <p className="text-sm font-medium text-fg mt-0.5">
+          {usage.chats} {usage.chats === 1 ? 'message' : 'messages'} · {usage.imageSearches} image {usage.imageSearches === 1 ? 'search' : 'searches'}
+        </p>
+      )}
+      <p className="text-xs text-fg-subtle mt-2">Counts reset daily. If a free model is busy, Solo AI automatically answers with another one and shows its name under the reply.</p>
+    </div>
   );
 }
 
