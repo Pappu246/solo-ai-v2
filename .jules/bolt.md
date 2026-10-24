@@ -1,0 +1,3 @@
+## 2026-06-01 - Optimizing Message Processing and Rendering
+**Learning:** During AI response streaming, components like `MessageList` re-render on every token chunk. Pre-parsing date strings into millisecond timestamps in batch array operations (`Date.parse`) eliminates GC overhead from repeated `Date` allocations. Pre-computing index lookups (`lastAssistantIdx`) with `useMemo` avoids redundant linear array scans on every streaming frame.
+**Action:** Always pre-parse dates into arrays of numbers when grouping/filtering lists in render loops, and memoize index scans in components that re-render frequently during live streaming.

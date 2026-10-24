@@ -61,9 +61,15 @@ export function MessageList({
     endRef.current?.scrollIntoView({ block: 'end' });
   }, [conversationKey]);
 
-  const lastAssistantIdx = (() => { for (let i = messages.length - 1; i >= 0; i--) if (messages[i].role === 'assistant') return i; return -1; })();
-  // Grouping only depends on the messages array — skip it while streaming
-  // tokens re-render this component with a fresh streamingContent string.
+  // Memoize both index lookup and grouping so streaming token re-renders
+  // avoid re-scanning the messages array on every delta.
+  const lastAssistantIdx = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === 'assistant') return i;
+    }
+    return -1;
+  }, [messages]);
+
   const grouped = useMemo(() => groupMessages(messages), [messages]);
 
   return (

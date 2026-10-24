@@ -17,19 +17,24 @@ export interface GroupedMessage {
  * back-and-forth reads as two conversations instead of a wall of avatars.
  */
 export function groupMessages(messages: Message[]): GroupedMessage[] {
+  const count = messages.length;
+  if (count === 0) return [];
+
+  // Parse timestamps once up front into milliseconds to avoid repeated Date
+  // object instantiations and string parsing passes inside the loop.
+  const timestamps = messages.map(m => Date.parse(m.created_at) || 0);
+
   return messages.map((message, index) => {
+    const time = timestamps[index];
+
     const prev = index > 0 ? messages[index - 1] : null;
     const sameRoleAsPrev = prev !== null && prev.role === message.role;
-    const closeInTime =
-      prev !== null &&
-      Math.abs(new Date(message.created_at).getTime() - new Date(prev.created_at).getTime()) < GROUP_GAP_MS;
+    const closeInTime = prev !== null && Math.abs(time - timestamps[index - 1]) < GROUP_GAP_MS;
     const isFirstInGroup = !sameRoleAsPrev || !closeInTime;
 
-    const next = index < messages.length - 1 ? messages[index + 1] : null;
+    const next = index < count - 1 ? messages[index + 1] : null;
     const sameRoleAsNext = next !== null && next.role === message.role;
-    const closeToNext =
-      next !== null &&
-      Math.abs(new Date(next.created_at).getTime() - new Date(message.created_at).getTime()) < GROUP_GAP_MS;
+    const closeToNext = next !== null && Math.abs(timestamps[index + 1] - time) < GROUP_GAP_MS;
     const isLastInGroup = !sameRoleAsNext || !closeToNext;
 
     return { message, index, isFirstInGroup, isLastInGroup };
