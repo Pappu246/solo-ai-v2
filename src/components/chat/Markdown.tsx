@@ -1,9 +1,8 @@
-import { memo, useMemo, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useState, type ReactNode } from 'react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
-import rehypeKatex, { type Options as KatexOptions } from 'rehype-katex';
-import 'katex/dist/katex.min.css';
+import type { Options as KatexOptions } from 'rehype-katex';
 import { CodeBlock } from './CodeBlock';
 import { SvgFigure } from './SvgFigure';
 import { safeHref } from '../../lib/url';
@@ -53,11 +52,35 @@ const liveComponents = buildComponents(true);
 const staticComponents = buildComponents(false);
 
 const remarkPlugins = [remarkGfm, remarkMath];
-// rehype-katex never throws on bad LaTeX (it renders the source in red);
-// `strict: false` additionally silences non-fatal warnings mid-stream, and
-// `trust` stays off so KaTeX features that take URLs are disabled.
-const katexPlugin: [typeof rehypeKatex, KatexOptions] = [rehypeKatex, { strict: false, errorColor: '#f87171' }];
-const rehypePlugins = [katexPlugin];
+// KaTeX (~250 kB with its CSS) is loaded on demand, only once a reply actually
+// contains math. rehype-katex never throws on bad LaTeX (it renders the source
+// in red); `strict: false` silences non-fatal warnings mid-stream, and `trust`
+// stays off so KaTeX features that take URLs are disabled.
+type KatexPlugin = [typeof import('rehype-katex').default, KatexOptions];
+let katexPlugin: KatexPlugin | null = null;
+let katexLoading: Promise<KatexPlugin> | null = null;
+
+function loadKatex(): Promise<KatexPlugin> {
+  katexLoading ??= Promise.all([import('rehype-katex'), import('katex/dist/katex.min.css')]).then(([mod]) => {
+    katexPlugin = [mod.default, { strict: false, errorColor: '#f87171' }];
+    return katexPlugin;
+  });
+  return katexLoading;
+}
+
+const MATH_HINT = /\$|\\\(|\\\[|\\begin\{/;
+const NO_PLUGINS: never[] = [];
+
+function useKatexPlugins(needed: boolean) {
+  const [plugin, setPlugin] = useState<KatexPlugin | null>(katexPlugin);
+  useEffect(() => {
+    if (!needed || plugin) return;
+    let alive = true;
+    loadKatex().then((loaded) => { if (alive) setPlugin(loaded); }).catch(() => { /* math stays as plain text */ });
+    return () => { alive = false; };
+  }, [needed, plugin]);
+  return useMemo(() => (plugin ? [plugin] : NO_PLUGINS), [plugin]);
+}
 
 /**
  * GFM + math + SVG renderer for assistant output.
@@ -72,6 +95,7 @@ const rehypePlugins = [katexPlugin];
 export const Markdown = memo(function Markdown({ content, live }: MarkdownProps) {
   const segments = useMemo(() => splitMarkdownSegments(content), [content]);
   const components = live ? liveComponents : staticComponents;
+  const rehypePlugins = useKatexPlugins(MATH_HINT.test(content));
   return (
     <div className="prose-chat text-[0.95rem]">
       {segments.map((segment, i) => (
