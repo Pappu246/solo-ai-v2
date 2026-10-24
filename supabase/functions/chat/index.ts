@@ -5,10 +5,8 @@ import {
   type Attempt,
   type FailureCode,
   fallbackChain,
-  type Image,
   isAbortError,
   isAliasedModel,
-  type Message,
   type ModelStream,
   ProviderError,
   publicModelAvailability,
@@ -26,9 +24,10 @@ import { FixedWindowRateLimiter } from "../shared/fixed_window_rate_limit.ts";
 import { corsHeaders } from "../shared/cors.ts";
 import { accessDeniedMessage, type QueryClient, resolveAccess, storeFromClient } from "../shared/access.ts";
 import { buildModelContext } from "./context.ts";
+import { contextPrompt, SYSTEM_PROMPT } from "./context-prompt.ts";
+import { parseContext, parseImages, parseMessages } from "./validation.ts";
+import { executeImageSearch } from "./image-search-exec.ts";
 import { decideImageSearch } from "../image-search/decision.ts";
-import { createImageSearchProvider, filterResults, type ImageResult } from "../image-search/providers.ts";
-import { imageSearchCache } from "../image-search/cache.ts";
 import { sseImageSearchEvent } from "../image-search/search-events.ts";
 import {
   createWebSearchProvider,
@@ -109,136 +108,6 @@ function usageForRequest(req: Request, id: string): UsageController {
     : null;
   return createUsageController(client, { limits: usageLimits, onEvent: (event, fields) => log(id, event, fields) });
 }
-const SYSTEM_PROMPT =
-  "You are Solo AI, a helpful, precise assistant inside the Solo AI workspace. Answer directly and concisely. Use Markdown. If unsure, say so. Never invent citations, URLs, or file contents. Reply in the user's language.";
-type Ctx = {
-  project?: { name: string; instructions?: string };
-  memories?: Array<{ type: string; content: string }>;
-  knowledge?: Array<{ file_id: string; file_name: string; chunk_index: number; content: string }>;
-};
-const TYPES = new Set(["fact", "preference", "instruction", "context"]);
-const clip = (v: unknown, n: number) => String(v ?? "").replace(/\0/g, "").slice(0, n);
-function parseContext(raw: unknown): Ctx | null {
-  if (raw == null) return null;
-  if (typeof raw !== "object" || Array.isArray(raw)) {
-    throw Object.assign(new Error("Invalid context"), { status: 400, code: "invalid_request" });
-  }
-  const r = raw as Record<string, unknown>, o: Ctx = {};
-  let total = 0;
-  if (r.project !== undefined) {
-    const p = r.project as Record<string, unknown>,
-      name = clip(p.name, 120).trim(),
-      instructions = clip(p.instructions, 4000).trim();
-    if (!name) throw Object.assign(new Error("Invalid project context"), { status: 400, code: "invalid_request" });
-    o.project = instructions ? { name, instructions } : { name };
-    total += name.length + instructions.length;
-  }
-  if (r.memories !== undefined) {
-    if (!Array.isArray(r.memories) || r.memories.length > 12) {
-      throw Object.assign(new Error("Too many memories"), { status: 400, code: "invalid_request" });
-    }
-    o.memories = r.memories.map((m: unknown) => {
-      const x = (m && typeof m === "object" ? m : {}) as Record<string, unknown>,
-        type = String(x.type ?? "fact"),
-        content = clip(x.content, 1000).trim();
-      if (!TYPES.has(type) || !content) {
-        throw Object.assign(new Error("Invalid memory"), { status: 400, code: "invalid_request" });
-      }
-      total += content.length;
-      return { type, content };
-    });
-  }
-  if (r.knowledge !== undefined) {
-    if (!Array.isArray(r.knowledge) || r.knowledge.length > 8) {
-      throw Object.assign(new Error("Too many knowledge excerpts"), { status: 400, code: "invalid_request" });
-    }
-    o.knowledge = r.knowledge.map((k: unknown) => {
-      const x = (k && typeof k === "object" ? k : {}) as Record<string, unknown>,
-        file_id = clip(x.file_id, 64),
-        file_name = clip(x.file_name, 255).trim() || "file",
-        chunk_index = Number.isInteger(x.chunk_index) ? Number(x.chunk_index) : 0,
-        content = clip(x.content, 8000).trim();
-      if (!file_id || !content) {
-        throw Object.assign(new Error("Invalid knowledge excerpt"), { status: 400, code: "invalid_request" });
-      }
-      total += content.length;
-      return { file_id, file_name, chunk_index, content };
-    });
-  }
-  if (total > 24000) {
-    throw Object.assign(new Error("Context is too large"), { status: 413, code: "context_length_exceeded" });
-  }
-  return o.project || o.memories?.length || o.knowledge?.length ? o : null;
-}
-function contextPrompt(c: Ctx | null) {
-  if (!c) return "";
-  const p: string[] = [];
-  if (c.project) p.push(`Project: ${c.project.name}${c.project.instructions ? `\n${c.project.instructions}` : ""}`);
-  if (c.memories?.length) {
-    p.push(`Remembered context:\n${c.memories.map((m) => `- [${m.type}] ${m.content}`).join("\n")}`);
-  }
-  if (c.knowledge?.length) {
-    p.push(
-      `File excerpts:\n${
-        c.knowledge.map((k) => `<<< ${k.file_name} · excerpt ${k.chunk_index + 1} >>>\n${k.content}\n<<< end >>>`).join(
-          "\n\n",
-        )
-      }`,
-    );
-  }
-  return p.length ? `\n\n### Context\n${p.join("\n\n")}` : "";
-}
-async function executeImageSearch(qs: string[], id: string) {
-  const provider = createImageSearchProvider((n) => Deno.env.get(n));
-  if (!provider) {
-    log(id, "image_search_provider_unavailable");
-    return { images: [], error: "Image search not configured" };
-  }
-  const all: ImageResult[] = [];
-  let failed = 0;
-  for (const q of qs.slice(0, 3)) {
-    const key = `search:${q.toLowerCase().trim()}`, c = imageSearchCache.get(key);
-    if (c) {
-      all.push(...c.results);
-      log(id, "image_search_cache_hit", { query: q, resultCount: c.results.length });
-      continue;
-    }
-    try {
-      const raw = await Promise.race([
-        provider.search(q),
-        new Promise<ImageResult[]>((_, rej) => setTimeout(() => rej(new Error("timeout")), 8000)),
-      ]);
-      const f = filterResults(raw);
-      all.push(...f);
-      imageSearchCache.set(key, { query: q, results: f, timestamp: Date.now() });
-      log(id, "image_search_provider_result", {
-        query: q,
-        rawCount: raw.length,
-        filteredCount: f.length,
-        thumbnailHosts: [
-          ...new Set(f.map((x) => {
-            try {
-              return new URL(x.thumbnail).hostname;
-            } catch {
-              return "invalid";
-            }
-          })),
-        ],
-      });
-    } catch (e) {
-      failed++;
-      log(id, "image_search_provider_failure", { query: q, error: e instanceof Error ? e.name : "unknown" });
-    }
-  }
-  const seen = new Set<string>(),
-    images = all.filter((x) => {
-      if (seen.has(x.url)) return false;
-      seen.add(x.url);
-      return true;
-    }).slice(0, 10);
-  log(id, "image_search_normalized", { count: images.length, failedQueries: failed });
-  return images.length || !failed ? { images } : { images: [], error: "Image search failed" };
-}
 Deno.serve(async (req) => {
   const id = crypto.randomUUID();
   if (req.method === "OPTIONS") return new Response(null, { headers: cors(req) });
@@ -274,48 +143,9 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => {
       throw Object.assign(new Error("Invalid JSON body"), { status: 400, code: "invalid_request" });
     });
-    const raw = body?.messages;
-    if (!Array.isArray(raw) || !raw.length) {
-      return fail(req, "invalid_request", "At least one message is required", 400, id);
-    }
-    if (raw.length > 500) {
-      throw Object.assign(new Error("Conversation request is too large"), {
-        status: 413,
-        code: "context_length_exceeded",
-      });
-    }
-    const messages: Message[] = raw.map((m: unknown) => {
-      if (!m || typeof m !== "object") {
-        throw Object.assign(new Error("Invalid message"), { status: 400, code: "invalid_request" });
-      }
-      const x = m as { role?: unknown; content?: unknown };
-      if (!["user", "assistant"].includes(String(x.role))) {
-        throw Object.assign(new Error("Invalid message role"), { status: 400, code: "invalid_request" });
-      }
-      const content = String(x.content ?? "");
-      if (content.length > 64000) {
-        throw Object.assign(new Error("Message is too large"), { status: 413, code: "context_length_exceeded" });
-      }
-      return { role: x.role as Message["role"], content };
-    });
+    const messages = parseMessages(body?.messages);
     const total = messages.reduce((n, m) => n + String(m.content).length, 0);
-    if (total > 1000000) {
-      throw Object.assign(new Error("Conversation request is too large"), {
-        status: 413,
-        code: "context_length_exceeded",
-      });
-    }
-    const images: Image[] = Array.isArray(body?.images)
-      ? body.images.slice(0, 4).map((x: unknown) => {
-        const i = (x && typeof x === "object" ? x : {}) as { mime_type?: unknown; base64?: unknown },
-          mime_type = String(i.mime_type || "image/jpeg"),
-          base64 = String(i.base64 || "");
-        if (!/^image\/(png|jpeg|webp|gif)$/.test(mime_type) || !base64 || base64.length > 12000000) {
-          throw Object.assign(new Error("Invalid image"), { status: 413, code: "context_length_exceeded" });
-        }
-        return { mime_type, base64 };
-      })
-      : [];
+    const images = parseImages(body?.images);
     const ctx = parseContext(body?.context),
       requested = typeof body?.model === "string" ? body.model : "",
       auto = body?.autoRoute !== false;
@@ -433,47 +263,54 @@ Deno.serve(async (req) => {
       }
     }
     const attempts: Attempt[] = [];
-    let decision: Awaited<ReturnType<typeof decideImageSearch>> | null = null;
     const last = messages.filter((m) => m.role === "user").at(-1);
-    if (last && !images.length) {
+    // The image-search decision (a small model call) and web research (a search
+    // call) are independent, so they run side by side instead of one after the
+    // other. Each task catches its own failures and logs them; neither can block
+    // or break the answer. The first-token time is logged in request_summary.
+    const decisionTask = async (): Promise<Awaited<ReturnType<typeof decideImageSearch>> | null> => {
+      if (!last || images.length) return null;
       try {
-        decision = await decideImageSearch(String(last.content), { env: (n) => Deno.env.get(n), fetchImpl: fetch });
+        const result = await decideImageSearch(String(last.content), { env: (n) => Deno.env.get(n), fetchImpl: fetch });
         log(id, "image_search_decision", {
-          shouldSearch: decision.shouldSearch,
-          queryCount: decision.queries.length,
-          queries: decision.shouldSearch ? decision.queries : [],
-          confidence: decision.confidence,
+          shouldSearch: result.shouldSearch,
+          queryCount: result.queries.length,
+          queries: result.shouldSearch ? result.queries : [],
+          confidence: result.confidence,
         });
+        return result;
       } catch (e) {
         log(id, "image_search_decision_failure", { error: e instanceof Error ? e.name : "unknown" });
+        return null;
       }
-    }
-    let webSources: WebSearchSource[] = [];
+    };
     const researchRequested = body?.research === true;
     const research = researchRequested || (last ? shouldResearch(String(last.content)) : false);
-    if (research && last) {
+    const researchTask = async (): Promise<WebSearchSource[]> => {
+      if (!research || !last) return [];
       log(id, "research_start", { requested: researchRequested });
       try {
         const webProvider = createWebSearchProvider((n) => Deno.env.get(n), fetch);
-        if (!webProvider) log(id, "research_provider_unavailable");
-        else {
-          const raw = await Promise.race([
-            webProvider.search(String(last.content).replace(/\s+/g, " ").slice(0, 300), 6),
-            new Promise<WebSearchSource[]>((_, rej) => setTimeout(() => rej(new Error("timeout")), 7000)),
-          ]);
-          webSources = normalizeSources(raw, { max: 6, maxPerDomain: 2 });
-          log(id, "research_results", {
-            count: webSources.length,
-            domains: [...new Set(webSources.map((s) => s.domain))],
-          });
+        if (!webProvider) {
+          log(id, "research_provider_unavailable");
+          return [];
         }
+        const raw = await Promise.race([
+          webProvider.search(String(last.content).replace(/\s+/g, " ").slice(0, 300), 6),
+          new Promise<WebSearchSource[]>((_, rej) => setTimeout(() => rej(new Error("timeout")), 7000)),
+        ]);
+        const sources = normalizeSources(raw, { max: 6, maxPerDomain: 2 });
+        log(id, "research_results", { count: sources.length, domains: [...new Set(sources.map((s) => s.domain))] });
+        return sources;
       } catch (e) {
         log(id, "research_failed", { error: e instanceof Error ? e.name : "unknown" });
+        return [];
       }
-      if (webSources.length) {
-        const sys = bounded.messages[0];
-        bounded.messages[0] = { ...sys, content: `${String(sys.content)}${sourcesPromptBlock(webSources)}` };
-      }
+    };
+    const [decision, webSources] = await Promise.all([decisionTask(), researchTask()]);
+    if (webSources.length) {
+      const sys = bounded.messages[0];
+      bounded.messages[0] = { ...sys, content: `${String(sys.content)}${sourcesPromptBlock(webSources)}` };
     }
     let stream: ModelStream;
     try {
@@ -528,7 +365,7 @@ Deno.serve(async (req) => {
       }
       if (decision?.shouldSearch) {
         yield enc.encode(sseImageSearchEvent({ type: "started", queries: decision.queries }));
-        const p = executeImageSearch(decision.queries, id);
+        const p = executeImageSearch(decision.queries, id, log);
         for await (const e of stream.events) {
           if (e.type === "delta") yield trackDelta(e.text);
           else if (e.type === "done") {
