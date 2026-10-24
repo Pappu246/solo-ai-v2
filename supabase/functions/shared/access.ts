@@ -6,6 +6,8 @@
  *    the app behaves exactly as before, so deploying this is safe.
  *  - The owner (verified email === OWNER_EMAIL) is always approved: no row,
  *    no email, no friction for demos.
+ *  - Emails listed in APPROVED_EMAILS (comma separated, confirmed email only)
+ *    are approved without a row or expiry, e.g. a CI smoke-test account.
  *  - Everyone else needs a `user_access` row with status "approved".
  *  - An approval lasts APPROVAL_DAYS (default 7; 0 = never expires). After
  *    that the user is treated as pending and the owner is asked again.
@@ -75,13 +77,23 @@ export function isOwner(user: AccessUser, env: EnvReader): boolean {
     Boolean(user.email_confirmed_at);
 }
 
+/** Accounts that never need approval: the owner plus anything in APPROVED_EMAILS (confirmed emails only). */
+export function isExempt(user: AccessUser, env: EnvReader): boolean {
+  if (isOwner(user, env)) return true;
+  const email = (user.email ?? "").trim().toLowerCase();
+  if (!email || !user.email_confirmed_at) return false;
+  return (env("APPROVED_EMAILS") ?? "").split(",").some((e) =>
+    e.trim().toLowerCase() === email
+  );
+}
+
 export async function resolveAccess(
   user: AccessUser,
   env: EnvReader,
   store: AccessStore,
   nowMs: number = Date.now(),
 ): Promise<AccessStatus> {
-  if (!approvalRequired(env) || isOwner(user, env)) return "approved";
+  if (!approvalRequired(env) || isExempt(user, env)) return "approved";
   try {
     return effectiveStatus(
       await store.getRecord(user.id),
