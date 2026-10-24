@@ -67,6 +67,16 @@ describe('Markdown', () => {
     expect(container.querySelector('a[href="https://example.com"]')).not.toBeNull();
   });
 
+  it('sanitizes image URLs and rejects non-http(s) or malformed image sources', () => {
+    const { container } = render(
+      <Markdown content={'![good](https://example.com/a.png)\n![bad js](javascript:alert(1))\n![bad data](data:image/png;base64,123)\n![bad rel](/path/to/img.png)\n![bad invalid](https://)'} />,
+    );
+    const images = container.querySelectorAll('img');
+    expect(images).toHaveLength(1);
+    expect(images[0]).toHaveAttribute('src', 'https://example.com/a.png');
+    expect(images[0]).toHaveAttribute('referrerPolicy', 'no-referrer');
+  });
+
   // ── Math (KaTeX) ─────────────────────────────────────────────────────────────
 
   it('renders inline $…$ math with KaTeX (loaded on demand)', async () => {
