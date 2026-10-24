@@ -29,7 +29,7 @@ describe('App × knowledge layer', () => {
   it('uploads a file from the Files view and shows its details', async () => {
     const user = userEvent.setup({ applyAccept: false });
     render(<App />);
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
 
     await user.click(screen.getAllByRole('button', { name: 'Files' })[0]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Files' })).toBeInTheDocument();
@@ -53,7 +53,7 @@ describe('App × knowledge layer', () => {
   it('adds a memory explicitly from the Memory view and never from chat alone', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
 
     await user.type(screen.getByRole('textbox', { name: /message/i }), 'My favourite colour is teal{Enter}');
     await waitFor(() => expect(screen.getByText('Sure, here you go.')).toBeInTheDocument());
@@ -75,7 +75,7 @@ describe('App × knowledge layer', () => {
   it('creates a project from the sidebar and starts a chat inside it', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
 
     await user.click(screen.getByRole('button', { name: /new project/i }));
     const dialog = await screen.findByRole('dialog', { name: /new project/i });
@@ -96,7 +96,7 @@ describe('App × knowledge layer', () => {
     const user = userEvent.setup();
     mock.tables.conversations.push({ id: 'c1', title: 'Falcon pricing', user_id: 'user-1', pinned: false, archived: false, project_id: null, created_at: '2026-01-01', updated_at: '2026-01-01' });
     render(<App />);
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
 
     await user.keyboard('{Meta>}k{/Meta}');
     const dialog = await screen.findByRole('dialog', { name: 'Search' });

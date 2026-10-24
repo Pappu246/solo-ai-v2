@@ -27,7 +27,7 @@ describe('App', () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
     expect(screen.getAllByRole('button', { name: /new chat/i })[0]).toBeInTheDocument();
 
     const box = screen.getByRole('textbox', { name: /message/i });
@@ -58,7 +58,7 @@ describe('App', () => {
   it('opens settings and applies the theme immediately', async () => {
     const user = userEvent.setup();
     render(<App />);
-    await screen.findByText(/what would you like to get done/i);
+    await screen.findByText(/how can i help you today/i);
 
     await user.click(screen.getAllByRole('button', { name: /settings/i })[0]);
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });

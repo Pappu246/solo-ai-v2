@@ -19,7 +19,7 @@ test.describe('model selector dropdown stacking', () => {
     await app.open();
 
     // Confirm we are on the welcome screen (no chats).
-    await expect(page.getByText(/what would you like to get done/i)).toBeVisible();
+    await expect(page.getByText(/how can i help you today/i)).toBeVisible();
 
     // Open the model selector.
     const trigger = page.getByRole('button', { name: /auto/i });

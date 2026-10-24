@@ -255,7 +255,7 @@ export interface UserSettings {
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
-  theme: 'dark',
+  theme: 'light',
   accent: 'amber',
   font_size: 'base',
   show_model_badges: true,
@@ -268,7 +268,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
 };
 
 export const ACCENT_OPTIONS: { value: AccentColor; label: string }[] = [
-  { value: 'amber', label: 'Amber' },
+  { value: 'amber', label: 'Clay' },
   { value: 'blue', label: 'Blue' },
   { value: 'violet', label: 'Violet' },
   { value: 'emerald', label: 'Emerald' },
