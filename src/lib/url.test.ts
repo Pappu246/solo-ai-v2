@@ -10,10 +10,18 @@ describe('safeHref', () => {
   it('rejects every non-http protocol handler', () => {
     expect(safeHref('javascript:alert(1)')).toBeUndefined();
     expect(safeHref('JavaScript:alert(1)')).toBeUndefined();
+    expect(safeHref('java\tscript:alert(1)')).toBeUndefined();
+    expect(safeHref('java\nscript:alert(1)')).toBeUndefined();
+    expect(safeHref('   javascript:alert(1)   ')).toBeUndefined();
     expect(safeHref('data:text/html,<script>x</script>')).toBeUndefined();
     expect(safeHref('vbscript:msgbox(1)')).toBeUndefined();
     expect(safeHref('file:///etc/passwd')).toBeUndefined();
     expect(safeHref('about:blank')).toBeUndefined();
+  });
+
+  it('strips control characters and trims valid http/https URLs', () => {
+    expect(safeHref('  https://example.com/path  ')).toBe('https://example.com/path');
+    expect(safeHref('https://example.com/path\n')).toBe('https://example.com/path');
   });
 
   it('rejects relative and protocol-relative URLs', () => {

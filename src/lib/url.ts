@@ -13,9 +13,13 @@
  */
 export function safeHref(url: string | null | undefined): string | undefined {
   if (!url) return undefined;
+  // Strip control characters (0x00-0x1F, 0x7F-0x9F) and trim surrounding whitespace
+  // eslint-disable-next-line no-control-regex
+  const sanitized = url.replace(/[\x00-\x1F\x7F-\x9F]/g, '').trim();
+  if (!sanitized) return undefined;
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? url : undefined;
+    const parsed = new URL(sanitized);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? sanitized : undefined;
   } catch {
     return undefined;
   }
