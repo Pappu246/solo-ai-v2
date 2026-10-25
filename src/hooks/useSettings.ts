@@ -38,7 +38,9 @@ export function useSettings(user?: User | null) {
     if (!userId) return;
     if (pushTimer.current) clearTimeout(pushTimer.current);
     pushTimer.current = setTimeout(() => {
-      Promise.resolve(supabase.auth.updateUser({ data: { [META_KEY]: next } })).catch(() => { /* offline: local copy still applies */ });
+      try {
+        Promise.resolve(supabase.auth.updateUser({ data: { [META_KEY]: next } })).catch(() => { /* offline: local copy still applies */ });
+      } catch { /* never let a sync failure break the app */ }
     }, PUSH_DELAY_MS);
   }, [userId]);
 
