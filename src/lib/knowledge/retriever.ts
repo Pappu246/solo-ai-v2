@@ -48,9 +48,13 @@ export function extractKeywords(text: string, max = 12): string[] {
   const words = text
     .toLowerCase()
     .replace(/[`*_>#~]/g, ' ')
-    .split(/[^\p{L}\p{N}]+/u)
-    .filter(w => w.length >= 3 && w.length <= 40 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
-  for (const w of words) { if (!seen.has(w)) seen.add(w); if (seen.size >= max) break; }
+    .split(/[^\p{L}\p{N}]+/u);
+  for (const w of words) {
+    if (w.length >= 3 && w.length <= 40 && !STOPWORDS.has(w) && !/^\d+$/.test(w)) {
+      seen.add(w);
+      if (seen.size >= max) break;
+    }
+  }
   return [...seen];
 }
 

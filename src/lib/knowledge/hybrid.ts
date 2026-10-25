@@ -251,7 +251,8 @@ export function dedupeChunks<T extends RankedChunk>(chunks: T[]): T[] {
       const other = keptNormalized[i];
       if (other === text) { duplicate = true; break; }
       const [short, long] = other.length <= text.length ? [other, text] : [text, other];
-      if (short.length >= 40 && long.includes(short) && short.length / long.length >= 0.9) { duplicate = true; break; }
+      // Perf: check length ratio BEFORE running expensive string search `long.includes(short)`.
+      if (short.length >= 40 && short.length / long.length >= 0.9 && long.includes(short)) { duplicate = true; break; }
     }
     if (!duplicate) {
       kept.push(chunk);
