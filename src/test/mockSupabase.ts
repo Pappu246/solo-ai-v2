@@ -47,6 +47,7 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
     let payload: Row | Row[] | null = null;
     let single = false;
     let limit: number | null = null;
+    let offset = 0;
 
     const apply = () => {
       let out = rows().filter(r => visible(table, r) && filters.every(f => f(r)));
@@ -56,7 +57,7 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
           return (av < bv ? -1 : av > bv ? 1 : 0) * (o.asc ? 1 : -1);
         });
       }
-      if (limit !== null) out = out.slice(0, limit);
+      if (limit !== null || offset) out = out.slice(offset, limit !== null ? offset + limit : undefined);
       return out;
     };
 
@@ -118,6 +119,7 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
       },
       order: (col: string, o?: { ascending?: boolean }) => { orders.push({ col, asc: o?.ascending !== false }); return builder; },
       limit: (n: number) => { limit = n; return builder; },
+      range: (from: number, to: number) => { offset = from; limit = to - from + 1; return builder; },
       single: () => { single = true; return builder; },
       maybeSingle: () => { single = true; return builder; },
       abortSignal: () => builder,
