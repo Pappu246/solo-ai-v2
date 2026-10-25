@@ -8,7 +8,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with: { node-version: 20, cache: npm }
       - run: npm ci
@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with: { node-version: 20, cache: npm }
       - run: npm ci
@@ -37,7 +37,7 @@ jobs:
     timeout-minutes: 10
     env: { DENO_NO_PACKAGE_JSON: 1 }
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: denoland/setup-deno@v2
         with: { deno-version: v2.x }
       - run: deno check supabase/functions/chat/index.ts supabase/functions/chat/context.ts supabase/functions/chat/providers.ts supabase/functions/chat/routing.ts supabase/functions/chat/health.ts supabase/functions/chat/metrics.ts supabase/functions/chat/tools.ts supabase/functions/chat/tools_test.ts supabase/functions/chat/agent.ts supabase/functions/chat/agent_test.ts supabase/functions/chat/validation.ts supabase/functions/chat/validation_test.ts supabase/functions/chat/context-prompt.ts supabase/functions/chat/image-search-exec.ts supabase/functions/shared/usage.ts supabase/functions/shared/usage_test.ts supabase/functions/shared/fixed_window_rate_limit.ts supabase/functions/shared/fixed_window_rate_limit_test.ts supabase/functions/shared/cors.ts supabase/functions/shared/cors_test.ts supabase/functions/image-search/decision.ts supabase/functions/image-search/providers.ts supabase/functions/image-search/cache.ts supabase/functions/image-search/index.ts supabase/functions/image-proxy/index.ts supabase/functions/web-search/providers.ts supabase/functions/web-search/safeFetch.ts supabase/functions/web-search/events.ts supabase/functions/shared/access.ts supabase/functions/shared/access_test.ts supabase/functions/shared/mail.ts supabase/functions/request-access/index.ts supabase/functions/request-access/logic.ts supabase/functions/request-access/logic_test.ts supabase/functions/access-approve/index.ts
