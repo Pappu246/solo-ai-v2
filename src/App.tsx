@@ -23,6 +23,7 @@ import { Topbar as TopbarBase } from './components/layout/Topbar';
 import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
+import { conversationToMarkdown, exportFilename, downloadText } from './lib/exportChat';
 import { pathFor, parsePath, type Route } from './lib/routes';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
@@ -276,6 +277,10 @@ function Shell() {
   const sidebarNewChat = useCallback(() => startNewChat(view.kind === 'project' ? view.id : null), [startNewChat, view]);
   const archiveWithToast = useCallback((id: string, archived: boolean) => { archiveConversation(id, archived); toast({ title: archived ? 'Chat archived' : 'Chat restored', tone: 'success' }); }, [archiveConversation, toast]);
   const moveWithToast = useCallback((id: string, projectId: string | null) => { moveConversation(id, projectId); toast({ title: projectId ? 'Moved to project' : 'Removed from project', tone: 'success' }); }, [moveConversation, toast]);
+  const exportActiveChat = useCallback(() => {
+    const title = chat.activeConversation?.title ?? null;
+    downloadText(exportFilename(title), conversationToMarkdown(title, chat.messages));
+  }, [chat.activeConversation, chat.messages]);
   const openSettingsPanel = useCallback(() => setSettingsOpen(true), []);
   const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
   const collapseSidebar = useCallback(() => toggleSidebar(true), [toggleSidebar]);
@@ -400,6 +405,7 @@ function Shell() {
           onOpenSidebar={expandSidebar}
           onOpenMobileSidebar={openMobileSidebar}
           disabled={chat.isGenerating}
+          onExport={view.kind === 'chat' && chat.messages.length > 0 ? exportActiveChat : undefined}
         />
 
         {!online && (
