@@ -228,6 +228,7 @@ export function createMockSupabase(opts: { userId?: string | null } = {}) {
       signInWithPassword: vi.fn(async () => ({ error: null })),
       signUp: vi.fn(async () => ({ data: { session: sessionFor() }, error: null })),
       signOut: vi.fn(async () => ({ error: null })),
+      updateUser: vi.fn(async () => ({ data: {}, error: null })),
     },
     from: vi.fn((table: string) => query(table)),
     storage: { from: vi.fn((bucket: string) => bucketApi(bucket)) },

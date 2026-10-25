@@ -58,7 +58,7 @@ export default function App() {
 
 function Shell() {
   const { user, loading: authLoading, signIn, signUp, signOut } = useAuth();
-  const { settings, updateSettings, resetSettings } = useSettings();
+  const { settings, updateSettings, resetSettings } = useSettings(user);
   const { toast } = useToast();
 
   // ── Phase 2 data ───────────────────────────────────────────────────────────
