@@ -23,6 +23,7 @@ import { Topbar as TopbarBase } from './components/layout/Topbar';
 import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
+import { pathFor, parsePath, type Route } from './lib/routes';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
 import { FileDetailDialog } from './components/knowledge/FileDetailDialog';
@@ -287,6 +288,35 @@ function Shell() {
   const handleRemember = useCallback((content: string) => { setRememberDraft(content.length > 600 ? { content: `${content.slice(0, 600).trimEnd()}…`, type: 'fact' } : { content, type: 'fact' }); }, []);
 
   const openSource = useCallback((s: KnowledgeSource) => openFileById(s.file_id), [openFileById]);
+
+  // ── URL sync ───────────────────────────────────────────────────────────────
+  // Every view has its own URL so refresh, back/forward and shared links work.
+  const route: Route = view.kind === 'chat' ? { kind: 'chat', conversationId: chat.activeConversation?.id ?? null } : view.kind === 'project' ? { kind: 'project', id: view.id } : { kind: view.kind };
+  const routePath = pathFor(route);
+  const dataReady = Boolean(user) && chat.conversationsStatus === 'ready' && projectsCtl.status === 'ready';
+  const appliedRef = useRef(false);
+  const applyRoute = useCallback((r: Route) => {
+    if (r.kind === 'files') setView({ kind: 'files' });
+    else if (r.kind === 'memory') setView({ kind: 'memory' });
+    else if (r.kind === 'project') { const p = projectsCtl.projects.find(x => x.id === r.id); if (p) openProject(p); else startNewChat(); }
+    else if (r.conversationId) { const c = chat.conversations.find(x => x.id === r.conversationId); if (c) openConversation(c); else startNewChat(); }
+    else startNewChat();
+  }, [projectsCtl.projects, chat.conversations, openProject, openConversation, startNewChat]);
+  useEffect(() => {
+    if (!dataReady || appliedRef.current) return;
+    appliedRef.current = true;
+    const initial = parsePath(window.location.pathname);
+    if (pathFor(initial) !== '/') applyRoute(initial);
+  }, [dataReady, applyRoute]);
+  useEffect(() => {
+    if (!dataReady || !appliedRef.current || window.location.pathname === routePath) return;
+    window.history.pushState(null, '', routePath);
+  }, [dataReady, routePath]);
+  useEffect(() => {
+    const onPop = () => applyRoute(parsePath(window.location.pathname));
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [applyRoute]);
 
   // Connectivity drives the offline banner and the composer hint. It must be
   // called before any early return so the hook order never changes.

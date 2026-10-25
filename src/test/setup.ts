@@ -2,7 +2,7 @@ import '@testing-library/jest-dom/vitest';
 import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-afterEach(() => { cleanup(); localStorage.clear(); });
+afterEach(() => { cleanup(); localStorage.clear(); window.history.replaceState(null, '', '/'); });
 
 // jsdom lacks matchMedia and scrollIntoView.
 if (!window.matchMedia) {
