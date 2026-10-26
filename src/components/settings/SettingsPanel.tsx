@@ -5,6 +5,7 @@ import { ACCENT_OPTIONS } from '../../types';
 import { Dialog, Toggle, Button } from '../ui';
 import { speak, stop as stopSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
+import { LANGUAGES, useT, type Language } from '../../lib/i18n';
 import { fetchUsageToday, type UsageToday } from '../../lib/usage';
 
 type Section = 'general' | 'appearance' | 'ai' | 'voice' | 'account';
@@ -33,6 +34,7 @@ const ACCENT_SWATCH: Record<string, string> = {
 };
 
 export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, models, userEmail, onSignOut }: Props) {
+  const t = useT();
   const [section, setSection] = useState<Section>('general');
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
@@ -93,6 +95,13 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                     />
                   ))}
                 </div>
+              </Field>
+              <Field label={t('Interface language')}>
+                <Segmented<Language>
+                  value={settings.language}
+                  onChange={language => onUpdate({ language })}
+                  options={LANGUAGES}
+                />
               </Field>
               <Field label="Text size">
                 <Segmented<FontSize>

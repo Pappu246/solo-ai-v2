@@ -8,6 +8,7 @@ import type { LoadStatus } from '../../hooks/useChat';
 import { IconButton, Kbd, Logo, Wordmark, modKey } from '../ui';
 import { cn } from '../../lib/cn';
 import { useIsDesktop } from '../../hooks/useMediaQuery';
+import { useT } from '../../lib/i18n';
 
 interface SidebarProps {
   conversations: Conversation[];
@@ -51,6 +52,7 @@ export function Sidebar({
   onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, onExpand, userEmail,
   projects = [], view = { kind: 'chat' }, onOpenProject, onNewProject, onOpenFiles, onOpenMemory, onOpenSearch, onMoveToProject,
 }: SidebarProps) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [showArchived, setShowArchived] = useState(false);
   const [showProjects, setShowProjects] = useState(true);
@@ -107,7 +109,7 @@ export function Sidebar({
           className="w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-sm font-medium text-fg hover:bg-surface-2 transition-colors"
         >
           <SquarePen className="w-4 h-4 text-fg-muted" />
-          <span className="flex-1 text-left">New chat</span>
+          <span className="flex-1 text-left">{t('New chat')}</span>
           <span className="hidden md:inline-flex items-center gap-0.5"><Kbd>{modKey}</Kbd><Kbd>⇧</Kbd><Kbd>O</Kbd></span>
         </button>
         <label className="relative block">
@@ -118,8 +120,8 @@ export function Sidebar({
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={e => { if (e.key === 'Escape') { setQuery(''); (e.target as HTMLInputElement).blur(); } }}
-            placeholder="Filter chats"
-            aria-label="Filter chats"
+            placeholder={t('Filter chats')}
+            aria-label={t('Filter chats')}
             className="w-full h-9 pl-8 pr-14 rounded-lg bg-transparent text-sm text-fg placeholder:text-fg-subtle hover:bg-surface-2 focus:bg-surface-2 outline-hidden transition-colors"
           />
           {!query && !onOpenSearch && <span className="absolute right-2.5 top-1/2 -translate-y-1/2 hidden md:inline-flex items-center gap-0.5 pointer-events-none"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>}
@@ -131,17 +133,17 @@ export function Sidebar({
             className="w-full flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-sm text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors"
           >
             <Search className="w-4 h-4" />
-            <span className="flex-1 text-left">Search everything</span>
+            <span className="flex-1 text-left">{t('Search everything')}</span>
             <span className="hidden md:inline-flex items-center gap-0.5"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
           </button>
         )}
         {(onOpenFiles || onOpenMemory) && (
           <div className="pt-1">
             {onOpenFiles && (
-              <NavButton icon={<FileText className="w-4 h-4" />} active={view.kind === 'files'} onClick={() => { onOpenFiles(); onCloseMobile(); }}>Files</NavButton>
+              <NavButton icon={<FileText className="w-4 h-4" />} active={view.kind === 'files'} onClick={() => { onOpenFiles(); onCloseMobile(); }}>{t('Files')}</NavButton>
             )}
             {onOpenMemory && (
-              <NavButton icon={<Brain className="w-4 h-4" />} active={view.kind === 'memory'} onClick={() => { onOpenMemory(); onCloseMobile(); }}>Memory</NavButton>
+              <NavButton icon={<Brain className="w-4 h-4" />} active={view.kind === 'memory'} onClick={() => { onOpenMemory(); onCloseMobile(); }}>{t('Memory')}</NavButton>
             )}
           </div>
         )}
@@ -158,7 +160,7 @@ export function Sidebar({
               className="flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg-muted"
             >
               {showProjects ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              Projects
+              {t('Projects')}
             </button>
             {onNewProject && (
               <IconButton label="New project" size="sm" onClick={() => { onNewProject(); onCloseMobile(); }} className="w-6 h-6"><Plus className="w-3.5 h-3.5" /></IconButton>
@@ -212,7 +214,7 @@ export function Sidebar({
               className="w-full flex items-center gap-1 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg-muted"
             >
               {pinnedOpen ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
-              <span>Pinned</span>
+              <span>{t('Pinned')}</span>
             </button>
             {pinnedOpen && (
               <ul className="space-y-0.5 mt-0.5">
@@ -254,7 +256,7 @@ export function Sidebar({
           </span>
           <span className="flex-1 min-w-0">
             <span className="block text-sm text-fg truncate">{userEmail?.split('@')[0] ?? 'Account'}</span>
-            <span className="block text-[11px] text-fg-subtle">Settings</span>
+            <span className="block text-[11px] text-fg-subtle">{t('Settings')}</span>
           </span>
           <Settings className="w-4 h-4 text-fg-subtle" />
         </button>
