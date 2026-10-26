@@ -1,5 +1,6 @@
 import { BookOpen, Code2, FileText, Lightbulb } from 'lucide-react';
 import { Logo } from '../ui';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   onSuggestion: (text: string) => void;
@@ -30,23 +31,24 @@ const SUGGESTIONS = [
 
 /** Calm, centered first screen: one greeting and a few optional starting points. */
 export function EmptyState({ onSuggestion }: Props) {
+  const t = useT();
   return (
     <div className="h-full min-h-[360px] flex items-center justify-center overflow-y-auto px-4 py-6 sm:px-8">
       <section className="w-full max-w-2xl animate-rise-in text-center">
         <Logo size={40} className="mx-auto rounded-xl" />
         <h1 className="mt-6 font-display text-4xl leading-tight text-fg sm:text-5xl">
-          How can I help you today?
+          {t('How can I help you today?')}
         </h1>
         <div className="mt-8 flex flex-wrap justify-center gap-2">
           {SUGGESTIONS.map((suggestion) => (
             <button
               key={suggestion.title}
               type="button"
-              onClick={() => onSuggestion(suggestion.prompt)}
+              onClick={() => onSuggestion(t(suggestion.prompt))}
               className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm text-fg-muted transition-colors hover:border-border-strong hover:bg-surface-2 hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             >
               <suggestion.icon className="h-4 w-4" aria-hidden />
-              {suggestion.title}
+              {t(suggestion.title)}
             </button>
           ))}
         </div>

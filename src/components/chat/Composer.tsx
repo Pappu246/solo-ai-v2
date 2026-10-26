@@ -1,3 +1,4 @@
+import { useT } from '../../lib/i18n';
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
 import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
 import type { Attachment, KnowledgeFile } from '../../types';
@@ -45,6 +46,7 @@ const MAX_ATTACHMENTS = 6;
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus, knowledge, offline }, ref,
 ) {
+  const t = useT();
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -285,7 +287,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             onChange={e => setValue(e.target.value)}
             onKeyDown={onKeyDown}
             onPaste={onPaste}
-            placeholder={dragging ? 'Drop files to attach' : 'Message Solo AI'}
+            placeholder={dragging ? t('Drop files to attach') : t('Message Solo AI')}
             rows={1}
             disabled={disabled}
             aria-label="Message"

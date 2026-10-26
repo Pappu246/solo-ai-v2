@@ -240,6 +240,7 @@ export interface UserSettings {
   theme: Theme;
   accent: AccentColor;
   font_size: FontSize;
+  language: 'en' | 'hi';
   show_model_badges: boolean;
   // General
   send_on_enter: boolean;
@@ -258,6 +259,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   theme: 'light',
   accent: 'amber',
   font_size: 'base',
+  language: 'en',
   show_model_badges: true,
   send_on_enter: true,
   auto_title: true,

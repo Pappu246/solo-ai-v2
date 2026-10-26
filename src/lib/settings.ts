@@ -1,5 +1,6 @@
 import type { UserSettings, Theme, AccentColor, FontSize } from '../types';
 import { DEFAULT_SETTINGS, ACCENT_OPTIONS } from '../types';
+import { setLanguage } from './i18n';
 
 export const SETTINGS_STORAGE_KEY = 'solo-ai-settings';
 
@@ -24,6 +25,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     theme: THEMES.includes(r.theme as Theme) ? (r.theme as Theme) : DEFAULT_SETTINGS.theme,
     accent: ACCENTS.includes(r.accent as AccentColor) ? (r.accent as AccentColor) : DEFAULT_SETTINGS.accent,
     font_size: FONT_SIZES.includes(r.font_size as FontSize) ? (r.font_size as FontSize) : DEFAULT_SETTINGS.font_size,
+    language: r.language === 'hi' ? 'hi' : 'en',
     show_model_badges: bool(r.show_model_badges, DEFAULT_SETTINGS.show_model_badges),
     send_on_enter: bool(r.send_on_enter, DEFAULT_SETTINGS.send_on_enter),
     auto_title: bool(r.auto_title, DEFAULT_SETTINGS.auto_title),
@@ -65,6 +67,8 @@ export function applyTheme(settings: UserSettings) {
   root.setAttribute('data-theme', effective);
   root.setAttribute('data-accent', settings.accent);
   root.setAttribute('data-font-size', settings.font_size);
+  root.setAttribute('lang', settings.language);
+  setLanguage(settings.language);
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.setAttribute('content', effective === 'dark' ? '#262624' : '#faf9f5');
 }
