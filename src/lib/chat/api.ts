@@ -64,9 +64,19 @@ export function toStoredAttachments(attachments?: Attachment[] | null): Omit<Att
 
 export const messagesApi = {
   async list(conversationId: string): Promise<Message[]> {
-    const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', conversationId).order('created_at', { ascending: true });
-    throwIf(error, 'Loading messages');
-    return (data ?? []) as Message[];
+    // PostgREST returns at most 1000 rows per request, so read long chats in pages
+    // instead of silently dropping the tail.
+    const PAGE = 500;
+    const all: Message[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await supabase.from('messages').select('*').eq('conversation_id', conversationId)
+        .order('created_at', { ascending: true }).order('id', { ascending: true }).range(from, from + PAGE - 1);
+      throwIf(error, 'Loading messages');
+      const rows = (data ?? []) as Message[];
+      all.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    return all;
   },
 
   async insert(message: Message & { user_id: string }): Promise<void> {

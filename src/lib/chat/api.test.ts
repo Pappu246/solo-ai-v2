@@ -157,6 +157,15 @@ describe('messagesApi', () => {
     expect(toStoredAttachments([])).toBeNull();
   });
 
+  it('list reads long chats across several pages without dropping the tail', async () => {
+    const c = await conversationsApi.create('alice', 'Long chat');
+    for (let i = 0; i < 1203; i++) await messagesApi.insert({ ...msg(`p${String(i).padStart(4, '0')}`, c.id, `m${i}`, i % 2 ? 'assistant' : 'user'), user_id: 'alice' });
+    const rows = await messagesApi.list(c.id);
+    expect(rows).toHaveLength(1203);
+    expect(rows[1202].content).toBe('m1202');
+    expect(new Set(rows.map(r => r.id)).size).toBe(1203);
+  });
+
   it('updateContent and remove work on own rows; remove([]) is a no-op', async () => {
     const c = await conversationsApi.create('alice', 'Chat');
     await messagesApi.insert({ ...msg('m1', c.id, 'draft'), user_id: 'alice' });
