@@ -342,13 +342,13 @@ Deno.test("fallback+health: when every provider is cooling down chat still works
 Deno.test("fallback+health: a retired model id disappears from later chains", async () => {
   const health = new ProviderHealth({ now: () => 0, modelUnavailableTtlMs: 60_000 });
   health.recordFailure("groq", { code: "model_unavailable", retryable: true }, "gpt-oss-120b");
-  const chain = fallbackChain(model("openrouter-gpt-oss-120b"), false, { health });
+  const chain = fallbackChain(model("openrouter-flint"), false, { health });
   assert(!chain.some(m => m.id === "gpt-oss-120b"), "stale catalog entry must not be offered as a fallback");
   // …and it is excluded from auto-routing too.
   assert(selectAutoModel("conversation", { health }).id !== "gpt-oss-120b");
   // Expired block → entry comes back (catalog refreshed).
   health.markModelAvailable("gpt-oss-120b");
-  assert(fallbackChain(model("openrouter-gpt-oss-120b"), false, { health }).some(m => m.id === "gpt-oss-120b"));
+  assert(fallbackChain(model("openrouter-flint"), false, { health }).some(m => m.id === "gpt-oss-120b"));
 });
 
 // ── retry budget & concurrency (Phase 3) ───────────────────────────────────

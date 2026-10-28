@@ -6,7 +6,7 @@ import { evaluate, parseCatalog } from "./free-model-check.mjs";
 test("parses every model in the real catalog", () => {
   const source = readFileSync(new URL("../supabase/functions/chat/providers.ts", import.meta.url), "utf8");
   const models = parseCatalog(source);
-  assert.ok(models.length >= 7, `found ${models.length}`);
+  assert.ok(models.length >= 6, `found ${models.length}`);
   assert.ok(models.some((m) => m.id === "gemini-3.7-flash" && m.providerModel === "gemini-3.7-flash" && m.provider === "google"));
   assert.ok(models.some((m) => m.id === "openrouter-flint" && m.providerModel === "recursive/flint-v1.0:free"));
   assert.ok(models.some((m) => m.id === "gpt-oss-120b" && m.provider === "groq"));
