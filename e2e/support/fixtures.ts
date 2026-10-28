@@ -5,7 +5,27 @@ import { MockBackend, type MockBackendOptions } from './mockBackend';
  * `test.use({ backend: { ...seed } })` per file/describe; `backend` in the test
  * body is the live MockBackend so assertions can read its tables and log.
  */
-export const test = base.extend<{ backendOptions: MockBackendOptions; backend: MockBackend; app: AppPage }>({
+export const test = base.extend<{ backendOptions: MockBackendOptions; backend: MockBackend; app: AppPage; cspGuard: void }>({
+  // With E2E_CSP=1 the app is served under its enforced production CSP; any
+  // violation (a blocked script, style, image, font, worker or request) fails the test.
+  cspGuard: [async ({ page }, provide, testInfo) => {
+    const violations: string[] = [];
+    if (process.env.E2E_CSP) {
+      await page.addInitScript(() => {
+        document.addEventListener('securitypolicyviolation', (e) => {
+          (window as unknown as { __csp?: string[] }).__csp = [...((window as unknown as { __csp?: string[] }).__csp ?? []), `${e.violatedDirective} ${e.blockedURI}`];
+        });
+      });
+      // Console copies come from the real browser; the in-page listener below is the source of truth.
+    }
+    await provide();
+    if (process.env.E2E_CSP && !testInfo.annotations.some((a) => a.type === 'csp-expected')) {
+      const fromPage = await page.evaluate(() => (window as unknown as { __csp?: string[] }).__csp ?? []).catch(() => [] as string[]);
+      // axe-core fetches cross-origin stylesheets to inspect them; that is a test-tool request, not the app.
+      const real = fromPage.filter((v) => !/^connect-src https:\/\/fonts\.googleapis\.com\//.test(v));
+      expect([...violations, ...real], 'CSP violations').toEqual([]);
+    }
+  }, { auto: true }],
   backendOptions: [{}, { option: true }],
   backend: async ({ page, backendOptions }, provide) => {
     const backend = new MockBackend(backendOptions);

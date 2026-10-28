@@ -30,7 +30,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
-        env: { CI: true }
+        env: { CI: true, E2E_CSP: 1 }
   edge-functions:
     name: Edge function (Deno)
     runs-on: ubuntu-latest

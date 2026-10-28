@@ -28,6 +28,8 @@ async function expectIndexed(page: Page, backend: MockBackend, name: string, buf
 
 /** A real CSP restriction: scripts can load, but no dedicated Worker can run. */
 async function disableWorkers(page: Page) {
+  // This test breaks workers on purpose, so the CSP-violation guard must not fail it.
+  test.info().annotations.push({ type: 'csp-expected' });
   await page.route('/', async route => {
     const response = await route.fetch();
     await route.fulfill({ response, headers: { ...response.headers(), 'content-security-policy': "worker-src 'none'" } });
