@@ -1,7 +1,7 @@
 /**
  * Vercel CSP violation-report receiver.
  *
- * The policy is report-only. Reports are treated as untrusted input and only
+ * The policy is enforced; this endpoint only receives violation reports. Reports are treated as untrusted input and only
  * minimal, path-free metadata is logged. Never log the report body, sample,
  * original policy, full URL, query string, referrer, or user agent.
  */

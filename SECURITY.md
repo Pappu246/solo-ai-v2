@@ -24,11 +24,11 @@ The Vercel deployment applies baseline headers to frontend routes:
 
 The production smoke gate verifies these headers after successful Production deployment events and on manual production runs. Pull-request smoke checks do not enforce them because the current smoke workflow targets the already-deployed production URL rather than the PR preview.
 
-**CSP is report-only and is not enforced.** `vercel.json` sends a `Content-Security-Policy-Report-Only` header with both `report-to` and compatibility `report-uri` directives. This reports suspected violations without blocking resources. The policy currently allows the known Supabase HTTPS/WSS origin, Google Fonts, local/blob PDF.js workers, and HTTPS images; `img-src https:` remains intentionally broad because the markdown renderer permits arbitrary HTTPS image URLs. Inline script/style allowances remain for the current theme bootstrap and app styles. These are compatibility accommodations, not a final enforcement policy.
+**CSP is enforced.** `vercel.json` sends a `Content-Security-Policy` header (with `report-to` and compatibility `report-uri`). It allows the Supabase HTTPS/WSS origin, Google Fonts, local/blob PDF.js workers and HTTPS images; `img-src https:` stays broad because markdown can embed remote images, and `'unsafe-inline'` remains for the pre-paint theme script and Tailwind styles. The e2e suite runs under this exact policy (`E2E_CSP=1 npx playwright test`) and fails on any violation, so a change that needs a new origin is caught in CI.
 
 Reports go to `/api/csp-report`. The receiver caps each body at 32 KiB, processes at most eight reports per request, and rate-limits log output to 20 records per minute per warm instance. It logs only the effective directive, disposition, status code, and normalized resource origins for reports whose document origin is `https://solo-ai-v2-mu.vercel.app`. It deliberately does not log full URL paths/queries, original policy text, source samples, referrers, or user agents. The production smoke gate checks that the report-only policy and endpoint are configured, and asserts that no enforcing `Content-Security-Policy` header is present.
 
-This does **not** complete the CSP compatibility review. Review real production reports and manually exercise sign-in/sign-up, authenticated chat, image search, uploads, PDF extraction/workers, remote markdown images, and voice input. Only then design a separate enforcing policy; remove inline allowances and narrow remote image sources where compatible before considering enforcement.
+Roll-back: rename the header key back to `Content-Security-Policy-Report-Only` in `vercel.json` and redeploy.
 
 ## Database function search-path hardening
 
