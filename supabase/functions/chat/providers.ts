@@ -81,7 +81,6 @@ export const MODELS: readonly ModelSpec[] = [
   { id: "gemini-3.7-flash", name: "Gemini 3.7 Flash", provider: "google", category: "research", speed: 5, quality: 5, cost: 1, free: true, context_length: 1048576, supports_vision: true, supports_tools: true, tag: "Vision" },
   { id: "gpt-oss-120b", name: "GPT OSS 120B", provider: "groq", category: "conversation", speed: 5, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Best", provider_model: "openai/gpt-oss-120b" },
   { id: "gpt-oss-20b", name: "GPT OSS 20B", provider: "groq", category: "fast", speed: 5, quality: 4, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, tag: "Fast", provider_model: "openai/gpt-oss-20b" },
-  { id: "openrouter-gpt-oss-120b", name: "GPT OSS 120B (OpenRouter)", provider: "openrouter", category: "reasoning", speed: 3, quality: 5, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: true, provider_model: "openai/gpt-oss-120b:free" },
   { id: "openrouter-flint", name: "Flint Coder", provider: "openrouter", category: "coding", speed: 3, quality: 5, cost: 1, free: true, context_length: 262144, supports_vision: false, supports_tools: false, tag: "Code", provider_model: "recursive/flint-v1.0:free" },
   { id: "openrouter-free", name: "OpenRouter Free Router", provider: "openrouter", category: "free", speed: 3, quality: 3, cost: 1, free: true, context_length: 131072, supports_vision: false, supports_tools: false, tag: "Backup", provider_model: "openrouter/free" },
   { id: "openrouter-nemotron-vl", name: "Nemotron Vision", provider: "openrouter", category: "vision", speed: 3, quality: 4, cost: 1, free: true, context_length: 262144, supports_vision: true, supports_tools: false, tag: "Vision backup", provider_model: "nvidia/nemotron-3.5-super-vl:free" },
@@ -100,6 +99,9 @@ export const MODEL_ALIASES: Readonly<Record<string, string>> = {
   "gpt-4o-mini": "gpt-oss-20b",
   "claude-sonnet-5": "openrouter-flint",
   // Qwen3 Coder lost its free tier on OpenRouter (404); keep saved ids working.
+  // OpenRouter dropped the free GPT OSS 120B listing (weekly check, issue #105).
+  "openrouter-gpt-oss-120b": "gpt-oss-120b",
+  "openai/gpt-oss-120b:free": "gpt-oss-120b",
   "openrouter-qwen3-coder": "openrouter-flint",
   "qwen/qwen3-coder:free": "openrouter-flint",
   "claude-opus-5": "gpt-oss-120b",
@@ -260,7 +262,7 @@ export function fallbackChain(primary: ModelSpec, hasImages: boolean, options: R
   const opts: RoutingOptions = { ...options, hasImages };
   const preferredIds = hasImages
     ? ["gemini-3.7-flash", "openrouter-nemotron-vl"]
-    : ["gpt-oss-120b", "gemini-3.7-flash", "openrouter-gpt-oss-120b", "gpt-oss-20b", "openrouter-free"];
+    : ["gpt-oss-120b", "gemini-3.7-flash", "gpt-oss-20b", "openrouter-free"];
   const health = opts.health ?? null;
 
   const preferred = preferredIds
