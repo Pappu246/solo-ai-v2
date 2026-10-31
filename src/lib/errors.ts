@@ -1,3 +1,5 @@
+import { translate } from './i18n';
+
 /**
  * Converts raw errors into something a non-technical user can act on,
  * while preserving the original detail for an expandable "Details" section.
@@ -56,7 +58,7 @@ const SERVER_CODES: Record<string, { title: string; message: string; retryable: 
   internal_error: { title: 'Something went wrong', message: 'Solo AI hit a server problem. Please try again.', retryable: true },
 };
 
-export function toFriendlyError(error: unknown): FriendlyError {
+function toFriendlyErrorEn(error: unknown): FriendlyError {
   const err = error instanceof Error ? error : new Error(String(error));
   const status = (err as AppError).status;
   const code = (err as AppError).code;
@@ -122,7 +124,7 @@ export function toFriendlyError(error: unknown): FriendlyError {
 }
 
 /** Map Supabase auth errors to clear, non-technical copy. */
-export function friendlyAuthMessage(error: unknown): string {
+function friendlyAuthMessageEn(error: unknown): string {
   const raw = error instanceof Error ? error.message : String(error ?? '');
   const lower = raw.toLowerCase();
   if (lower.includes('invalid login credentials')) return 'Incorrect email or password.';
@@ -133,4 +135,14 @@ export function friendlyAuthMessage(error: unknown): string {
   if (lower.includes('failed to fetch') || lower.includes('network')) return 'Could not connect. Check your internet connection.';
   if (lower.includes('invalid email') || lower.includes('valid email')) return 'Please enter a valid email address.';
   return raw || 'Something went wrong. Please try again.';
+}
+
+/** User-facing error, in the interface language (technical `detail` stays as-is). */
+export function toFriendlyError(error: unknown): FriendlyError {
+  const e = toFriendlyErrorEn(error);
+  return { ...e, title: translate(e.title), message: translate(e.message) };
+}
+
+export function friendlyAuthMessage(error: unknown): string {
+  return translate(friendlyAuthMessageEn(error));
 }
