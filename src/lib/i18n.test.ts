@@ -17,3 +17,16 @@ describe('i18n', () => {
     expect(normalizeSettings(null).language).toBe('en');
   });
 });
+
+describe('i18n settings coverage', () => {
+  it('has a Hindi string for every label used on the settings screen', async () => {
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/components/settings/SettingsPanel.tsx', 'utf8');
+    const lit = [...src.matchAll(/(?:label|title|hint|description)="([^"{]+)"/g)].map(m => m[1])
+      .filter(x => !/^(Accent color|Default model|Speaking rate)$/.test(x));
+    setLanguage('hi');
+    const missing = lit.filter(x => translate(x) === x && !/^[A-Z]{1,3}$/.test(x));
+    setLanguage('en');
+    expect(missing).toEqual([]);
+  });
+});

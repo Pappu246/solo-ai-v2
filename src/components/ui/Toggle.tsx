@@ -1,5 +1,6 @@
 import { useId } from 'react';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface ToggleProps {
   checked: boolean;
@@ -10,7 +11,10 @@ interface ToggleProps {
 }
 
 /** Labelled switch. The whole row is the click target. */
-export function Toggle({ checked, onChange, label, description, disabled }: ToggleProps) {
+export function Toggle({ checked, onChange, label: rawLabel, description: rawDescription, disabled }: ToggleProps) {
+  const t = useT();
+  const label = t(rawLabel);
+  const description = rawDescription ? t(rawDescription) : undefined;
   const id = useId();
   const descId = useId();
   return (
