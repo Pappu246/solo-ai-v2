@@ -24,7 +24,6 @@ import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
 import { conversationToMarkdown, exportFilename, downloadText } from './lib/exportChat';
-import { translate } from './lib/i18n';
 import { pathFor, parsePath, type Route } from './lib/routes';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
@@ -351,18 +350,8 @@ function Shell() {
   }
 
   const hasMessages = chat.messages.length > 0 || chat.isGenerating || chat.messagesStatus === 'loading';
-  const activeModelName = chat.selectedModel
-    ? chat.availableModels.find(m => m.id === chat.selectedModel)?.name ?? chat.selectedModel
-    : null;
   const activeProject = view.kind === 'project' ? projectsCtl.projects.find(p => p.id === view.id) ?? null : null;
-  const chatProject = chat.activeConversation?.project_id
-    ? projectsCtl.projects.find(p => p.id === chat.activeConversation!.project_id) ?? null
-    : chat.activeProjectId ? projectsCtl.projects.find(p => p.id === chat.activeProjectId) ?? null : null;
   const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
-  const composerHint = !online
-    ? translate('You’re offline — reconnect to send')
-    : activeModelName ? `${translate('Using')} ${activeModelName}` : chatProject ? `${translate('In')} ${chatProject.name} · ${translate('Auto picks the best model')}` : translate('Auto picks the best model for each message');
-
   // The shell must not paint an opaque background: the ambient glow layer
   // lives behind it (body::before, z -1) and every frosted surface above
   // blurs it. z-10 keeps the whole app above that glow layer.
@@ -468,7 +457,7 @@ function Shell() {
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <EmptyState onSuggestion={sendMessage} />
+                <EmptyState />
               </div>
             )}
 
@@ -478,7 +467,6 @@ function Shell() {
               onStop={chat.stopGeneration}
               isGenerating={chat.isGenerating}
               sendOnEnter={settings.send_on_enter}
-              hint={composerHint}
               knowledge={knowledgeUploader}
               offline={!online}
               autoFocus

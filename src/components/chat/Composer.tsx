@@ -1,6 +1,6 @@
 import { useT } from '../../lib/i18n';
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ArrowUp, Square, Paperclip, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, Plus, Check, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
 import type { Attachment, KnowledgeFile } from '../../types';
 import { processFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../lib/files';
 import { detectFileType, KNOWLEDGE_ACCEPT } from '../../lib/knowledge/fileTypes';
@@ -34,7 +34,6 @@ interface Props {
   sendOnEnter: boolean;
   disabled?: boolean;
   /** Short helper text under the box (e.g. active model). */
-  hint?: string;
   autoFocus?: boolean;
   knowledge?: KnowledgeUploader;
   /** Phase 11: the browser reports no connection — sending would fail. */
@@ -44,9 +43,19 @@ interface Props {
 const MAX_ATTACHMENTS = 6;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { onSend, onStop, isGenerating, sendOnEnter, disabled, hint, autoFocus, knowledge, offline }, ref,
+  { onSend, onStop, isGenerating, sendOnEnter, disabled, autoFocus, knowledge, offline }, ref,
 ) {
   const t = useT();
+  const [plusOpen, setPlusOpen] = useState(false);
+  const plusRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!plusOpen) return;
+    const onDown = (e: MouseEvent) => { if (!plusRef.current?.contains(e.target as Node)) setPlusOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setPlusOpen(false); };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDown); document.removeEventListener('keydown', onKey); };
+  }, [plusOpen]);
   const [value, setValue] = useState('');
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [dragging, setDragging] = useState(false);
@@ -295,23 +304,50 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
           />
 
           <div className="flex items-center justify-between px-2 pb-2">
-            <div className="flex items-center gap-0.5">
-              <IconButton label="Attach files" size="sm" disabled={disabled || processing} onClick={() => fileInputRef.current?.click()} className="w-9 h-9">
-                <Paperclip className="w-4 h-4" />
-              </IconButton>
-              <input
-                ref={fileInputRef}
-                type="file"
-                multiple
-                className="hidden"
-                accept={accept}
-                onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }}
-              />
-              {knowledge?.pickFromLibrary && (
-                <IconButton label="Attach from your files" size="sm" disabled={disabled} onClick={pickFromLibrary} className="w-9 h-9">
-                  <Library className="w-4 h-4" />
+            <div className="flex items-center gap-1.5">
+              <div ref={plusRef} className="relative">
+                <IconButton
+                  label={t('Add files and tools')}
+                  size="sm"
+                  active={plusOpen}
+                  disabled={disabled}
+                  aria-haspopup="menu"
+                  aria-expanded={plusOpen}
+                  showTooltip={!plusOpen}
+                  onClick={() => setPlusOpen(v => !v)}
+                  className="w-9 h-9"
+                >
+                  <Plus className={cn('w-5 h-5 transition-transform duration-150', plusOpen && 'rotate-45')} />
                 </IconButton>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept={accept}
+                  onChange={e => { if (e.target.files) addFiles(e.target.files); e.target.value = ''; }}
+                />
+                {plusOpen && (
+                  <div role="menu" aria-label={t('Add files and tools')} className="absolute bottom-full left-0 mb-2 w-64 rounded-xl glass-menu border border-border float-shadow p-1 z-50 animate-scale-in">
+                    <PlusItem icon={<Paperclip className="w-4 h-4" />} disabled={processing} onClick={() => { setPlusOpen(false); fileInputRef.current?.click(); }}>{t('Attach files')}</PlusItem>
+                    {knowledge?.pickFromLibrary && (
+                      <PlusItem icon={<Library className="w-4 h-4" />} onClick={() => { setPlusOpen(false); pickFromLibrary(); }}>{t('Attach from your files')}</PlusItem>
+                    )}
+                    <div className="my-1 h-px bg-border" role="separator" />
+                    <PlusItem icon={<Globe className="w-4 h-4" />} checked={research} disabled={isGenerating} onClick={() => setResearch(v => !v)} hint={t('Search the web and cite sources')}>{t('Web search')}</PlusItem>
+                    <PlusItem icon={<Wrench className="w-4 h-4" />} checked={agent} disabled={isGenerating} onClick={() => setAgent(v => !v)} hint={t('Let Solo use tools step by step')}>{t('Agent mode')}</PlusItem>
+                  </div>
+                )}
+              </div>
+              {research && (
+                <ModeChip icon={<Globe className="w-3.5 h-3.5" />} label={t('Web search')} onRemove={() => setResearch(false)} removeLabel={t('Turn off web search')} />
               )}
+              {agent && (
+                <ModeChip icon={<Wrench className="w-3.5 h-3.5" />} label={t('Agent mode')} onRemove={() => setAgent(false)} removeLabel={t('Turn off agent mode')} />
+              )}
+            </div>
+
+            <div className="flex items-center gap-1">
               {speech.supported && (
                 <IconButton
                   label={speech.listening ? 'Stop voice input' : 'Voice input'}
@@ -324,28 +360,6 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                   {speech.listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                 </IconButton>
               )}
-              <IconButton
-                label={research ? 'Web research on' : 'Web research'}
-                size="sm"
-                active={research}
-                disabled={disabled || isGenerating}
-                onClick={() => setResearch(v => !v)}
-                className={cn('w-9 h-9', research ? 'text-accent bg-accent/10' : undefined)}
-              >
-                <Globe className="w-4 h-4" />
-              </IconButton>
-              <IconButton
-                label={agent ? 'Agent mode on' : 'Agent mode'}
-                size="sm"
-                active={agent}
-                disabled={disabled || isGenerating}
-                onClick={() => setAgent(v => !v)}
-                className={cn('w-9 h-9', agent ? 'text-accent bg-accent/10' : undefined)}
-              >
-                <Wrench className="w-4 h-4" />
-              </IconButton>
-            </div>
-
             {/* One control, two states: the arrow morphs into a stop square. */}
             <button
               type="button"
@@ -374,15 +388,13 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
                 <Square className="w-3.5 h-3.5" fill="currentColor" />
               </span>
             </button>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-between min-h-5 mt-1.5 px-1 text-[11px] text-fg-subtle">
+        <div className="min-h-5 mt-1.5 px-1 text-center text-[11px] text-fg-subtle">
           <span className={cn(fileError && 'text-danger')} aria-live="polite">
-            {fileError || (speech.listening ? t('Listening…') : processing ? t('Reading files…') : pendingKnowledge ? t('Preparing files…') : hint || '')}
-          </span>
-          <span className="hidden sm:inline">
-            {t(sendOnEnter ? 'Enter to send · Shift+Enter for a new line' : '⌘/Ctrl+Enter to send')}
+            {fileError || (speech.listening ? t('Listening…') : processing ? t('Reading files…') : pendingKnowledge ? t('Preparing files…') : '')}
           </span>
         </div>
       </div>
@@ -463,5 +475,37 @@ function AttachmentChip({ attachment, progress, onRemove, onRetry }: {
         <X className="w-3 h-3" />
       </IconButton>
     </div>
+  );
+}
+
+function PlusItem({ icon, children, onClick, checked, disabled, hint }: { icon: React.ReactNode; children: React.ReactNode; onClick: () => void; checked?: boolean; disabled?: boolean; hint?: string }) {
+  const isToggle = checked !== undefined;
+  return (
+    <button
+      type="button"
+      role={isToggle ? 'menuitemcheckbox' : 'menuitem'}
+      aria-checked={isToggle ? checked : undefined}
+      disabled={disabled}
+      onClick={onClick}
+      className="w-full flex items-center gap-3 px-2.5 py-2 rounded-lg text-left text-sm text-fg hover:bg-surface-2 disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:bg-surface-2"
+    >
+      <span className="text-fg-muted shrink-0">{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block">{children}</span>
+        {hint && <span className="block text-[11px] text-fg-subtle">{hint}</span>}
+      </span>
+      {checked && <Check className="w-4 h-4 text-accent shrink-0" aria-hidden />}
+    </button>
+  );
+}
+
+function ModeChip({ icon, label, onRemove, removeLabel }: { icon: React.ReactNode; label: string; onRemove: () => void; removeLabel: string }) {
+  return (
+    <span className="inline-flex items-center gap-1 h-7 pl-2 pr-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+      {icon}{label}
+      <button type="button" aria-label={removeLabel} onClick={onRemove} className="inline-flex items-center justify-center w-5 h-5 rounded-full hover:bg-accent/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+        <X className="w-3 h-3" />
+      </button>
+    </span>
   );
 }

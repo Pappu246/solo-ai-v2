@@ -25,7 +25,8 @@ test.describe('upload → ask', () => {
     await app.open();
 
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Attach files' }).click();
+    await page.getByRole('button', { name: 'Add files and tools' }).click();
+  await page.getByRole('menuitem', { name: 'Attach files' }).click();
     await (await chooser).setFiles({ name: 'plan.md', mimeType: 'text/markdown', buffer: Buffer.from(PLAN) });
 
     // Chip goes uploading → processing → ready (size label) and the file row exists in the database.
@@ -58,7 +59,8 @@ test.describe('resumable uploads', () => {
     const buffer = Buffer.alloc(size, 'a');
     buffer.write('Big log file starts here. The secret word is pelican.\n', 0);
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Attach files' }).click();
+    await page.getByRole('button', { name: 'Add files and tools' }).click();
+  await page.getByRole('menuitem', { name: 'Attach files' }).click();
     await (await chooser).setFiles({ name: 'big.log', mimeType: 'text/plain', buffer });
 
     const chip = page.locator('[data-file-status]', { hasText: 'big.log' });
@@ -87,7 +89,8 @@ test.describe('resumable uploads', () => {
     await app.open();
     const size = 6 * 1024 * 1024 * 3 + 100; // 4 chunks → plenty of time to cancel
     const chooser = page.waitForEvent('filechooser');
-    await page.getByRole('button', { name: 'Attach files' }).click();
+    await page.getByRole('button', { name: 'Add files and tools' }).click();
+  await page.getByRole('menuitem', { name: 'Attach files' }).click();
     await (await chooser).setFiles({ name: 'huge.txt', mimeType: 'text/plain', buffer: Buffer.alloc(size, 'z') });
 
     const chip = page.locator('[data-file-status]', { hasText: 'huge.txt' });
