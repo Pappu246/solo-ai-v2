@@ -428,3 +428,8 @@ Deno.test("events: SSE frames round-trip and malformed input is dropped", () => 
   assertEquals(parseWebSearchEvent("not json"), null);
   assertEquals(parseWebSearchEvent(JSON.stringify({ type: "unknown" })), null);
 });
+
+Deno.test("stripHtml: closing tags with attributes or spaces still end the block", () => {
+  const html = "a<script>evil()</script foo=bar>b<style>x{}</style >c<!-- hidden --!>d";
+  assertEquals(stripHtml(html), "a b c d");
+});
