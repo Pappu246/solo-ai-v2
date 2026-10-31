@@ -104,3 +104,7 @@ npm run smoke:production
 ```
 
 For the authenticated path locally, provide either `SMOKE_JWT` or the dedicated smoke-user login credentials and the matching public publishable key. Never print a JWT, password, service-role key, or Authorization header in logs.
+
+## Uptime monitor
+
+`.github/workflows/uptime.yml` runs the public smoke gate every 30 minutes (one retry after 60 s). A failure opens a single "Uptime: Solo AI is failing its health check" issue (GitHub emails it to the repo owner); a later passing run closes it. Use **Actions → Uptime monitor → Run workflow** to test it.
