@@ -430,12 +430,12 @@ export function collapseWhitespace(text: string): string {
 
 export function stripHtml(html: string, limit = Number.POSITIVE_INFINITY): string {
   const withoutBlocks = html
-    .replace(/<!--[\s\S]*?-->/g, " ")
-    .replace(/<script\b[\s\S]*?<\/script>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style>/gi, " ")
-    .replace(/<noscript\b[\s\S]*?<\/noscript>/gi, " ")
-    .replace(/<svg\b[\s\S]*?<\/svg>/gi, " ")
-    .replace(/<template\b[\s\S]*?<\/template>/gi, " ");
+    .replace(/<!--[\s\S]*?--!?>/g, " ")
+    .replace(/<script\b[\s\S]*?<\/script[^>]*>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style[^>]*>/gi, " ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript[^>]*>/gi, " ")
+    .replace(/<svg\b[\s\S]*?<\/svg[^>]*>/gi, " ")
+    .replace(/<template\b[\s\S]*?<\/template[^>]*>/gi, " ");
   const withoutTags = withoutBlocks.replace(/<[^>]*>/g, " ");
   return collapseWhitespace(decodeEntities(withoutTags)).slice(0, limit);
 }
