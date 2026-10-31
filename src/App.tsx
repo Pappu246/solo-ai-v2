@@ -350,18 +350,8 @@ function Shell() {
   }
 
   const hasMessages = chat.messages.length > 0 || chat.isGenerating || chat.messagesStatus === 'loading';
-  const activeModelName = chat.selectedModel
-    ? chat.availableModels.find(m => m.id === chat.selectedModel)?.name ?? chat.selectedModel
-    : null;
   const activeProject = view.kind === 'project' ? projectsCtl.projects.find(p => p.id === view.id) ?? null : null;
-  const chatProject = chat.activeConversation?.project_id
-    ? projectsCtl.projects.find(p => p.id === chat.activeConversation!.project_id) ?? null
-    : chat.activeProjectId ? projectsCtl.projects.find(p => p.id === chat.activeProjectId) ?? null : null;
   const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
-  const composerHint = !online
-    ? 'You’re offline — reconnect to send'
-    : activeModelName ? `Using ${activeModelName}` : chatProject ? `In ${chatProject.name} · Auto picks the best model` : 'Auto picks the best model for each message';
-
   // The shell must not paint an opaque background: the ambient glow layer
   // lives behind it (body::before, z -1) and every frosted surface above
   // blurs it. z-10 keeps the whole app above that glow layer.
@@ -467,7 +457,7 @@ function Shell() {
               />
             ) : (
               <div className="flex-1 min-h-0 overflow-y-auto">
-                <EmptyState onSuggestion={sendMessage} />
+                <EmptyState />
               </div>
             )}
 
@@ -477,7 +467,6 @@ function Shell() {
               onStop={chat.stopGeneration}
               isGenerating={chat.isGenerating}
               sendOnEnter={settings.send_on_enter}
-              hint={composerHint}
               knowledge={knowledgeUploader}
               offline={!online}
               autoFocus

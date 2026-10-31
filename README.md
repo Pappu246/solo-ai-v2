@@ -4,6 +4,19 @@ A premium AI workspace built with React, TypeScript, Vite, Tailwind CSS and Supa
 
 SOLO AI brings different AI providers into one clean chat interface with saved conversations, streaming replies, image input and a responsive, accessible UI. This release adds **Phase 2 — Knowledge Layer** on top of the Phase 1 foundation: file uploads with text extraction and chunking, relevance-based retrieval with visible sources, explicit memory, projects, and global search. It also includes opt-in **web research** with cited sources and a bounded **agent tool loop** (time, calculator, web search, chat and file search).
 
+<p align="center">
+  <img src="docs/screenshots/chat.png" alt="A chat with an answer, model badge and export button" width="49%">
+  <img src="docs/screenshots/hindi.png" alt="The home screen in Hindi" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Home screen" width="49%">
+  <img src="docs/screenshots/menu.png" alt="The + menu: attach files, web search, agent mode" width="49%">
+</p>
+
+*Screenshots are taken from the offline demo (`npm run demo`), which runs the whole app against an in-memory mock backend, so you can try it without any keys.*
+
+**Free to run, safe to share:** only models with a free tier, an owner-approval gate for new users, per-account storage and usage limits, an enforced Content-Security-Policy, a weekly free-model check, a 30-minute uptime monitor, and an English / हिन्दी interface.
+
 ## Features
 
 - Email authentication with clear sign-up / confirmation feedback

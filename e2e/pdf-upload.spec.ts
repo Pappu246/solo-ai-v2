@@ -11,7 +11,8 @@ const BUNDLED_WORKER = /\/pdf\.worker(?:\.min)?-[^/?]+\.js(?:\?.*)?$/;
 
 async function attachPdfs(page: Page, files: Array<{ name: string; buffer: Buffer }>) {
   const chooser = page.waitForEvent('filechooser');
-  await page.getByRole('button', { name: 'Attach files' }).click();
+  await page.getByRole('button', { name: 'Add files and tools' }).click();
+  await page.getByRole('menuitem', { name: 'Attach files' }).click();
   await (await chooser).setFiles(files.map(file => ({ ...file, mimeType: 'application/pdf' })));
 }
 
