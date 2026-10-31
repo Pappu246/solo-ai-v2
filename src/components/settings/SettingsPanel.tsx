@@ -39,9 +39,9 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
   const ttsSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
   return (
-    <Dialog open={open} onClose={onClose} title="Settings" size="lg" className="sm:h-[560px]">
+    <Dialog open={open} onClose={onClose} title={t('Settings')} size="lg" className="sm:h-[560px]">
       <div className="flex flex-col sm:flex-row gap-4 sm:gap-6 h-full -mx-1">
-        <nav aria-label="Settings sections" className="flex sm:flex-col gap-1 sm:w-40 shrink-0 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <nav aria-label={t('Settings sections')} className="flex sm:flex-col gap-1 sm:w-40 shrink-0 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
           {SECTIONS.map(s => (
             <button
               key={s.id}
@@ -50,7 +50,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
               aria-current={section === s.id ? 'page' : undefined}
               className={cn('flex items-center gap-2.5 h-9 px-3 rounded-lg text-sm whitespace-nowrap transition-colors', section === s.id ? 'bg-accent/12 text-fg font-medium ring-1 ring-accent/25' : 'text-fg-muted hover:text-fg hover:bg-surface-2/60')}
             >
-              {s.icon}{s.label}
+              {s.icon}{t(s.label)}
             </button>
           ))}
         </nav>
@@ -62,7 +62,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
               <Toggle label="Name chats automatically" description="Use your first message as the chat title." checked={settings.auto_title} onChange={v => onUpdate({ auto_title: v })} />
               <Toggle label="Suggest memories" description="Offer to remember durable preferences and facts from your messages." checked={settings.suggest_memories} onChange={v => onUpdate({ suggest_memories: v })} />
               <div className="pt-4 mt-2 border-t border-border">
-                <Button size="sm" variant="ghost" onClick={onReset}>Reset all settings to defaults</Button>
+                <Button size="sm" variant="ghost" onClick={onReset}>{t('Reset all settings to defaults')}</Button>
               </div>
             </Group>
           )}
@@ -123,7 +123,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                   aria-label="Default model"
                   className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong"
                 >
-                  <option value="">Auto (recommended)</option>
+                  <option value="">{t('Auto (recommended)')}</option>
                   {models.filter(m => m.available !== false).map(m => <option key={m.id} value={m.id}>{m.name} · {m.provider}</option>)}
                 </select>
               </Field>
@@ -135,7 +135,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
 
           {section === 'voice' && (
             <Group title="Voice">
-              {!ttsSupported && <p className="text-sm text-fg-muted">Your browser doesn’t support speech output.</p>}
+              {!ttsSupported && <p className="text-sm text-fg-muted">{t('Your browser doesn’t support speech output.')}</p>}
               <Toggle label="Read aloud button" description="Show a “Read aloud” action on responses." checked={settings.tts_enabled} onChange={v => onUpdate({ tts_enabled: v })} disabled={!ttsSupported} />
               <Field label={`Speaking rate · ${settings.tts_rate.toFixed(1)}×`}>
                 <div className="flex items-center gap-3">
@@ -152,19 +152,19 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                   </Button>
                 </div>
               </Field>
-              <p className="text-xs text-fg-subtle">Voice input uses your browser’s speech recognition and appears in the message box when available.</p>
+              <p className="text-xs text-fg-subtle">{t('Voice input uses your browser’s speech recognition and appears in the message box when available.')}</p>
             </Group>
           )}
 
           {section === 'account' && (
             <Group title="Account">
               <div className="rounded-xl border border-border p-4">
-                <p className="text-xs text-fg-subtle">Signed in as</p>
+                <p className="text-xs text-fg-subtle">{t('Signed in as')}</p>
                 <p className="text-sm font-medium text-fg mt-0.5 break-all">{userEmail ?? '—'}</p>
               </div>
               <UsageCard />
               <div className="pt-2">
-                <Button variant="danger" size="md" leftIcon={<LogOut className="w-4 h-4" />} onClick={onSignOut}>Sign out</Button>
+                <Button variant="danger" size="md" leftIcon={<LogOut className="w-4 h-4" />} onClick={onSignOut}>{t('Sign out')}</Button>
               </div>
             </Group>
           )}
@@ -176,6 +176,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
 
 /** Today's own request counts. Free models also have provider limits; Solo AI switches model when one is busy. */
 function UsageCard() {
+  const t = useT();
   const [usage, setUsage] = useState<UsageToday | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
@@ -184,20 +185,21 @@ function UsageCard() {
   }, []);
   return (
     <div className="rounded-xl border border-border p-4" aria-live="polite">
-      <p className="text-xs text-fg-subtle">Your usage today</p>
-      {usage === undefined && <p className="text-sm text-fg-muted mt-0.5">Loading…</p>}
-      {usage === null && <p className="text-sm text-fg-muted mt-0.5">Usage is not available right now.</p>}
+      <p className="text-xs text-fg-subtle">{t('Your usage today')}</p>
+      {usage === undefined && <p className="text-sm text-fg-muted mt-0.5">{t('Loading…')}</p>}
+      {usage === null && <p className="text-sm text-fg-muted mt-0.5">{t('Usage is not available right now.')}</p>}
       {usage && (
         <p className="text-sm font-medium text-fg mt-0.5">
-          {usage.chats} {usage.chats === 1 ? 'message' : 'messages'} · {usage.imageSearches} image {usage.imageSearches === 1 ? 'search' : 'searches'}
+          {usage.chats} {t(usage.chats === 1 ? 'message' : 'messages')} · {usage.imageSearches} {t(usage.imageSearches === 1 ? 'image search' : 'image searches')}
         </p>
       )}
-      <p className="text-xs text-fg-subtle mt-2">Counts reset daily. If a free model is busy, Solo AI automatically answers with another one and shows its name under the reply.</p>
+      <p className="text-xs text-fg-subtle mt-2">{t('Counts reset daily. If a free model is busy, Solo AI automatically answers with another one and shows its name under the reply.')}</p>
     </div>
   );
 }
 
-function Group({ title, children }: { title: string; children: ReactNode }) {
+function Group({ title: rawTitle, children }: { title: string; children: ReactNode }) {
+  const title = useT()(rawTitle);
   return (
     <section aria-label={title} className="space-y-4">
       <h3 className="sr-only">{title}</h3>
@@ -206,7 +208,10 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-function Field({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+function Field({ label: rawLabel, hint: rawHint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const t = useT();
+  const label = t(rawLabel);
+  const hint = rawHint ? t(rawHint) : undefined;
   return (
     <div className="py-1">
       <p className="text-sm font-medium text-fg mb-2">{label}</p>
@@ -217,6 +222,7 @@ function Field({ label, hint, children }: { label: string; hint?: string; childr
 }
 
 function Segmented<T extends string>({ value, onChange, options }: { value: T; onChange: (v: T) => void; options: { value: T; label: string; icon?: ReactNode }[] }) {
+  const t = useT();
   return (
     <div role="radiogroup" className="inline-flex p-0.5 rounded-lg bg-surface-2 border border-border">
       {options.map(o => (
@@ -231,7 +237,7 @@ function Segmented<T extends string>({ value, onChange, options }: { value: T; o
             value === o.value ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg',
           )}
         >
-          {o.icon}{o.label}
+          {o.icon}{t(o.label)}
         </button>
       ))}
     </div>
