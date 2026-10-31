@@ -65,4 +65,8 @@ jobs:
           # Public client key (not a service-role key); used only to sign in as the smoke user.
           SMOKE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_CGJc_QEGr-DBNIR7hjJI_w_vj_NmxlA
           SMOKE_REQUIRE_AUTH: "true"
-        run: node scripts/production-smoke.mjs
+        # Right after a deploy the edge functions can still be warming up, and the image
+        # check depends on live third-party image hosts. One delayed retry removes those
+        # false alarms; a real regression fails both attempts.
+        run: |
+          node scripts/production-smoke.mjs || { echo "Attempt 1 failed; retrying in 60s"; sleep 60; node scripts/production-smoke.mjs; }
