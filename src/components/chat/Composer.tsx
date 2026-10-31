@@ -379,10 +379,10 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
         <div className="flex items-center justify-between min-h-5 mt-1.5 px-1 text-[11px] text-fg-subtle">
           <span className={cn(fileError && 'text-danger')} aria-live="polite">
-            {fileError || (speech.listening ? 'Listening…' : processing ? 'Reading files…' : pendingKnowledge ? 'Preparing files…' : hint || '')}
+            {fileError || (speech.listening ? t('Listening…') : processing ? t('Reading files…') : pendingKnowledge ? t('Preparing files…') : hint || '')}
           </span>
           <span className="hidden sm:inline">
-            {sendOnEnter ? 'Enter to send · Shift+Enter for a new line' : '⌘/Ctrl+Enter to send'}
+            {t(sendOnEnter ? 'Enter to send · Shift+Enter for a new line' : '⌘/Ctrl+Enter to send')}
           </span>
         </div>
       </div>
