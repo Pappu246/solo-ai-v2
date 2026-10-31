@@ -30,3 +30,15 @@ describe('i18n settings coverage', () => {
     expect(missing).toEqual([]);
   });
 });
+
+describe('i18n errors', () => {
+  afterEach(() => setLanguage('en'));
+  it('translates friendly errors and auth messages, leaving English untouched', async () => {
+    const { toFriendlyError, friendlyAuthMessage } = await import('./errors');
+    expect(toFriendlyError(Object.assign(new Error('x'), { code: 'rate_limited' })).title).toBe('Slow down');
+    expect(friendlyAuthMessage(new Error('Invalid login credentials'))).toBe('Incorrect email or password.');
+    setLanguage('hi');
+    expect(toFriendlyError(Object.assign(new Error('x'), { code: 'rate_limited' })).title).toBe('थोड़ा धीरे');
+    expect(friendlyAuthMessage(new Error('Invalid login credentials'))).toBe('ईमेल या पासवर्ड गलत है।');
+  });
+});
