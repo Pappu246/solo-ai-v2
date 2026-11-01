@@ -13,6 +13,7 @@ import {
   GoogleCseWebProvider,
   GoogleNewsRssProvider,
   TavilyProvider,
+  isNewsQuery,
   normalizeSources,
   normalizeWebUrl,
   shouldResearch,
@@ -459,6 +460,21 @@ Deno.test("tavily: sends a bearer POST and maps results", async () => {
   assertEquals(out.length, 1);
   assertEquals(out[0].url, "https://a.example/x");
   assertEquals(out[0].title, "Alpha news");
+  const body = JSON.parse(String(seen!.init!.body));
+  assertEquals(body.topic, "news");
+  assertEquals(body.days, 3);
+});
+
+Deno.test("tavily: non-news queries stay on the general topic", async () => {
+  let body: Record<string, unknown> = {};
+  const fetchImpl = (_u: string | URL | Request, init?: RequestInit) => {
+    body = JSON.parse(String(init!.body));
+    return Promise.resolve(new Response(JSON.stringify({ results: [] }), { status: 200 }));
+  };
+  await new TavilyProvider("k", fetchImpl).search("how does a heap work", 3);
+  assertEquals(body.topic, undefined);
+  assertEquals(isNewsQuery("आज की खबर"), true);
+  assertEquals(isNewsQuery("python list sort"), false);
 });
 
 Deno.test("google news rss: parses items, decodes entities and skips junk", async () => {
