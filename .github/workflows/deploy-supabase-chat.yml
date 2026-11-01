@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - "supabase/functions/chat/**"
+      - "supabase/functions/web-search/**"
       - "supabase/functions/image-search/**"
       - "supabase/functions/image-proxy/**"
       - "supabase/functions/request-access/**"
