@@ -200,6 +200,7 @@ Models whose provider key is missing are greyed out, and Auto routing only picks
 For the Smart Image Search feature (optional), also add:
 
 ```text
+TAVILY_API_KEY            # (recommended) free web-search key from tavily.com; tried first
 GOOGLE_CSE_API_KEY        # Google Custom Search JSON API key
 GOOGLE_CSE_ENGINE_ID      # Custom Search Engine ID (cx parameter)
 ```

@@ -41,9 +41,11 @@ interface Options {
   settings: Pick<UserSettings, 'auto_title' | 'preferred_model'>;
   resolveContext?: ContextResolver;
   onConversationCreated?: (conversation: Conversation) => void;
+  /** Web search was on, but no sources could be fetched, so the answer is not grounded in live results. */
+  onWebSearchUnavailable?: () => void;
 }
 
-export function useChat(user: User | null, { settings, resolveContext, onConversationCreated }: Options) {
+export function useChat(user: User | null, { settings, resolveContext, onConversationCreated, onWebSearchUnavailable }: Options) {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversationsStatus, setConversationsStatus] = useState<LoadStatus>('idle');
   const [activeConversation, setActiveConversation] = useState<Conversation | null>(null);
@@ -64,7 +66,8 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
   const activeProjectRef = useRef<string | null>(null);
   const resolveContextRef = useRef<ContextResolver | undefined>(resolveContext);
   const onCreatedRef = useRef(onConversationCreated);
-  useEffect(() => { resolveContextRef.current = resolveContext; onCreatedRef.current = onConversationCreated; });
+  const onWebUnavailableRef = useRef(onWebSearchUnavailable);
+  useEffect(() => { resolveContextRef.current = resolveContext; onCreatedRef.current = onConversationCreated; onWebUnavailableRef.current = onWebSearchUnavailable; });
   const setMessagesSync = useCallback((next: Message[] | ((prev: Message[]) => Message[])) => {
     const value = typeof next === 'function' ? next(messagesRef.current) : next;
     messagesRef.current = value;
@@ -270,6 +273,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
       }
       imageResults = handle.images.length ? [...handle.images] : undefined;
       webResults = handle.webSources.length ? [...handle.webSources] : undefined;
+      if (handle.webSearchFailed()) onWebUnavailableRef.current?.();
     } catch (e) {
       const aborted = (e as Error).name === 'AbortError' || controller.signal.aborted;
       if (!aborted) {

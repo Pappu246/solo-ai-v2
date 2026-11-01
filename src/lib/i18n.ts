@@ -29,6 +29,8 @@ const HI: Record<string, string> = {
   'How can I help you today?': 'आज मैं आपकी क्या मदद करूँ?',
   Language: 'भाषा',
   'Interface language': 'इंटरफ़ेस की भाषा',
+  'Web search is unavailable right now': 'वेब सर्च अभी उपलब्ध नहीं है',
+  'This answer is not based on live results. Try again in a minute.': 'यह जवाब लाइव नतीजों पर आधारित नहीं है। एक मिनट बाद फिर कोशिश करें।',
   'Add files and tools': 'फ़ाइलें और टूल जोड़ें',
   'Attach files': 'फ़ाइलें जोड़ें',
   'Attach from your files': 'अपनी फ़ाइलों से जोड़ें',

@@ -2,12 +2,16 @@
  * Web research providers (Phase 5) — a SEPARATE abstraction from Smart Image
  * Search. Free-first:
  *
- *  1. Google Custom Search (web mode) — used when the existing
- *     `GOOGLE_CSE_API_KEY` / `GOOGLE_CSE_ENGINE_ID` secrets are present
- *     (same credentials as image search; no new setup).
- *  2. DuckDuckGo HTML — keyless fallback so research works with zero
- *     configuration.
- *  3. `null` when `WEB_SEARCH_PROVIDER=off` or nothing can run — the chat
+ *  1. Tavily (free tier, `TAVILY_API_KEY`) — built for LLM search and reliable
+ *     from cloud servers.
+ *  2. Google Custom Search (web mode) — when `GOOGLE_CSE_API_KEY` /
+ *     `GOOGLE_CSE_ENGINE_ID` are present.
+ *  3. DuckDuckGo HTML — keyless, but often blocks cloud IPs.
+ *  4. Google News RSS — keyless, works for news-style questions.
+ *
+ *  The configured providers run as a chain: if one throws or returns nothing,
+ *  the next is tried, so a single blocked provider no longer breaks research.
+ *  `null` when `WEB_SEARCH_PROVIDER=off` or nothing can run — the chat
  *     function then degrades to a normal answer instead of faking sources.
  *
  * Everything is dependency-injected (`env`, `fetchImpl`) so the offline test
@@ -124,6 +128,97 @@ export class GoogleCseWebProvider implements WebSearchProvider {
   }
 }
 
+/** Tavily search API (free tier). Purpose-built for LLM grounding. */
+export class TavilyProvider implements WebSearchProvider {
+  readonly name = "tavily";
+
+  constructor(
+    private readonly apiKey: string,
+    private readonly fetchImpl: FetchLike = (input, init) => fetch(input, init),
+  ) {}
+
+  async search(query: string, limit = 6): Promise<WebSearchSource[]> {
+    const response = await this.fetchImpl("https://api.tavily.com/search", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${this.apiKey}` },
+      body: JSON.stringify({ query, max_results: Math.min(Math.max(limit, 1), 10), search_depth: "basic", include_answer: false }),
+    });
+    if (!response.ok) throw new Error(`tavily HTTP ${response.status}`);
+    const data = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
+    const items = Array.isArray(data.results) ? data.results : [];
+    return items.map((item, index) => {
+      const url = normalizeWebUrl(String(item.url ?? "")) ?? "";
+      return {
+        title: stripHtmlFragment(String(item.title ?? ""), 200),
+        url,
+        domain: domainOf(url),
+        snippet: stripHtmlFragment(String(item.content ?? ""), 400),
+        rank: index + 1,
+      };
+    }).filter(source => source.url && source.title);
+  }
+}
+
+/** Keyless Google News RSS: reliable for "latest / today / news" questions. */
+export class GoogleNewsRssProvider implements WebSearchProvider {
+  readonly name = "google-news-rss";
+
+  constructor(private readonly fetchImpl: FetchLike = (input, init) => fetch(input, init)) {}
+
+  async search(query: string, limit = 6): Promise<WebSearchSource[]> {
+    const url = `https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=en-IN&gl=IN&ceid=IN:en`;
+    const response = await this.fetchImpl(url, { headers: { Accept: "application/rss+xml, application/xml, text/xml" } });
+    if (!response.ok) throw new Error(`google news HTTP ${response.status}`);
+    const xml = (await response.text()).slice(0, 400_000);
+    const items = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/gi)];
+    const sources: WebSearchSource[] = [];
+    for (const [, body] of items) {
+      if (sources.length >= limit) break;
+      const tag = (name: string) => body.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`, "i"))?.[1] ?? "";
+      const link = normalizeWebUrl(decodeXml(tag("link")));
+      const title = stripHtmlFragment(decodeXml(tag("title")), 200);
+      if (!link || !title) continue;
+      const publisher = stripHtmlFragment(decodeXml(tag("source")), 80);
+      const published = stripHtmlFragment(tag("pubDate"), 40);
+      const snippet = [publisher, published].filter(Boolean).join(" · ");
+      sources.push({ title, url: link, domain: domainOf(link), ...(snippet ? { snippet } : {}), rank: sources.length + 1 });
+    }
+    return sources;
+  }
+}
+
+function decodeXml(text: string): string {
+  return text.replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&amp;/g, "&");
+}
+
+/** Tries providers in order; moves on when one throws or returns nothing. */
+export class FallbackWebProvider implements WebSearchProvider {
+  readonly name: string;
+  /** Name of the provider that produced the last answer (for logs). */
+  lastUsed = "";
+  /** Short failure notes from the last search, e.g. `duckduckgo-html: HTTP 202`. */
+  lastFailures: string[] = [];
+
+  constructor(private readonly providers: WebSearchProvider[]) {
+    this.name = providers.map(p => p.name).join(">");
+  }
+
+  async search(query: string, limit = 6): Promise<WebSearchSource[]> {
+    this.lastUsed = "";
+    this.lastFailures = [];
+    for (const provider of this.providers) {
+      try {
+        const results = await provider.search(query, limit);
+        if (results.length) { this.lastUsed = provider.name; return results; }
+        this.lastFailures.push(`${provider.name}: no results`);
+      } catch (e) {
+        this.lastFailures.push(`${provider.name}: ${e instanceof Error ? e.message.slice(0, 60) : "error"}`);
+      }
+    }
+    return [];
+  }
+}
+
 /** Keyless DuckDuckGo HTML endpoint — the zero-config free path. */
 export class DuckDuckGoProvider implements WebSearchProvider {
   readonly name = "duckduckgo-html";
@@ -171,21 +266,26 @@ export function decodeDdgHref(href: string): string {
 /**
  * Pick the provider for this deployment:
  * `WEB_SEARCH_PROVIDER=off` → null (explicitly disabled);
- * CSE secrets present → Google CSE web; otherwise the keyless DDG path.
+ * `duckduckgo` / `tavily` / `google` force a single provider;
+ * otherwise a fallback chain of everything configured:
+ * Tavily → Google CSE → DuckDuckGo → Google News RSS.
  */
 export function createWebSearchProvider(env: EnvReader, fetchImpl?: FetchLike): WebSearchProvider | null {
   const mode = (env("WEB_SEARCH_PROVIDER") || "").trim().toLowerCase();
   if (mode === "off" || mode === "disabled" || mode === "false") return null;
   if (mode === "duckduckgo") return new DuckDuckGoProvider(fetchImpl);
 
+  const tavilyKey = env("TAVILY_API_KEY")?.trim();
   const apiKey = env("GOOGLE_CSE_API_KEY")?.trim();
   const engineId = env("GOOGLE_CSE_ENGINE_ID")?.trim();
-  if (apiKey && engineId && mode !== "duckduckgo") {
-    return new GoogleCseWebProvider({ apiKey, engineId }, fetchImpl);
-  }
-  // Free-first default: no keys required.
-  if (mode === "google" || mode === "cse") return null; // explicitly asked for CSE but unconfigured
-  return new DuckDuckGoProvider(fetchImpl);
+  if (mode === "tavily") return tavilyKey ? new TavilyProvider(tavilyKey, fetchImpl) : null;
+  if (mode === "google" || mode === "cse") return apiKey && engineId ? new GoogleCseWebProvider({ apiKey, engineId }, fetchImpl) : null;
+
+  const chain: WebSearchProvider[] = [];
+  if (tavilyKey) chain.push(new TavilyProvider(tavilyKey, fetchImpl));
+  if (apiKey && engineId) chain.push(new GoogleCseWebProvider({ apiKey, engineId }, fetchImpl));
+  chain.push(new DuckDuckGoProvider(fetchImpl), new GoogleNewsRssProvider(fetchImpl));
+  return new FallbackWebProvider(chain);
 }
 
 // ── Research decision ───────────────────────────────────────────────────────
