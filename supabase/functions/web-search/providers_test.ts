@@ -9,7 +9,10 @@ import {
   decodeDdgHref,
   domainOf,
   DuckDuckGoProvider,
+  FallbackWebProvider,
   GoogleCseWebProvider,
+  GoogleNewsRssProvider,
+  TavilyProvider,
   normalizeSources,
   normalizeWebUrl,
   shouldResearch,
@@ -337,8 +340,14 @@ Deno.test("google cse (web): parses items and surfaces HTTP failures", async () 
 Deno.test("factory: free-first provider selection", () => {
   const withKeys: EnvReader = n => (n === "GOOGLE_CSE_API_KEY" ? "key" : n === "GOOGLE_CSE_ENGINE_ID" ? "cx" : undefined);
   const noKeys: EnvReader = () => undefined;
-  assertEquals(createWebSearchProvider(withKeys)?.name, "google-cse-web");
-  assertEquals(createWebSearchProvider(noKeys)?.name, "duckduckgo-html", "zero-config default must be the keyless path");
+  assertEquals(createWebSearchProvider(withKeys)?.name, "google-cse-web>duckduckgo-html>google-news-rss");
+  assertEquals(createWebSearchProvider(noKeys)?.name, "duckduckgo-html>google-news-rss", "zero-config default must be keyless");
+  assertEquals(
+    createWebSearchProvider(n => (n === "TAVILY_API_KEY" ? "tvly-x" : undefined))?.name,
+    "tavily>duckduckgo-html>google-news-rss",
+    "a Tavily key goes first in the chain",
+  );
+  assertEquals(createWebSearchProvider(n => (n === "WEB_SEARCH_PROVIDER" ? "tavily" : undefined)), null, "forced tavily without a key");
   assertEquals(createWebSearchProvider(n => (n === "WEB_SEARCH_PROVIDER" ? "off" : undefined)), null, "explicit off");
   assertEquals(
     createWebSearchProvider(n => (n === "WEB_SEARCH_PROVIDER" ? "duckduckgo" : undefined))?.name,
@@ -432,4 +441,49 @@ Deno.test("events: SSE frames round-trip and malformed input is dropped", () => 
 Deno.test("stripHtml: closing tags with attributes or spaces still end the block", () => {
   const html = "a<script>evil()</script foo=bar>b<style>x{}</style >c<!-- hidden --!>d";
   assertEquals(stripHtml(html), "a b c d");
+});
+
+Deno.test("tavily: sends a bearer POST and maps results", async () => {
+  let seen: { url: string; init?: RequestInit } | null = null;
+  const fetchImpl = (url: string | URL | Request, init?: RequestInit) => {
+    seen = { url: String(url), init };
+    return Promise.resolve(new Response(JSON.stringify({ results: [
+      { title: "Alpha <b>news</b>", url: "https://a.example/x#frag", content: "Snippet A" },
+      { title: "", url: "https://b.example/y", content: "dropped: no title" },
+      { title: "Bad url", url: "javascript:alert(1)", content: "dropped" },
+    ] }), { status: 200 }));
+  };
+  const out = await new TavilyProvider("tvly-key", fetchImpl).search("today news", 5);
+  assertEquals(seen!.url, "https://api.tavily.com/search");
+  assertEquals((seen!.init!.headers as Record<string, string>).Authorization, "Bearer tvly-key");
+  assertEquals(out.length, 1);
+  assertEquals(out[0].url, "https://a.example/x");
+  assertEquals(out[0].title, "Alpha news");
+});
+
+Deno.test("google news rss: parses items, decodes entities and skips junk", async () => {
+  const xml = `<rss><channel>
+    <item><title>Markets rally &amp; close higher - Reuters</title><link>https://news.example/a</link><pubDate>Sun, 01 Nov 2026 10:00:00 GMT</pubDate><source url="https://reuters.com">Reuters</source></item>
+    <item><title><![CDATA[Second story]]></title><link>https://news.example/b</link></item>
+    <item><title>No link</title></item>
+  </channel></rss>`;
+  const out = await new GoogleNewsRssProvider(() => Promise.resolve(new Response(xml, { status: 200 }))).search("markets", 5);
+  assertEquals(out.map(s => s.title), ["Markets rally & close higher - Reuters", "Second story"]);
+  assertEquals(out[0].snippet, "Reuters · Sun, 01 Nov 2026 10:00:00 GMT");
+  assertEquals(out[1].rank, 2);
+});
+
+Deno.test("fallback chain: a blocked provider no longer breaks research", async () => {
+  const source = (n: string): WebSearchSource => ({ title: n, url: `https://${n}.example/`, domain: `${n}.example`, rank: 1 });
+  const blocked = { name: "blocked", search: () => Promise.reject(new Error("HTTP 202")) };
+  const empty = { name: "empty", search: () => Promise.resolve([]) };
+  const good = { name: "good", search: () => Promise.resolve([source("ok")]) };
+  const chain = new FallbackWebProvider([blocked, empty, good]);
+  const out = await chain.search("q");
+  assertEquals(out.map(s => s.title), ["ok"]);
+  assertEquals(chain.lastUsed, "good");
+  assertEquals(chain.lastFailures, ["blocked: HTTP 202", "empty: no results"]);
+  const none = new FallbackWebProvider([blocked, empty]);
+  assertEquals(await none.search("q"), []);
+  assertEquals(none.lastUsed, "");
 });

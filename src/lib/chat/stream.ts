@@ -51,6 +51,8 @@ export interface StreamHandle {
   images: ImageSearchImage[];
   /** Phase 5: web research sources received while consuming the stream. */
   webSources: WebSearchSource[];
+  /** True when web search was requested but the server could not get any sources. */
+  webSearchFailed: () => boolean;
 }
 
 /**
@@ -297,10 +299,12 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
   };
   const imageResults: ImageSearchImage[] = [];
   const webSources: WebSearchSource[] = [];
+  let webSearchFailed = false;
   const deltas = parseSSE(res.body, event => {
     if (event.type === 'results' && event.images?.length) imageResults.push(...event.images);
   }, event => {
     if (event.type === 'results' && event.sources?.length) webSources.push(...event.sources);
+    if (event.type === 'error') webSearchFailed = true;
   });
-  return { model, deltas, images: imageResults, webSources };
+  return { model, deltas, images: imageResults, webSources, webSearchFailed: () => webSearchFailed };
 }

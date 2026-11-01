@@ -300,7 +300,8 @@ Deno.serve(async (req) => {
           new Promise<WebSearchSource[]>((_, rej) => setTimeout(() => rej(new Error("timeout")), 7000)),
         ]);
         const sources = normalizeSources(raw, { max: 6, maxPerDomain: 2 });
-        log(id, "research_results", { count: sources.length, domains: [...new Set(sources.map((s) => s.domain))] });
+        const chain = webProvider as { lastUsed?: string; lastFailures?: string[] };
+        log(id, "research_results", { count: sources.length, provider: chain.lastUsed || webProvider.name, failures: chain.lastFailures ?? [], domains: [...new Set(sources.map((s) => s.domain))] });
         return sources;
       } catch (e) {
         log(id, "research_failed", { error: e instanceof Error ? e.name : "unknown" });

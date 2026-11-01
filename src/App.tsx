@@ -24,6 +24,7 @@ import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
 import { conversationToMarkdown, exportFilename, downloadText } from './lib/exportChat';
+import { translate } from './lib/i18n';
 import { pathFor, parsePath, type Route } from './lib/routes';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
@@ -115,6 +116,7 @@ function Shell() {
   const chat = useChat(user, {
     settings,
     resolveContext,
+    onWebSearchUnavailable: () => toast({ title: translate('Web search is unavailable right now'), description: translate('This answer is not based on live results. Try again in a minute.'), tone: 'error' }),
     onConversationCreated: conversation => {
       // Files attached before the chat existed now get linked to it.
       if (pendingAttachRef.current.length) { knowledge.attachToConversation(pendingAttachRef.current, conversation.id); pendingAttachRef.current = []; }
