@@ -6,6 +6,7 @@ import { Dialog, Toggle, Button } from '../ui';
 import { speak, stop as stopSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
 import { LANGUAGES, useT, type Language } from '../../lib/i18n';
+import { FeedbackCard } from './FeedbackCard';
 import { fetchUsageToday, type UsageToday } from '../../lib/usage';
 
 type Section = 'general' | 'appearance' | 'ai' | 'voice' | 'account';
@@ -163,6 +164,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                 <p className="text-sm font-medium text-fg mt-0.5 break-all">{userEmail ?? '—'}</p>
               </div>
               <UsageCard />
+              <FeedbackCard />
               <div className="pt-2">
                 <Button variant="danger" size="md" leftIcon={<LogOut className="w-4 h-4" />} onClick={onSignOut}>{t('Sign out')}</Button>
               </div>
