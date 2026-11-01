@@ -128,6 +128,11 @@ export class GoogleCseWebProvider implements WebSearchProvider {
   }
 }
 
+/** True for "today / latest / breaking news" style questions (English + Hindi). */
+export function isNewsQuery(query: string): boolean {
+  return /\b(news|headlines?|breaking|latest|today|samachar|khabar)\b|समाचार|खबर|ख़बर/i.test(query);
+}
+
 /** Tavily search API (free tier). Purpose-built for LLM grounding. */
 export class TavilyProvider implements WebSearchProvider {
   readonly name = "tavily";
@@ -141,7 +146,14 @@ export class TavilyProvider implements WebSearchProvider {
     const response = await this.fetchImpl("https://api.tavily.com/search", {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${this.apiKey}` },
-      body: JSON.stringify({ query, max_results: Math.min(Math.max(limit, 1), 10), search_depth: "basic", include_answer: false }),
+      body: JSON.stringify({
+        query,
+        max_results: Math.min(Math.max(limit, 1), 10),
+        search_depth: "basic",
+        include_answer: false,
+        // News-style questions need real, recent articles, not homepages.
+        ...(isNewsQuery(query) ? { topic: "news", days: 3 } : {}),
+      }),
     });
     if (!response.ok) throw new Error(`tavily HTTP ${response.status}`);
     const data = await response.json() as { results?: Array<{ title?: string; url?: string; content?: string }> };
@@ -152,7 +164,7 @@ export class TavilyProvider implements WebSearchProvider {
         title: stripHtmlFragment(String(item.title ?? ""), 200),
         url,
         domain: domainOf(url),
-        snippet: stripHtmlFragment(String(item.content ?? ""), 400),
+        snippet: stripHtmlFragment(String(item.content ?? ""), 500),
         rank: index + 1,
       };
     }).filter(source => source.url && source.title);
