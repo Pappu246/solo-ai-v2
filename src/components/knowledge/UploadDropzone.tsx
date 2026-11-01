@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { UploadCloud } from 'lucide-react';
 import { KNOWLEDGE_ACCEPT, KNOWLEDGE_MAX_FILES_PER_UPLOAD } from '../../lib/knowledge/fileTypes';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   onFiles: (files: File[]) => void;
@@ -13,6 +14,7 @@ interface Props {
 
 /** Click-or-drop upload target. Accessible: it is a real button, not a div with handlers. */
 export function UploadDropzone({ onFiles, disabled, compact, hint }: Props) {
+  const tr = useT();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -41,10 +43,10 @@ export function UploadDropzone({ onFiles, disabled, compact, hint }: Props) {
         <UploadCloud className={cn('text-fg-muted shrink-0', compact ? 'w-4 h-4' : 'w-6 h-6')} aria-hidden />
         <span className="min-w-0">
           <span className={cn('block font-medium text-fg', compact ? 'text-sm' : 'text-sm')}>
-            {dragging ? 'Drop to upload' : compact ? 'Upload files' : 'Click to upload or drop files here'}
+            {dragging ? tr('Drop to upload') : compact ? tr('Upload files') : tr('Click to upload or drop files here')}
           </span>
           <span className="block text-[11px] text-fg-subtle mt-0.5">
-            {hint ?? 'PDF, text, Markdown, CSV, JSON or code · large files upload in resumable chunks'}
+            {hint ?? tr('PDF, text, Markdown, CSV, JSON or code · large files upload in resumable chunks')}
           </span>
         </span>
       </button>

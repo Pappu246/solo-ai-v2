@@ -6,6 +6,7 @@ import { FileList } from './FileList';
 import { UploadDropzone } from './UploadDropzone';
 import { Button, Spinner, useToast } from '../ui';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   knowledge: KnowledgeController;
@@ -24,6 +25,7 @@ const FILTERS: { id: Filter; label: string }[] = [
 
 /** The user's whole file library: upload, filter, search by name, open details. */
 export function FilesView({ knowledge, projects, onOpenFile }: Props) {
+  const tr = useT();
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
   const [uploading, setUploading] = useState(false);
@@ -49,10 +51,10 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
       const outcome = await knowledge.uploadFiles(files);
       const ready = outcome.files.filter(f => f.status === 'ready').length;
       const failed = outcome.files.filter(f => f.status === 'failed').length;
-      if (ready) toast({ title: ready === 1 ? 'File ready' : `${ready} files ready`, tone: 'success' });
-      if (failed) toast({ title: failed === 1 ? 'A file could not be processed' : `${failed} files could not be processed`, description: 'Open the file to see why.', tone: 'error' });
-      for (const reason of outcome.rejected) toast({ title: 'File skipped', description: reason, tone: 'error' });
-      if (outcome.cancelled.length) toast({ title: outcome.cancelled.length === 1 ? 'Upload cancelled' : `${outcome.cancelled.length} uploads cancelled`, tone: 'info' });
+      if (ready) toast({ title: ready === 1 ? tr('File ready') : `${ready} ${tr('files ready')}`, tone: 'success' });
+      if (failed) toast({ title: failed === 1 ? tr('A file could not be processed') : `${failed} ${tr('files could not be processed')}`, description: tr('Open the file to see why.'), tone: 'error' });
+      for (const reason of outcome.rejected) toast({ title: tr('File skipped'), description: reason, tone: 'error' });
+      if (outcome.cancelled.length) toast({ title: outcome.cancelled.length === 1 ? tr('Upload cancelled') : `${outcome.cancelled.length} ${tr('uploads cancelled')}`, tone: 'info' });
     } finally { setUploading(false); }
   };
 
@@ -60,14 +62,14 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
     <div className="flex-1 min-h-0 overflow-y-auto">
       <div className="max-w-3xl mx-auto px-4 py-6 sm:py-8">
         <header className="mb-5">
-          <h2 className="font-display text-2xl tracking-tight text-fg">Files</h2>
-          <p className="text-sm text-fg-muted mt-1">Upload documents once, then attach them to chats or add them to a project. Solo only reads the parts that are relevant to your question.</p>
+          <h2 className="font-display text-2xl tracking-tight text-fg">{tr('Files')}</h2>
+          <p className="text-sm text-fg-muted mt-1">{tr('Upload documents once, then attach them to chats or add them to a project. Solo only reads the parts that are relevant to your question.')}</p>
         </header>
 
         <UploadDropzone onFiles={upload} disabled={uploading} />
 
         <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-5">
-          <div role="tablist" aria-label="Filter files" className="inline-flex p-0.5 rounded-lg bg-surface-2 border border-border self-start">
+          <div role="tablist" aria-label={tr('Filter files')} className="inline-flex p-0.5 rounded-lg bg-surface-2 border border-border self-start">
             {FILTERS.map(f => (
               <button
                 key={f.id}
@@ -77,7 +79,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
                 onClick={() => setFilter(f.id)}
                 className={cn('inline-flex items-center gap-1.5 h-8 px-3 rounded-md text-xs font-medium transition-all duration-150', filter === f.id ? 'bg-accent/12 text-fg shadow-sm ring-1 ring-accent/30' : 'text-fg-muted hover:text-fg')}
               >
-                {f.label}
+                {tr(f.label)}
                 <span className={cn('tabular-nums', filter === f.id ? 'text-fg-subtle' : 'text-fg-subtle/80')}>{counts[f.id]}</span>
               </button>
             ))}
@@ -88,8 +90,8 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
               type="search"
               value={query}
               onChange={e => setQuery(e.target.value)}
-              placeholder="Filter by name"
-              aria-label="Filter files by name"
+              placeholder={tr('Filter by name')}
+              aria-label={tr('Filter files by name')}
               className="w-full h-9 pl-8 pr-3 rounded-lg bg-surface-2 border border-border text-sm text-fg placeholder:text-fg-subtle outline-hidden focus:border-border-strong"
             />
           </label>
@@ -102,9 +104,9 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
           {knowledge.status === 'error' && (
             <div className="flex flex-col items-center gap-2 py-10 text-center">
               <AlertCircle className="w-5 h-5 text-danger" aria-hidden />
-              <p className="text-sm text-fg">{knowledge.error?.title ?? 'Couldn’t load your files.'}</p>
+              <p className="text-sm text-fg">{knowledge.error?.title ?? tr('Couldn’t load your files.')}</p>
               <p className="text-xs text-fg-muted">{knowledge.error?.message}</p>
-              <Button size="sm" variant="secondary" onClick={knowledge.reload}>Retry</Button>
+              <Button size="sm" variant="secondary" onClick={knowledge.reload}>{tr('Retry')}</Button>
             </div>
           )}
           {knowledge.status === 'ready' && (
@@ -114,7 +116,7 @@ export function FilesView({ knowledge, projects, onOpenFile }: Props) {
               onOpen={onOpenFile}
               progress={knowledge.progress}
               onCancelUpload={knowledge.cancelUpload}
-              emptyMessage={knowledge.files.length === 0 ? 'No files yet. Upload one above to get started.' : query ? `No files match “${query}”.` : `No ${filter} files.`}
+              emptyMessage={knowledge.files.length === 0 ? tr('No files yet. Upload one above to get started.') : query ? `${tr('No files match')} “${query}”.` : tr('No files in this filter.')}
             />
           )}
         </div>
