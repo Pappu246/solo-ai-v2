@@ -339,6 +339,15 @@ export function sourcesPromptBlock(sources: WebSearchSource[]): string {
     "for anything time-sensitive. If a source does not answer the question, ignore it —",
     "never invent additional URLs.",
     "",
+    "Grounding rules:",
+    "- State only facts that appear in the excerpts below; put the matching [n] after each fact.",
+    "- Never fill gaps from memory or make up headlines, scores, prices or percentages.",
+    "- If the excerpts hold no concrete answer, say so in one line and suggest a sharper query.",
+    "",
+    "Format: answer in the user's language. For news or multi-topic questions use a short",
+    "heading, then a table with columns Topic | What happened | Source, one row per item,",
+    "followed by a one-line takeaway. For a single question, 2-4 tight sentences with citations.",
+    "",
     ...lines,
   ].join("\n");
 }
