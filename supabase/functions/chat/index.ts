@@ -30,6 +30,7 @@ import { executeImageSearch } from "./image-search-exec.ts";
 import { decideImageSearch } from "../image-search/decision.ts";
 import { sseImageSearchEvent } from "../image-search/search-events.ts";
 import {
+  applyRegionHint,
   createWebSearchProvider,
   normalizeSources,
   shouldResearch,
@@ -296,7 +297,7 @@ Deno.serve(async (req) => {
           return [];
         }
         const raw = await Promise.race([
-          webProvider.search(String(last.content).replace(/\s+/g, " ").slice(0, 300), 6),
+          webProvider.search(applyRegionHint(String(last.content).replace(/\s+/g, " ").slice(0, 300), Deno.env.get("WEB_SEARCH_REGION")), 6),
           new Promise<WebSearchSource[]>((_, rej) => setTimeout(() => rej(new Error("timeout")), 7000)),
         ]);
         const sources = normalizeSources(raw, { max: 6, maxPerDomain: 2 });

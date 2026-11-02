@@ -14,6 +14,7 @@ import {
   GoogleNewsRssProvider,
   TavilyProvider,
   isNewsQuery,
+  applyRegionHint,
   normalizeSources,
   normalizeWebUrl,
   shouldResearch,
@@ -502,4 +503,16 @@ Deno.test("fallback chain: a blocked provider no longer breaks research", async 
   const none = new FallbackWebProvider([blocked, empty]);
   assertEquals(await none.search("q"), []);
   assertEquals(none.lastUsed, "");
+});
+
+Deno.test("region hint: only generic news questions get the region", () => {
+  assertEquals(applyRegionHint("today news", "India"), "today news India");
+  assertEquals(applyRegionHint("aaj ki khabar", "India"), "aaj ki khabar India");
+  assertEquals(applyRegionHint("what is the latest news", "India"), "what is the latest news India");
+  // specific questions keep their own meaning
+  assertEquals(applyRegionHint("latest news about NASA Artemis", "India"), "latest news about NASA Artemis");
+  assertEquals(applyRegionHint("how does a heap work", "India"), "how does a heap work");
+  // no region configured → untouched
+  assertEquals(applyRegionHint("today news", ""), "today news");
+  assertEquals(applyRegionHint("today news", undefined), "today news");
 });
