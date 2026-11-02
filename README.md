@@ -203,6 +203,7 @@ For the Smart Image Search feature (optional), also add:
 TAVILY_API_KEY            # (recommended) free web-search key from tavily.com; tried first
 GOOGLE_CSE_API_KEY        # Google Custom Search JSON API key
 GOOGLE_CSE_ENGINE_ID      # Custom Search Engine ID (cx parameter)
+WEB_SEARCH_REGION         # (optional) e.g. India; added to generic "today news" questions only
 ```
 
 Get credentials from [Google Cloud Console](https://console.cloud.google.com/apis/credentials) (API key) and [Programmable Search Engine](https://programmablesearchengine.google.com/) (engine ID). The free tier includes 100 image search queries per day.

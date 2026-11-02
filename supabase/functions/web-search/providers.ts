@@ -133,6 +133,25 @@ export function isNewsQuery(query: string): boolean {
   return /\b(news|headlines?|breaking|latest|today|samachar|khabar)\b|समाचार|खबर|ख़बर/i.test(query);
 }
 
+const GENERIC_NEWS_WORDS = new Set([
+  "news", "headline", "headlines", "breaking", "latest", "today", "todays", "today's", "update", "updates",
+  "the", "of", "in", "on", "me", "my", "what", "whats", "what's", "is", "are", "give", "show", "tell", "us",
+  "aaj", "ki", "ka", "khabar", "khabrein", "samachar", "ke", "bata", "batao", "do", "dikhao", "ताज़ा", "आज", "की", "खबर", "खबरें", "समाचार",
+]);
+
+/**
+ * A bare "today news" has no place in it, so a global index answers with US sports.
+ * When an operator-set region exists (WEB_SEARCH_REGION, e.g. "India"), add it to
+ * such generic news questions only; anything specific is left untouched.
+ */
+export function applyRegionHint(query: string, region: string | undefined | null): string {
+  const hint = (region ?? "").trim().slice(0, 40);
+  if (!hint || !isNewsQuery(query)) return query;
+  const words = query.toLowerCase().replace(/[?!.,]/g, " ").split(/\s+/).filter(Boolean);
+  if (!words.length || !words.every((w) => GENERIC_NEWS_WORDS.has(w))) return query;
+  return `${query.trim()} ${hint}`;
+}
+
 /** Tavily search API (free tier). Purpose-built for LLM grounding. */
 export class TavilyProvider implements WebSearchProvider {
   readonly name = "tavily";

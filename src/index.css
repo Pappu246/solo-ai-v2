@@ -571,9 +571,12 @@ layer(base);
   border-radius: var(--radius);
 }
 .prose-chat th, .prose-chat td {
-  padding: 0.55em 0.9em; text-align: left;
+  padding: 0.55em 0.9em; text-align: left; vertical-align: top;
   border-bottom: 1px solid rgb(var(--border) / 0.2);
+  /* The prose default (anywhere) breaks short words letter by letter in narrow columns. */
+  overflow-wrap: break-word; word-break: normal;
 }
+.prose-chat th { white-space: nowrap; }
 .prose-chat th {
   background: rgb(var(--surface-2));
   font-weight: 600;
