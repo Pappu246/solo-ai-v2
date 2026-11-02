@@ -56,16 +56,16 @@ jobs:
           version: latest
 
       - name: Deploy chat Edge Function
-        run: supabase functions deploy chat --project-ref "$SUPABASE_PROJECT_ID"
+        run: supabase functions deploy chat --project-ref "$SUPABASE_PROJECT_ID" --yes
 
       - name: Deploy image-search Edge Function
-        run: supabase functions deploy image-search --project-ref "$SUPABASE_PROJECT_ID"
+        run: supabase functions deploy image-search --project-ref "$SUPABASE_PROJECT_ID" --yes
 
       - name: Deploy image-proxy Edge Function
-        run: supabase functions deploy image-proxy --project-ref "$SUPABASE_PROJECT_ID"
+        run: supabase functions deploy image-proxy --project-ref "$SUPABASE_PROJECT_ID" --yes
 
       - name: Deploy request-access Edge Function
-        run: supabase functions deploy request-access --project-ref "$SUPABASE_PROJECT_ID"
+        run: supabase functions deploy request-access --project-ref "$SUPABASE_PROJECT_ID" --yes
 
       - name: Deploy access-approve Edge Function
-        run: supabase functions deploy access-approve --project-ref "$SUPABASE_PROJECT_ID" --no-verify-jwt
+        run: supabase functions deploy access-approve --project-ref "$SUPABASE_PROJECT_ID" --yes --no-verify-jwt
