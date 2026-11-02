@@ -25,7 +25,8 @@ import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
 import { conversationToMarkdown, exportFilename, downloadText } from './lib/exportChat';
 import { translate } from './lib/i18n';
-import { pathFor, parsePath, type Route } from './lib/routes';
+import type { Route } from './lib/routes';
+import { useUrlRoute } from './hooks/useUrlRoute';
 import { SettingsPanel } from './components/settings/SettingsPanel';
 import { FilesView } from './components/knowledge/FilesView';
 import { FileDetailDialog } from './components/knowledge/FileDetailDialog';
@@ -299,9 +300,7 @@ function Shell() {
   // ── URL sync ───────────────────────────────────────────────────────────────
   // Every view has its own URL so refresh, back/forward and shared links work.
   const route: Route = view.kind === 'chat' ? { kind: 'chat', conversationId: chat.activeConversation?.id ?? null } : view.kind === 'project' ? { kind: 'project', id: view.id } : { kind: view.kind };
-  const routePath = pathFor(route);
   const dataReady = Boolean(user) && chat.conversationsStatus === 'ready' && projectsCtl.status === 'ready';
-  const appliedRef = useRef(false);
   const applyRoute = useCallback((r: Route) => {
     if (r.kind === 'files') setView({ kind: 'files' });
     else if (r.kind === 'memory') setView({ kind: 'memory' });
@@ -309,21 +308,7 @@ function Shell() {
     else if (r.conversationId) { const c = chat.conversations.find(x => x.id === r.conversationId); if (c) openConversation(c); else startNewChat(); }
     else startNewChat();
   }, [projectsCtl.projects, chat.conversations, openProject, openConversation, startNewChat]);
-  useEffect(() => {
-    if (!dataReady || appliedRef.current) return;
-    appliedRef.current = true;
-    const initial = parsePath(window.location.pathname);
-    if (pathFor(initial) !== '/') applyRoute(initial);
-  }, [dataReady, applyRoute]);
-  useEffect(() => {
-    if (!dataReady || !appliedRef.current || window.location.pathname === routePath) return;
-    window.history.pushState(null, '', routePath);
-  }, [dataReady, routePath]);
-  useEffect(() => {
-    const onPop = () => applyRoute(parsePath(window.location.pathname));
-    window.addEventListener('popstate', onPop);
-    return () => window.removeEventListener('popstate', onPop);
-  }, [applyRoute]);
+  useUrlRoute({ route, ready: dataReady, navigate: applyRoute });
 
   // Connectivity drives the offline banner and the composer hint. It must be
   // called before any early return so the hook order never changes.
