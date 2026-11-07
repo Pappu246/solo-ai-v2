@@ -82,7 +82,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                 />
               </Field>
               <Field label="Accent">
-                <div role="radiogroup" aria-label="Accent color" className="flex gap-2">
+                <div role="radiogroup" aria-label="Accent color" className="flex gap-2 p-1">
                   {ACCENT_OPTIONS.map(a => (
                     <button
                       key={a.value}
@@ -92,7 +92,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                       aria-label={a.label}
                       title={a.label}
                       onClick={() => onUpdate({ accent: a.value })}
-                      className={cn('w-7 h-7 rounded-full transition-all duration-150', ACCENT_SWATCH[a.value], settings.accent === a.value ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent scale-110' : 'opacity-70 hover:opacity-100')}
+                      className={cn('w-7 h-7 rounded-full transition-all duration-150', ACCENT_SWATCH[a.value], settings.accent === a.value ? 'ring-2 ring-offset-2 ring-offset-surface ring-accent' : 'opacity-70 hover:opacity-100')}
                     />
                   ))}
                 </div>
