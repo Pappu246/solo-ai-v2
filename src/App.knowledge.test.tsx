@@ -33,7 +33,7 @@ describe('App × knowledge layer', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Files' })[0]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Files' })).toBeInTheDocument();
-    expect(screen.getByText(/no files yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no files yet/i)).toBeInTheDocument();
 
     const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
     await user.upload(input, new File(['# Plan\n\nShip search in Q4.'], 'plan.md', { type: 'text/markdown' }));
@@ -61,7 +61,7 @@ describe('App × knowledge layer', () => {
 
     await user.click(screen.getAllByRole('button', { name: 'Memory' })[0]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Memory' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: /add memory/i }));
+    await user.click(await screen.findByRole('button', { name: /add memory/i }));
     const dialog = await screen.findByRole('dialog', { name: /add memory/i });
     await user.type(within(dialog).getByRole('textbox'), 'Prefers teal in designs');
     await user.click(within(dialog).getByRole('radio', { name: /preference/i }));
@@ -84,7 +84,7 @@ describe('App × knowledge layer', () => {
 
     expect(await screen.findByRole('heading', { level: 1, name: 'Website relaunch' })).toBeInTheDocument();
     expect(mock.tables.projects).toHaveLength(1);
-    expect(screen.getByText(/no chats in this project yet/i)).toBeInTheDocument();
+    expect(await screen.findByText(/no chats in this project yet/i)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /start the first chat/i }));
     await user.type(await screen.findByRole('textbox', { name: /message/i }), 'Draft the homepage copy{Enter}');

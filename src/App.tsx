@@ -27,15 +27,12 @@ import { conversationToMarkdown, exportFilename, downloadText } from './lib/expo
 import { translate } from './lib/i18n';
 import type { Route } from './lib/routes';
 import { useUrlRoute } from './hooks/useUrlRoute';
-import { SettingsPanel } from './components/settings/SettingsPanel';
-import { FilesView } from './components/knowledge/FilesView';
-import { FileDetailDialog } from './components/knowledge/FileDetailDialog';
-import { FilePickerDialog } from './components/knowledge/FilePickerDialog';
-import { MemoryView } from './components/memory/MemoryView';
-import { MemoryEditor, type MemoryDraft } from './components/memory/MemoryEditor';
-import { ProjectView } from './components/projects/ProjectView';
-import { ProjectDialog } from './components/projects/ProjectDialog';
-import { SearchPalette } from './components/search/SearchPalette';
+import type { MemoryDraft } from './components/memory/MemoryEditor';
+import {
+  SettingsPanel, SearchPalette, FileDetailDialog, FilePickerDialog, FilesView, MemoryView, MemoryEditor,
+  ProjectView, ProjectDialog, LazyDialog, LazyView,
+} from './lazyViews';
+import { prefetchLazyViews } from './lazyLoaders';
 import { ConfirmDialog, Logo, ToastProvider, useToast } from './components/ui';
 
 const SIDEBAR_KEY = 'solo-ai-sidebar-collapsed';
@@ -313,6 +310,7 @@ function Shell() {
   // Connectivity drives the offline banner and the composer hint. It must be
   // called before any early return so the hook order never changes.
   const online = useOnlineStatus();
+  useEffect(() => { prefetchLazyViews(); }, []);
   const access = useAccess(user);
 
   if (authLoading) {
@@ -394,27 +392,29 @@ function Shell() {
 
         <main className="flex-1 flex flex-col min-h-0 min-w-0">
         {view.kind === 'files' && (
-          <FilesView knowledge={knowledge} projects={projectsCtl.projects} onOpenFile={setFileDetail} />
+          <LazyView><FilesView knowledge={knowledge} projects={projectsCtl.projects} onOpenFile={setFileDetail} /></LazyView>
         )}
 
         {view.kind === 'memory' && (
-          <MemoryView memories={memoriesCtl} projects={projectsCtl.projects} projectId={chat.activeProjectId} onOpenConversation={openConversationById} />
+          <LazyView><MemoryView memories={memoriesCtl} projects={projectsCtl.projects} projectId={chat.activeProjectId} onOpenConversation={openConversationById} /></LazyView>
         )}
 
         {view.kind === 'project' && activeProject && (
-          <ProjectView
-            project={activeProject}
-            conversations={chat.conversations}
-            memories={memoriesCtl.memories}
-            knowledge={knowledge}
-            onNewChat={() => startNewChat(activeProject.id)}
-            onOpenConversation={openConversation}
-            onOpenFile={setFileDetail}
-            onEdit={() => setProjectDialog({ open: true, project: activeProject })}
-            onArchive={archived => projectsCtl.archiveProject(activeProject.id, archived)}
-            onDelete={() => deleteProject(activeProject)}
-            onOpenMemory={openMemoryView}
-          />
+          <LazyView>
+            <ProjectView
+              project={activeProject}
+              conversations={chat.conversations}
+              memories={memoriesCtl.memories}
+              knowledge={knowledge}
+              onNewChat={() => startNewChat(activeProject.id)}
+              onOpenConversation={openConversation}
+              onOpenFile={setFileDetail}
+              onEdit={() => setProjectDialog({ open: true, project: activeProject })}
+              onArchive={archived => projectsCtl.archiveProject(activeProject.id, archived)}
+              onDelete={() => deleteProject(activeProject)}
+              onOpenMemory={openMemoryView}
+            />
+          </LazyView>
         )}
         {view.kind === 'project' && !activeProject && (
           <div className="flex-1 flex items-center justify-center text-sm text-fg-muted">This project no longer exists.</div>
@@ -463,6 +463,7 @@ function Shell() {
         </main>
       </div>
 
+      <LazyDialog open={settingsOpen}>
       <SettingsPanel
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
@@ -473,9 +474,11 @@ function Shell() {
         userEmail={user.email}
         onSignOut={handleSignOut}
       />
+      </LazyDialog>
 
-      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} />
+      <LazyDialog open={searchOpen}><SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} onOpenResult={openSearchResult} /></LazyDialog>
 
+      <LazyDialog open={liveFileDetail !== null}>
       <FileDetailDialog
         file={liveFileDetail}
         projects={projectsCtl.projects}
@@ -486,8 +489,10 @@ function Shell() {
         onOpenConversation={openConversationById}
         onOpenProject={openProjectById}
       />
+      </LazyDialog>
 
       {picker && (
+        <LazyDialog open>
         <FilePickerDialog
           open
           files={knowledge.files}
@@ -496,15 +501,19 @@ function Shell() {
           onConfirm={files => { picker.resolve(files); setPicker(null); }}
           onClose={() => { picker.resolve([]); setPicker(null); }}
         />
+        </LazyDialog>
       )}
 
+      <LazyDialog open={projectDialog.open}>
       <ProjectDialog
         open={projectDialog.open}
         initial={projectDialog.project}
         onSave={saveProject}
         onClose={() => setProjectDialog({ open: false, project: null })}
       />
+      </LazyDialog>
 
+      <LazyDialog open={rememberDraft !== null}>
       <MemoryEditor
         open={rememberDraft !== null}
         initial={null}
@@ -515,6 +524,7 @@ function Shell() {
         onSave={saveRemembered}
         onClose={() => setRememberDraft(null)}
       />
+      </LazyDialog>
 
       <ConfirmDialog
         open={pendingDelete !== null}
