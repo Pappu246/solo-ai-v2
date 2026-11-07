@@ -194,12 +194,12 @@ export function Sidebar({
         )}
         {status === 'error' && (
           <div className="px-2 py-4 text-center">
-            <p className="text-xs text-fg-muted">Couldn’t load your chats.</p>
-            <button type="button" onClick={onRetryLoad} className="mt-1.5 text-xs font-medium text-accent hover:underline">Retry</button>
+            <p className="text-xs text-fg-muted">{t('Couldn’t load your chats.')}</p>
+            <button type="button" onClick={onRetryLoad} className="mt-1.5 text-xs font-medium text-accent hover:underline">{t('Retry')}</button>
           </div>
         )}
         {status === 'ready' && conversations.length === 0 && (
-          <p className="px-2 py-6 text-xs text-fg-subtle text-center">No chats yet. Start one above.</p>
+          <p className="px-2 py-6 text-xs text-fg-subtle text-center">{t('No chats yet. Start one above.')}</p>
         )}
         {status === 'ready' && conversations.length > 0 && pinned.length + recent.length + archived.length === 0 && (
           <p className="px-2 py-6 text-xs text-fg-subtle text-center">No chats match “{query}”.</p>
@@ -351,6 +351,7 @@ function NavButton({ icon, active, onClick, children }: { icon: React.ReactNode;
 }
 
 function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin, onArchive, onDeleteRequest, projects = [], onMoveToProject, projectName }: ItemProps) {
+  const t = useT();
   const [menuOpen, setMenuOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -419,14 +420,14 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
         </IconButton>
         {menuOpen && (
           <div role="menu" className="absolute right-0 top-full mt-1 w-52 rounded-xl glass-menu border border-border float-shadow p-1 z-50 animate-scale-in">
-            <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>Rename</MenuItem>
+            <MenuItem icon={<Pencil className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); setDraft(c.title); setRenaming(true); }}>{t('Rename')}</MenuItem>
             {!c.archived && (
               <MenuItem icon={c.pinned ? <PinOff className="w-3.5 h-3.5" /> : <Pin className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onPin(c.id, !c.pinned); }}>
-                {c.pinned ? 'Unpin' : 'Pin'}
+                {c.pinned ? t('Unpin') : t('Pin')}
               </MenuItem>
             )}
             <MenuItem icon={c.archived ? <ArchiveRestore className="w-3.5 h-3.5" /> : <Archive className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onArchive(c.id, !c.archived); }}>
-              {c.archived ? 'Unarchive' : 'Archive'}
+              {c.archived ? t('Unarchive') : t('Archive')}
             </MenuItem>
             {onMoveToProject && (projects.length > 0 || c.project_id) && (
               <>
@@ -439,12 +440,12 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
                   className="w-full flex items-center gap-2.5 px-2.5 h-8 rounded-lg text-sm text-left text-fg hover:bg-surface-2 transition-colors"
                 >
                   <FolderInput className="w-3.5 h-3.5" />
-                  <span className="flex-1">Move to project</span>
+                  <span className="flex-1">{t('Move to project')}</span>
                   <ChevronRight className={cn('w-3 h-3 text-fg-subtle transition-transform', moveOpen && 'rotate-90')} />
                 </button>
                 {moveOpen && (
                   <div role="menu" aria-label="Choose a project" className="ml-3 pl-2 border-l border-border my-0.5 max-h-40 overflow-y-auto">
-                    {c.project_id && <MenuItem icon={<X className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onMoveToProject(c.id, null); }}>Remove from project</MenuItem>}
+                    {c.project_id && <MenuItem icon={<X className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onMoveToProject(c.id, null); }}>{t('Remove from project')}</MenuItem>}
                     {projects.filter(p => p.id !== c.project_id).map(p => (
                       <MenuItem key={p.id} icon={<FolderKanban className="w-3.5 h-3.5" />} onClick={() => { setMenuOpen(false); onMoveToProject(c.id, p.id); }}>{p.name}</MenuItem>
                     ))}
@@ -453,7 +454,7 @@ function ConversationItem({ conversation: c, activeId, onSelect, onRename, onPin
               </>
             )}
             <div className="my-1 border-t border-border" />
-            <MenuItem icon={<Trash2 className="w-3.5 h-3.5" />} danger onClick={() => { setMenuOpen(false); onDeleteRequest(c); }}>Delete</MenuItem>
+            <MenuItem icon={<Trash2 className="w-3.5 h-3.5" />} danger onClick={() => { setMenuOpen(false); onDeleteRequest(c); }}>{t('Delete')}</MenuItem>
           </div>
         )}
       </div>
