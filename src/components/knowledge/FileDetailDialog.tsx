@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useT } from '../../lib/i18n';
 import { Download, RefreshCw, Trash2, FolderKanban, MessageSquare, FileText } from 'lucide-react';
 import type { KnowledgeFile, Project, FileChunk } from '../../types';
 import { Dialog, Button, ConfirmDialog, Spinner } from '../ui';
@@ -195,9 +196,10 @@ export function FileDetailDialog({ file, projects, onClose, onDelete, onRetry, o
 }
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
+  const t = useT();
   return (
     <>
-      <dt className="text-fg-subtle whitespace-nowrap pt-0.5">{label}</dt>
+      <dt className="text-fg-subtle whitespace-nowrap pt-0.5">{t(label)}</dt>
       <dd className="text-fg min-w-0 wrap-break-word">{children}</dd>
     </>
   );

@@ -1,5 +1,6 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 export interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   /** Accessible name. Required — icon-only buttons must be labelled. */
@@ -28,6 +29,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
   },
   ref,
 ) {
+  const t = useT();
+  const name = t(label);
   const sizes = { sm: 'w-7 h-7', md: 'w-9 h-9', lg: 'w-11 h-11' };
 
   const tooltipPositions = {
@@ -41,8 +44,8 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     <button
       ref={ref}
       type={type}
-      aria-label={label}
-      title={showTooltip ? undefined : label}
+      aria-label={name}
+      title={showTooltip ? undefined : name}
       aria-pressed={active}
       className={cn(
         'group/tooltip relative inline-flex items-center justify-center rounded-lg transition-colors',
@@ -70,7 +73,7 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
             tooltipPositions[tooltipPosition],
           )}
         >
-          {label}
+          {name}
         </span>
       )}
     </button>

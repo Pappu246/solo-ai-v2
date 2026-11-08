@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Dialog } from './Dialog';
 import { Button } from './Button';
+import { useT } from '../../lib/i18n';
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -16,6 +17,7 @@ interface ConfirmDialogProps {
 export function ConfirmDialog({
   open, title, description, confirmLabel = 'Confirm', cancelLabel = 'Cancel', destructive, onConfirm, onCancel,
 }: ConfirmDialogProps) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
 
   const handleConfirm = async () => {
@@ -33,9 +35,9 @@ export function ConfirmDialog({
       size="sm"
       footer={
         <>
-          <Button variant="ghost" onClick={onCancel} disabled={busy}>{cancelLabel}</Button>
+          <Button variant="ghost" onClick={onCancel} disabled={busy}>{t(cancelLabel)}</Button>
           <Button variant={destructive ? 'danger' : 'primary'} onClick={handleConfirm} loading={busy} autoFocus>
-            {confirmLabel}
+            {t(confirmLabel)}
           </Button>
         </>
       }
