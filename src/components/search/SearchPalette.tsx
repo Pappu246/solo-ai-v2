@@ -5,6 +5,7 @@ import { useSearch } from '../../hooks/useSearch';
 import { SEARCH_KINDS, SEARCH_KIND_LABELS, SEARCH_MIN_CHARS, splitHighlights } from '../../lib/knowledge/search';
 import { Dialog, Kbd, Spinner, Button } from '../ui';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   open: boolean;
@@ -25,6 +26,7 @@ const ICONS: Record<SearchKind, typeof MessageSquare> = {
  * Results are grouped by kind, keyboard navigable, and each group can load more.
  */
 export function SearchPalette({ open, onClose, onOpenResult }: Props) {
+  const t = useT();
   const [query, setQuery] = useState('');
   const [active, setActive] = useState(0);
   const search = useSearch(query, open);
@@ -62,7 +64,7 @@ export function SearchPalette({ open, onClose, onOpenResult }: Props) {
             type="search"
             value={query}
             onChange={e => setQuery(e.target.value)}
-            placeholder="Search chats, messages, projects, files and memories"
+            placeholder={t('Search chats, messages, projects, files and memories')}
             aria-label="Search everything"
             role="combobox"
             aria-expanded={ordered.length > 0}

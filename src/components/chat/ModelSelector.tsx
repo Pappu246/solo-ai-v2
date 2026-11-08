@@ -3,6 +3,7 @@ import { ChevronDown, Check, Sparkles } from 'lucide-react';
 import type { AIModel, ModelCategory } from '../../types';
 import { MODEL_CATEGORIES } from '../../types';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   models: AIModel[];
@@ -17,6 +18,7 @@ interface Props {
  * list is available for advanced users behind a single quiet control.
  */
 export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const selectableModels = models.filter(m => m.available !== false);
@@ -45,7 +47,7 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
         className="inline-flex items-center gap-1.5 h-8 pl-2.5 pr-2 rounded-lg text-sm font-medium text-fg-muted hover:text-fg hover:bg-surface-2 transition-colors disabled:opacity-50"
       >
         {!current && <Sparkles className="w-3.5 h-3.5 text-accent" />}
-        <span className="max-w-[140px] truncate">{current ? current.name : 'Auto'}</span>
+        <span className="max-w-[140px] truncate">{current ? current.name : t('Auto')}</span>
         <ChevronDown className={cn('w-3.5 h-3.5 transition-transform', open && 'rotate-180')} />
       </button>
 
@@ -59,7 +61,7 @@ export function ModelSelector({ models, selected, onSelect, disabled }: Props) {
             selected={!selected}
             onClick={() => { onSelect(null); setOpen(false); }}
             title="Auto"
-            subtitle="Solo picks the best model for each message"
+            subtitle={t('Solo picks the best model for each message')}
             icon={<Sparkles className="w-3.5 h-3.5 text-accent" />}
           />
           {selectableModels.length === 0 && (

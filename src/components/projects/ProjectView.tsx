@@ -8,6 +8,7 @@ import { UploadDropzone } from '../knowledge/UploadDropzone';
 import { Button, ConfirmDialog, IconButton, useToast } from '../ui';
 import { toFriendlyError } from '../../lib/errors';
 import { cn } from '../../lib/cn';
+import { useT } from '../../lib/i18n';
 
 interface Props {
   project: Project;
@@ -183,11 +184,12 @@ export function ProjectView({ project, conversations, memories, knowledge, onNew
 }
 
 function EmptyPanel({ icon: Icon, title, description, action }: { icon: typeof MessageSquare; title: string; description?: string; action?: React.ReactNode }) {
+  const tr = useT();
   return (
     <div className="rounded-xl glass border border-border flex flex-col items-center gap-2 py-10 px-6 text-center">
       <Icon className="w-5 h-5 text-fg-subtle" aria-hidden />
-      <p className="text-sm text-fg">{title}</p>
-      {description && <p className="text-xs text-fg-muted max-w-sm">{description}</p>}
+      <p className="text-sm text-fg">{tr(title)}</p>
+      {description && <p className="text-xs text-fg-muted max-w-sm">{tr(description)}</p>}
       {action && <div className="mt-1">{action}</div>}
     </div>
   );
