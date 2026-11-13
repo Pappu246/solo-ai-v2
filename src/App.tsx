@@ -24,6 +24,8 @@ import { MessageList } from './components/chat/MessageList';
 import { EmptyState } from './components/chat/EmptyState';
 import { Composer as ComposerBase, type ComposerHandle, type KnowledgeUploader } from './components/chat/Composer';
 import { conversationToMarkdown, exportFilename, downloadText } from './lib/exportChat';
+import { printConversation } from './lib/exportPdf';
+import { useCleanSelectionCopy } from './hooks/useCleanSelectionCopy';
 import { translate } from './lib/i18n';
 import type { Route } from './lib/routes';
 import { useUrlRoute } from './hooks/useUrlRoute';
@@ -281,6 +283,12 @@ function Shell() {
     const title = chat.activeConversation?.title ?? null;
     downloadText(exportFilename(title), conversationToMarkdown(title, chat.messages));
   }, [chat.activeConversation, chat.messages]);
+  const exportActiveChatPdf = useCallback(() => {
+    const title = chat.activeConversation?.title ?? null;
+    printConversation(title, chat.messages, settings.language).catch(() => {
+      toast({ title: translate('Could not open the print dialog. Try again or download Markdown.'), tone: 'error' });
+    });
+  }, [chat.activeConversation, chat.messages, settings.language, toast]);
   const openSettingsPanel = useCallback(() => setSettingsOpen(true), []);
   const closeMobileSidebar = useCallback(() => setMobileSidebarOpen(false), []);
   const collapseSidebar = useCallback(() => toggleSidebar(true), [toggleSidebar]);
@@ -311,6 +319,7 @@ function Shell() {
   // called before any early return so the hook order never changes.
   const online = useOnlineStatus();
   useEffect(() => { prefetchLazyViews(); }, []);
+  useCleanSelectionCopy();
   const access = useAccess(user);
 
   if (authLoading) {
@@ -381,6 +390,7 @@ function Shell() {
           onOpenMobileSidebar={openMobileSidebar}
           disabled={chat.isGenerating}
           onExport={view.kind === 'chat' && chat.messages.length > 0 ? exportActiveChat : undefined}
+          onExportPdf={view.kind === 'chat' && chat.messages.length > 0 ? exportActiveChatPdf : undefined}
         />
 
         {!online && (

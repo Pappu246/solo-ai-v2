@@ -2,6 +2,7 @@ import { memo, useState, useCallback, useEffect, useRef } from 'react';
 import { Copy, Check, RefreshCw, Pencil, Volume2, Square, FileText, Image as ImageIcon, Brain, Globe } from 'lucide-react';
 import type { Message as MessageType, Attachment, KnowledgeSource, ImageSearchImage, WebSearchSource } from '../../types';
 import { Markdown } from './Markdown';
+import { copyRich, htmlForClipboard } from '../../lib/clipboard';
 import { IconButton, Button } from '../ui';
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
@@ -65,7 +66,7 @@ export const Message = memo(function Message({
       <div className="flex items-start">
         <div className="min-w-0 flex-1">
           <div className="py-1">
-            <div className="text-fg"><Markdown content={message.content} /></div>
+            <div className="text-fg" data-copy-root><Markdown content={message.content} /></div>
             {message.images && message.images.length > 0 && <ImageSearchGallery images={message.images} />}
           </div>
           {message.sources && message.sources.length > 0 && <div className="mt-1.5"><SourceList sources={message.sources} onOpen={onOpenSource} /></div>}
@@ -75,7 +76,7 @@ export const Message = memo(function Message({
       <div className="flex items-center gap-1">
         {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
         <span className={cn('flex items-center gap-0.5 transition-opacity', isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
-          <CopyButton text={message.content} />
+          <CopyButton text={message.content} rich />
           {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
           {onRegenerate && isLast && <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}><RefreshCw className="w-3.5 h-3.5" /></IconButton>}
           {onRemember && <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}><Brain className="w-3.5 h-3.5" /></IconButton>}
@@ -133,11 +134,14 @@ function ImageSearchGallery({ images }: { images: ImageSearchImage[] }) {
   );
 }
 
-function CopyButton({ text }: { text: string }) {
+function CopyButton({ text, rich }: { text: string; rich?: boolean }) {
   const [copied, setCopied] = useState(false);
-  const copy = useCallback(async () => {
-    try { await navigator.clipboard.writeText(text); setCopied(true); window.setTimeout(() => setCopied(false), 1800); } catch { /* clipboard unavailable */ }
-  }, [text]);
+  const copy = useCallback(async (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Assistant replies are copied as formatted HTML plus Markdown; user messages as plain text.
+    const body = rich ? e.currentTarget.closest('[data-role="assistant"]')?.querySelector<HTMLElement>('[data-copy-root]') : null;
+    const ok = await copyRich(text, body ? htmlForClipboard(body) : null);
+    if (ok) { setCopied(true); window.setTimeout(() => setCopied(false), 1800); }
+  }, [text, rich]);
   return <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}</IconButton>;
 }
 
