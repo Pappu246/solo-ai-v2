@@ -28,7 +28,7 @@ export function ExportMenu({ onMarkdown, onPdf }: Props) {
 
   return (
     <div ref={root} className="relative">
-      <IconButton label="Export chat" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)} tooltipPosition="bottom"><Download className="w-4 h-4" /></IconButton>
+      <IconButton label="Export chat" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(o => !o)} showTooltip={!open} tooltipPosition="bottom"><Download className="w-4 h-4" /></IconButton>
       {open && (
         <div role="menu" aria-label={t('Export chat')} className="absolute right-0 top-full mt-1.5 z-40 w-56 p-1 rounded-xl border border-border bg-surface shadow-lg">
           <button type="button" role="menuitem" className={item} onClick={pick(onPdf)}><FileType2 className="w-4 h-4 text-fg-muted" aria-hidden="true" />{t('Save as PDF')}</button>

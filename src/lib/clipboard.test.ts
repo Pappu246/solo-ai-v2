@@ -11,10 +11,11 @@ describe('htmlForClipboard', () => {
   it('keeps structure, inlines table/code styling and drops app classes', () => {
     const out = htmlForClipboard(el('<h2 class="x">Title</h2><table class="t"><thead><tr><th class="a">A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table><p>Use <code class="c">npm</code> <strong>now</strong></p>'));
     expect(out).toContain('<h2>Title</h2>');
-    expect(out).toMatch(/<table style="[^"]*border-collapse:collapse/);
+    expect(out).toMatch(/<table style="[^"]*border-collapse:collapse;width:100%/);
     expect(out).toMatch(/<th style="[^"]*border:1px solid/);
     expect(out).toMatch(/<td style="[^"]*border:1px solid/);
     expect(out).toContain('<strong>now</strong>');
+    expect(out).toMatch(/<table[^>]*width="100%"/);
     expect(out).not.toMatch(/class=/);
   });
 

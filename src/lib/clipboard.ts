@@ -7,7 +7,7 @@
 const ALLOWED_ATTRS = new Set(['href', 'src', 'alt', 'colspan', 'rowspan', 'start']);
 
 const INLINE_STYLES: Record<string, string> = {
-  table: 'border-collapse:collapse;margin:8px 0;',
+  table: 'border-collapse:collapse;width:100%;margin:8px 0;',
   th: 'border:1px solid #bbb;padding:4px 8px;background:#f2f2f2;font-weight:600;text-align:left;',
   td: 'border:1px solid #bbb;padding:4px 8px;',
   pre: 'background:#f6f8fa;border:1px solid #ddd;padding:10px;font-family:Consolas,Menlo,monospace;font-size:90%;white-space:pre-wrap;',
@@ -47,6 +47,8 @@ export function htmlForClipboard(root: HTMLElement): string {
     const tag = el.tagName.toLowerCase();
     const style = tag === 'code' && !el.closest('pre') ? INLINE_CODE_STYLE : INLINE_STYLES[tag];
     if (style) el.setAttribute('style', style);
+    // Word-style importers honour the legacy attribute, not the CSS width.
+    if (tag === 'table') el.setAttribute('width', '100%');
   }
   return clone.innerHTML;
 }
