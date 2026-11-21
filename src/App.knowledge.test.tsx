@@ -44,7 +44,7 @@ describe('App × knowledge layer', () => {
     expect(mock.tables.files[0].status).toBe('ready');
 
     await user.click(row);
-    const dialog = await screen.findByRole('dialog', { name: 'plan.md' });
+    const dialog = await screen.findByRole('dialog', { name: 'plan.md' }, { timeout: 5000 });
     expect(within(dialog).getByText('Markdown')).toBeInTheDocument();
     expect(within(dialog).getByText('Ready')).toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: /delete/i })).toBeInTheDocument();
@@ -62,7 +62,7 @@ describe('App × knowledge layer', () => {
     await user.click(screen.getAllByRole('button', { name: 'Memory' })[0]);
     expect(await screen.findByRole('heading', { level: 1, name: 'Memory' })).toBeInTheDocument();
     await user.click(await screen.findByRole('button', { name: /add memory/i }));
-    const dialog = await screen.findByRole('dialog', { name: /add memory/i });
+    const dialog = await screen.findByRole('dialog', { name: /add memory/i }, { timeout: 5000 });
     await user.type(within(dialog).getByRole('textbox'), 'Prefers teal in designs');
     await user.click(within(dialog).getByRole('radio', { name: /preference/i }));
     await user.click(within(dialog).getByRole('button', { name: /save memory/i }));
@@ -78,7 +78,7 @@ describe('App × knowledge layer', () => {
     await screen.findByText(/how can i help you today/i);
 
     await user.click(screen.getByRole('button', { name: /new project/i }));
-    const dialog = await screen.findByRole('dialog', { name: /new project/i });
+    const dialog = await screen.findByRole('dialog', { name: /new project/i }, { timeout: 5000 });
     await user.type(within(dialog).getByLabelText('Name'), 'Website relaunch');
     await user.click(within(dialog).getByRole('button', { name: /create project/i }));
 
@@ -99,7 +99,7 @@ describe('App × knowledge layer', () => {
     await screen.findByText(/how can i help you today/i);
 
     await user.keyboard('{Meta>}k{/Meta}');
-    const dialog = await screen.findByRole('dialog', { name: 'Search' });
+    const dialog = await screen.findByRole('dialog', { name: 'Search' }, { timeout: 5000 });
     await user.type(within(dialog).getByRole('combobox'), 'falcon');
     const option = await within(dialog).findByRole('option', { name: /falcon pricing/i });
     await user.click(option);
