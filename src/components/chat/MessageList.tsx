@@ -20,6 +20,7 @@ interface Props {
   showModelBadge: boolean;
   ttsEnabled: boolean;
   ttsRate: number;
+  voiceLanguage?: string;
   /** First letter of the signed-in user's name/email, for the user avatar. */
   userInitial?: string;
   onRegenerate: () => void;
@@ -34,7 +35,7 @@ const NEAR_BOTTOM_PX = 120;
 
 export function MessageList({
   messages, loading, isGenerating, streamingContent, streamingModel, error, canRetry,
-  showModelBadge, ttsEnabled, ttsRate, userInitial, onRegenerate, onEdit, onRetry, onDismissError, onRemember, onOpenSource,
+  showModelBadge, ttsEnabled, ttsRate, voiceLanguage, userInitial, onRegenerate, onEdit, onRetry, onDismissError, onRemember, onOpenSource,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
@@ -83,6 +84,7 @@ export function MessageList({
                 showModelBadge={showModelBadge}
                 ttsEnabled={ttsEnabled}
                 ttsRate={ttsRate}
+                voiceLanguage={voiceLanguage}
                 userInitial={userInitial}
                 onRegenerate={m.role === 'assistant' ? onRegenerate : undefined}
                 onEdit={m.role === 'user' ? onEdit : undefined}

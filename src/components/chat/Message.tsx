@@ -5,6 +5,7 @@ import { Markdown } from './Markdown';
 import { copyRich, htmlForClipboard } from '../../lib/clipboard';
 import { IconButton, Button } from '../ui';
 import { formatMessageTime, formatMessageTimeFull } from '../../lib/chat/grouping';
+import { browserLanguage, detectLanguage } from '../../lib/languages';
 import { speak, stop as stopSpeaking, isSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
 import { safeHref } from '../../lib/url';
@@ -17,6 +18,7 @@ interface MessageProps {
   showModelBadge?: boolean;
   ttsEnabled?: boolean;
   ttsRate?: number;
+  voiceLanguage?: string;
   isFirstInGroup: boolean;
   userInitial?: string;
   onRegenerate?: () => void;
@@ -26,7 +28,7 @@ interface MessageProps {
 }
 
 export const Message = memo(function Message({
-  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1,
+  message, isLast, disabled, showModelBadge = true, ttsEnabled = true, ttsRate = 1, voiceLanguage = 'auto',
   isFirstInGroup, onRegenerate, onEdit, onRemember, onOpenSource,
 }: MessageProps) {
   const isUser = message.role === 'user';
@@ -77,7 +79,7 @@ export const Message = memo(function Message({
         {isFirstInGroup && <time dateTime={formatMessageTimeFull(message.created_at)} title={formatMessageTimeFull(message.created_at)} className="text-[10px] tabular-nums text-fg-subtle mr-0.5">{formatMessageTime(message.created_at)}</time>}
         <span className={cn('flex items-center gap-0.5 transition-opacity', isLast ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
           <CopyButton text={message.content} rich />
-          {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} />}
+          {ttsEnabled && <SpeakButton text={message.content} rate={ttsRate} language={voiceLanguage} />}
           {onRegenerate && isLast && <IconButton label="Regenerate response" size="sm" disabled={disabled} onClick={onRegenerate}><RefreshCw className="w-3.5 h-3.5" /></IconButton>}
           {onRemember && <IconButton label="Remember this" size="sm" disabled={disabled} onClick={() => onRemember(message.content)}><Brain className="w-3.5 h-3.5" /></IconButton>}
           {showModelBadge && message.model && <span className="ml-1.5 text-[11px] text-fg-subtle truncate" title={`Answered by ${message.model_name || message.model}`}>{message.model_name || message.model}</span>}
@@ -145,15 +147,15 @@ function CopyButton({ text, rich }: { text: string; rich?: boolean }) {
   return <IconButton label={copied ? 'Copied' : 'Copy'} size="sm" onClick={copy}>{copied ? <Check className="w-3.5 h-3.5 text-success" /> : <Copy className="w-3.5 h-3.5" />}</IconButton>;
 }
 
-function SpeakButton({ text, rate }: { text: string; rate: number }) {
+function SpeakButton({ text, rate, language }: { text: string; rate: number; language: string }) {
   const [speaking, setSpeaking] = useState(false);
   const timer = useRef<number | null>(null);
   useEffect(() => () => { if (timer.current) window.clearInterval(timer.current); }, []);
   const toggle = useCallback(() => {
     if (speaking) { stopSpeaking(); setSpeaking(false); if (timer.current) window.clearInterval(timer.current); return; }
-    speak(text, rate); setSpeaking(true);
+    speak(text, rate, 1, { lang: detectLanguage(text, language === 'auto' ? browserLanguage() : language) }); setSpeaking(true);
     timer.current = window.setInterval(() => { if (!isSpeaking()) { setSpeaking(false); if (timer.current) window.clearInterval(timer.current); } }, 400);
-  }, [speaking, text, rate]);
+  }, [speaking, text, rate, language]);
   if (typeof window === 'undefined' || !('speechSynthesis' in window)) return null;
   return <IconButton label={speaking ? 'Stop reading' : 'Read aloud'} size="sm" active={speaking} onClick={toggle}>{speaking ? <Square className="w-3.5 h-3.5" /> : <Volume2 className="w-3.5 h-3.5" />}</IconButton>;
 }

@@ -24,7 +24,7 @@ import { FixedWindowRateLimiter } from "../shared/fixed_window_rate_limit.ts";
 import { corsHeaders } from "../shared/cors.ts";
 import { accessDeniedMessage, type QueryClient, resolveAccess, storeFromClient } from "../shared/access.ts";
 import { buildModelContext } from "./context.ts";
-import { contextPrompt, SYSTEM_PROMPT } from "./context-prompt.ts";
+import { contextPrompt, languagePrompt, SYSTEM_PROMPT } from "./context-prompt.ts";
 import { parseContext, parseImages, parseMessages } from "./validation.ts";
 import { executeImageSearch } from "./image-search-exec.ts";
 import { decideImageSearch } from "../image-search/decision.ts";
@@ -178,7 +178,7 @@ Deno.serve(async (req) => {
       return fail(req, "images_unsupported", userMessage("images_unsupported"), 400, id);
     }
     const bounded = buildModelContext(
-      [{ role: "system", content: SYSTEM_PROMPT + contextPrompt(ctx) }, ...messages],
+      [{ role: "system", content: SYSTEM_PROMPT + languagePrompt(body?.reply_language) + contextPrompt(ctx) }, ...messages],
       model,
     );
     log(id, "context_built", {

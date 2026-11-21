@@ -2,6 +2,11 @@ import type { Ctx } from "./validation.ts";
 
 export const SYSTEM_PROMPT =
   "You are Solo AI, a helpful, precise assistant inside the Solo AI workspace. Answer directly and concisely. Use Markdown. If unsure, say so. Never invent citations, URLs, or file contents. Reply in the user's language.";
+/** Preferred reply language chosen in Settings; ignored unless it is a plain language name. */
+export function languagePrompt(name: unknown): string {
+  if (typeof name !== "string" || !/^[A-Za-z][A-Za-z ()-]{1,29}$/.test(name)) return "";
+  return ` The user's preferred language is ${name}: reply in ${name} unless they clearly write in, or ask for, another language.`;
+}
 export function contextPrompt(c: Ctx | null) {
   if (!c) return "";
   const p: string[] = [];

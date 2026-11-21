@@ -35,6 +35,7 @@ import {
   ProjectView, ProjectDialog, LazyDialog, LazyView,
 } from './lazyViews';
 import { prefetchLazyViews } from './lazyLoaders';
+import { LiveVoice } from './components/chat/LiveVoice';
 import { ConfirmDialog, Logo, ToastProvider, useToast } from './components/ui';
 
 const SIDEBAR_KEY = 'solo-ai-sidebar-collapsed';
@@ -130,6 +131,7 @@ function Shell() {
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => localStorage.getItem(SIDEBAR_KEY) === '1');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [liveVoice, setLiveVoice] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<Conversation | null>(null);
   const [fileDetail, setFileDetail] = useState<KnowledgeFile | null>(null);
@@ -445,6 +447,7 @@ function Shell() {
                 showModelBadge={settings.show_model_badges}
                 ttsEnabled={settings.tts_enabled}
                 ttsRate={settings.tts_rate}
+                voiceLanguage={settings.voice_language}
                 onRegenerate={chat.regenerate}
                 onEdit={chat.editMessage}
                 onRetry={chat.retry}
@@ -466,12 +469,25 @@ function Shell() {
               sendOnEnter={settings.send_on_enter}
               knowledge={knowledgeUploader}
               offline={!online}
+              voiceLanguage={settings.voice_language}
+              onLiveVoice={() => setLiveVoice(true)}
               autoFocus
             />
           </>
         )}
         </main>
       </div>
+
+      <LiveVoice
+        open={liveVoice}
+        onClose={() => setLiveVoice(false)}
+        voiceLanguage={settings.voice_language}
+        rate={settings.tts_rate}
+        messages={chat.messages}
+        isGenerating={chat.isGenerating}
+        onSend={text => chatSend(text)}
+        onStopGeneration={chat.stopGeneration}
+      />
 
       <LazyDialog open={settingsOpen}>
       <SettingsPanel

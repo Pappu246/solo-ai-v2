@@ -6,6 +6,7 @@ import { Dialog, Toggle, Button } from '../ui';
 import { speak, stop as stopSpeaking } from '../../lib/tts';
 import { cn } from '../../lib/cn';
 import { LANGUAGES, useT, type Language } from '../../lib/i18n';
+import { VOICE_LANGUAGES, previewText } from '../../lib/languages';
 import { FeedbackCard } from './FeedbackCard';
 import { fetchUsageToday, type UsageToday } from '../../lib/usage';
 
@@ -137,6 +138,17 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
           {section === 'voice' && (
             <Group title="Voice">
               {!ttsSupported && <p className="text-sm text-fg-muted">{t('Your browser doesn’t support speech output.')}</p>}
+              <Field label="Language" hint="Used for voice input, reading aloud and replies. Auto listens in the language you spoke last and answers in the language you write or speak. Pick a language for the best accuracy.">
+                <select
+                  value={settings.voice_language}
+                  onChange={e => onUpdate({ voice_language: e.target.value })}
+                  aria-label="Voice language"
+                  className="w-full h-9 px-3 rounded-lg bg-surface-2 border border-border text-sm text-fg outline-hidden focus:border-border-strong"
+                >
+                  <option value="auto">{t('Auto (detect my language)')}</option>
+                  {VOICE_LANGUAGES.map(l => <option key={l.code} value={l.code}>{l.native}{l.native !== l.name ? ` · ${l.name}` : ''}</option>)}
+                </select>
+              </Field>
               <Toggle label="Read aloud button" description="Show a “Read aloud” action on responses." checked={settings.tts_enabled} onChange={v => onUpdate({ tts_enabled: v })} disabled={!ttsSupported} />
               <Field label={`Speaking rate · ${settings.tts_rate.toFixed(1)}×`}>
                 <div className="flex items-center gap-3">
@@ -148,7 +160,7 @@ export function SettingsPanel({ open, onClose, settings, onUpdate, onReset, mode
                     aria-label="Speaking rate"
                     className="flex-1 accent-[rgb(var(--accent))]"
                   />
-                  <Button size="sm" variant="secondary" disabled={!ttsSupported || !settings.tts_enabled} onClick={() => { stopSpeaking(); speak('This is how Solo AI sounds when reading aloud.', settings.tts_rate); }}>
+                  <Button size="sm" variant="secondary" disabled={!ttsSupported || !settings.tts_enabled} onClick={() => { stopSpeaking(); speak(previewText(settings.voice_language), settings.tts_rate, 1, { lang: settings.voice_language === 'auto' ? undefined : settings.voice_language }); }}>
                     Preview
                   </Button>
                 </div>
