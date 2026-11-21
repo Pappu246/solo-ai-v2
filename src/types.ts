@@ -253,6 +253,8 @@ export interface UserSettings {
   // Voice
   tts_enabled: boolean;
   tts_rate: number;
+  /** 'auto' or a BCP-47 code: language for voice input, read-aloud and replies. */
+  voice_language: string;
 }
 
 export const DEFAULT_SETTINGS: UserSettings = {
@@ -267,6 +269,7 @@ export const DEFAULT_SETTINGS: UserSettings = {
   preferred_model: null,
   tts_enabled: true,
   tts_rate: 1,
+  voice_language: 'auto',
 };
 
 export const ACCENT_OPTIONS: { value: AccentColor; label: string }[] = [

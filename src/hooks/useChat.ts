@@ -1,3 +1,4 @@
+import { languageName } from '../lib/languages';
 import { useState, useCallback, useRef, useEffect } from 'react';
 import type { User } from '@supabase/supabase-js';
 import type { Conversation, Message, Attachment, AIModel, ModelInfo, UserSettings, ChatContext, KnowledgeSource } from '../types';
@@ -38,7 +39,7 @@ export interface ResolvedContext {
 export type ContextResolver = (input: { conversation: Conversation; query: string; attachments?: Attachment[] }) => Promise<ResolvedContext>;
 
 interface Options {
-  settings: Pick<UserSettings, 'auto_title' | 'preferred_model'>;
+  settings: Pick<UserSettings, 'auto_title' | 'preferred_model'> & Partial<Pick<UserSettings, 'voice_language'>>;
   resolveContext?: ContextResolver;
   onConversationCreated?: (conversation: Conversation) => void;
   /** Web search was on, but no sources could be fetched, so the answer is not grounded in live results. */
@@ -264,7 +265,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
         } catch { /* answer without extra context */ }
       }
       if (controller.signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, context, research: opts?.research, agent: opts?.agent, signal: controller.signal });
+      const handle = await streamChat({ messages: wire, model: selectedModel, attachments, context, research: opts?.research, agent: opts?.agent, replyLanguage: languageName(settings.voice_language ?? 'auto') ?? undefined, signal: controller.signal });
       model = handle.model;
       setStreamingModel(model);
       for await (const delta of handle.deltas) {
@@ -315,7 +316,7 @@ export function useChat(user: User | null, { settings, resolveContext, onConvers
     setStreamingContent('');
     setStreamingModel(null);
     setIsGenerating(false);
-  }, [user, selectedModel, setMessagesSync, loadModels]);
+  }, [user, selectedModel, setMessagesSync, loadModels, settings.voice_language]);
 
   const sendMessage = useCallback(async (content: string, attachments?: Attachment[], opts?: { research?: boolean; agent?: boolean }) => {
     const text = content.trim();

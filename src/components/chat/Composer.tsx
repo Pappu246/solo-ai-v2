@@ -1,11 +1,12 @@
 import { useT } from '../../lib/i18n';
 import { useState, useRef, useEffect, useCallback, forwardRef, useImperativeHandle } from 'react';
-import { ArrowUp, Square, Paperclip, Plus, Check, X, FileText, Image as ImageIcon, Mic, MicOff, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
+import { ArrowUp, Square, Paperclip, Plus, Check, X, FileText, Image as ImageIcon, Mic, MicOff, AudioLines, Library, AlertCircle, Loader2, CheckCircle2, RotateCcw, Globe, Wrench } from 'lucide-react';
 import type { Attachment, KnowledgeFile } from '../../types';
 import { processFile, formatFileSize, ACCEPTED_TYPES, MAX_FILE_SIZE } from '../../lib/files';
 import { detectFileType, KNOWLEDGE_ACCEPT } from '../../lib/knowledge/fileTypes';
 import { attachmentFromFile } from '../../lib/knowledge/attachments';
 import { useSpeechInput } from '../../hooks/useSpeechInput';
+import { AUTO_LANGUAGE, detectLanguage, rememberVoiceLanguage, resolveListenLanguage } from '../../lib/languages';
 import { IconButton } from '../ui';
 import { cn } from '../../lib/cn';
 
@@ -38,12 +39,16 @@ interface Props {
   knowledge?: KnowledgeUploader;
   /** Phase 11: the browser reports no connection — sending would fail. */
   offline?: boolean;
+  /** Settings voice language ('auto' or a BCP-47 code). */
+  voiceLanguage?: string;
+  /** Opens the hands-free live voice mode. */
+  onLiveVoice?: () => void;
 }
 
 const MAX_ATTACHMENTS = 6;
 
 export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
-  { onSend, onStop, isGenerating, sendOnEnter, disabled, autoFocus, knowledge, offline }, ref,
+  { onSend, onStop, isGenerating, sendOnEnter, disabled, autoFocus, knowledge, offline, voiceLanguage = AUTO_LANGUAGE, onLiveVoice }, ref,
 ) {
   const t = useT();
   const [plusOpen, setPlusOpen] = useState(false);
@@ -75,7 +80,24 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
   /** Per-chip retry action, chosen when the file fails (re-upload vs re-process). */
   const retryPlans = useRef(new Map<string, () => Promise<unknown>>());
 
-  const speech = useSpeechInput(transcript => setValue(v => (v ? `${v} ${transcript}` : transcript)));
+  const [interim, setInterim] = useState('');
+  const [listenLang, setListenLang] = useState(() => resolveListenLanguage(voiceLanguage));
+  useEffect(() => { setListenLang(resolveListenLanguage(voiceLanguage)); }, [voiceLanguage]);
+  const speech = useSpeechInput({
+    lang: listenLang,
+    onInterim: setInterim,
+    onDenied: () => setFileError(t('Microphone is blocked. Allow it in your browser’s address bar and try again.')),
+    onFinal: transcript => {
+      setInterim('');
+      setValue(v => (v ? `${v} ${transcript}` : transcript));
+      if (voiceLanguage === AUTO_LANGUAGE) {
+        const heard = detectLanguage(transcript, listenLang);
+        if (heard !== listenLang) { setListenLang(heard); rememberVoiceLanguage(heard); speechRestart.current(); }
+      }
+    },
+  });
+  const speechRestart = useRef(speech.restart);
+  speechRestart.current = speech.restart;
 
   useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus() }), []);
 
@@ -348,6 +370,11 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
             </div>
 
             <div className="flex items-center gap-1">
+              {speech.supported && onLiveVoice && !value.trim() && !isGenerating && (
+                <IconButton label="Live voice conversation" size="sm" disabled={disabled} onClick={onLiveVoice} className="w-9 h-9">
+                  <AudioLines className="w-4 h-4" />
+                </IconButton>
+              )}
               {speech.supported && (
                 <IconButton
                   label={speech.listening ? 'Stop voice input' : 'Voice input'}
@@ -394,7 +421,7 @@ export const Composer = forwardRef<ComposerHandle, Props>(function Composer(
 
         <div className="min-h-5 mt-1.5 px-1 text-center text-[11px] text-fg-subtle">
           <span className={cn(fileError && 'text-danger')} aria-live="polite">
-            {fileError || (speech.listening ? t('Listening…') : processing ? t('Reading files…') : pendingKnowledge ? t('Preparing files…') : '')}
+            {fileError || (speech.listening ? (interim ? `${t('Listening…')} ${interim}` : t('Listening…')) : processing ? t('Reading files…') : pendingKnowledge ? t('Preparing files…') : '')}
           </span>
         </div>
       </div>

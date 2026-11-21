@@ -1,3 +1,4 @@
+import { isVoiceLanguage } from './languages';
 import type { UserSettings, Theme, AccentColor, FontSize } from '../types';
 import { DEFAULT_SETTINGS, ACCENT_OPTIONS } from '../types';
 import { setLanguage } from './i18n';
@@ -32,6 +33,7 @@ export function normalizeSettings(raw: unknown): UserSettings {
     suggest_memories: bool(r.suggest_memories, DEFAULT_SETTINGS.suggest_memories),
     preferred_model: typeof r.preferred_model === 'string' && r.preferred_model ? r.preferred_model : legacyModel,
     tts_enabled: bool(r.tts_enabled, DEFAULT_SETTINGS.tts_enabled),
+    voice_language: isVoiceLanguage(r.voice_language) ? r.voice_language : DEFAULT_SETTINGS.voice_language,
     tts_rate: typeof r.tts_rate === 'number' && r.tts_rate >= 0.5 && r.tts_rate <= 2 ? r.tts_rate : DEFAULT_SETTINGS.tts_rate,
   };
 }

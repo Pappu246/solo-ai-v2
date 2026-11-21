@@ -40,6 +40,8 @@ export interface StreamRequest {
   research?: boolean;
   /** Phase 7: opt in to the bounded agent tool loop for this turn. */
   agent?: boolean;
+  /** English name of the language replies should be in (omit to follow the user). */
+  replyLanguage?: string;
   signal: AbortSignal;
 }
 
@@ -268,6 +270,7 @@ export async function streamChat(req: StreamRequest): Promise<StreamHandle> {
   if (images?.length) body.images = images;
   if (req.research) body.research = true;
   if (req.agent) body.agent = true;
+  if (req.replyLanguage) body.reply_language = req.replyLanguage;
   if (req.context) body.context = req.context;
 
   const res = await fetch(CHAT_FUNCTION_URL, {
