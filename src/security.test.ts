@@ -42,6 +42,8 @@ describe('security headers (vercel.json)', () => {
     expect(csp).toMatch(/frame-ancestors 'none'/);
     expect(csp).toMatch(/base-uri 'self'/);
     expect(csp).not.toMatch(/unsafe-eval/);
+    expect(/script-src ([^;]+)/.exec(csp)?.[1]).not.toMatch(/unsafe-inline/);
+    expect(readFileSync(join(root, 'index.html'), 'utf8')).not.toMatch(/<script(?![^>]*\bsrc=)[^>]*>/);
     const connect = /connect-src ([^;]+)/.exec(csp)?.[1] ?? '';
     expect(connect).not.toMatch(/(^|\s)\*(\s|$)|https:(\s|$)/);
   });
