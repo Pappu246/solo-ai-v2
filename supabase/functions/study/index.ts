@@ -1,14 +1,10 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { redactSecrets } from "../chat/providers.ts";
-import {
-  createUsageController,
-  limitsFromEnv,
-  type QueryClient,
-} from "../shared/usage.ts";
+import { createUsageController, limitsFromEnv } from "../shared/usage.ts";
 import { FixedWindowRateLimiter } from "../shared/fixed_window_rate_limit.ts";
 import { corsHeaders } from "../shared/cors.ts";
-import { accessDeniedMessage, resolveAccess, storeFromClient } from "../shared/access.ts";
+import { accessDeniedMessage, resolveAccess, storeFromClient, type QueryClient } from "../shared/access.ts";
 import {
   StudyFetchError,
   fetchTranscript,
