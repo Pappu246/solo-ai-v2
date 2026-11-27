@@ -9,6 +9,7 @@ export const loaders = {
   fileDetail: () => import('./components/knowledge/FileDetailDialog'),
   filePicker: () => import('./components/knowledge/FilePickerDialog'),
   files: () => import('./components/knowledge/FilesView'),
+  pdf: () => import('./components/documents/PdfTool'),
   memoryView: () => import('./components/memory/MemoryView'),
   memoryEditor: () => import('./components/memory/MemoryEditor'),
   project: () => import('./components/projects/ProjectView'),

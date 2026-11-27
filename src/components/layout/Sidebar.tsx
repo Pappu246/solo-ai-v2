@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   SquarePen, Search, Settings, Pin, PinOff, Pencil, Archive, ArchiveRestore, Trash2,
-  MoreHorizontal, X, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, FolderKanban, FileText, Brain, Plus, FolderInput,
+  MoreHorizontal, X, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, FolderKanban, FileText, FileDown, Brain, Plus, FolderInput,
 } from 'lucide-react';
 import type { Conversation, Project } from '../../types';
 import type { LoadStatus } from '../../hooks/useChat';
@@ -38,6 +38,7 @@ interface SidebarProps {
   onOpenProject?: (project: Project) => void;
   onNewProject?: () => void;
   onOpenFiles?: () => void;
+  onOpenPdf?: () => void;
   onOpenMemory?: () => void;
   /** Open the global search palette (⌘K). */
   onOpenSearch?: () => void;
@@ -45,12 +46,12 @@ interface SidebarProps {
   onMoveToProject?: (conversationId: string, projectId: string | null) => void;
 }
 
-export type SidebarView = { kind: 'chat' } | { kind: 'files' } | { kind: 'memory' } | { kind: 'project'; id: string };
+export type SidebarView = { kind: 'chat' } | { kind: 'files' } | { kind: 'pdf' } | { kind: 'memory' } | { kind: 'project'; id: string };
 
 export function Sidebar({
   conversations, status, activeId, onSelect, onNewChat, onRename, onPin, onArchive, onDeleteRequest,
   onOpenSettings, onRetryLoad, mobileOpen, onCloseMobile, collapsed, onCollapse, onExpand, userEmail,
-  projects = [], view = { kind: 'chat' }, onOpenProject, onNewProject, onOpenFiles, onOpenMemory, onOpenSearch, onMoveToProject,
+  projects = [], view = { kind: 'chat' }, onOpenProject, onNewProject, onOpenFiles, onOpenPdf, onOpenMemory, onOpenSearch, onMoveToProject,
 }: SidebarProps) {
   const t = useT();
   const [query, setQuery] = useState('');
@@ -137,10 +138,13 @@ export function Sidebar({
             <span className="hidden md:inline-flex items-center gap-0.5"><Kbd>{modKey}</Kbd><Kbd>K</Kbd></span>
           </button>
         )}
-        {(onOpenFiles || onOpenMemory) && (
+        {(onOpenFiles || onOpenPdf || onOpenMemory) && (
           <div className="pt-1">
             {onOpenFiles && (
               <NavButton icon={<FileText className="w-4 h-4" />} active={view.kind === 'files'} onClick={() => { onOpenFiles(); onCloseMobile(); }}>{t('Files')}</NavButton>
+            )}
+            {onOpenPdf && (
+              <NavButton icon={<FileDown className="w-4 h-4" />} active={view.kind === 'pdf'} onClick={() => { onOpenPdf(); onCloseMobile(); }}>{t('PDF')}</NavButton>
             )}
             {onOpenMemory && (
               <NavButton icon={<Brain className="w-4 h-4" />} active={view.kind === 'memory'} onClick={() => { onOpenMemory(); onCloseMobile(); }}>{t('Memory')}</NavButton>
@@ -274,6 +278,9 @@ export function Sidebar({
       )}
       {onOpenFiles && (
         <IconButton label="Files" active={view.kind === 'files'} onClick={onOpenFiles} size="lg"><FileText className="w-[18px] h-[18px]" /></IconButton>
+      )}
+      {onOpenPdf && (
+        <IconButton label="PDF" active={view.kind === 'pdf'} onClick={onOpenPdf} size="lg"><FileDown className="w-[18px] h-[18px]" /></IconButton>
       )}
       {onOpenMemory && (
         <IconButton label="Memory" active={view.kind === 'memory'} onClick={onOpenMemory} size="lg"><Brain className="w-[18px] h-[18px]" /></IconButton>

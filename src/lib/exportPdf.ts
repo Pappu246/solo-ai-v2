@@ -40,7 +40,7 @@ hr { border: 0; border-top: 1px solid #ccc; margin: 10pt 0; }
 .katex-display { margin: 8pt 0; overflow: hidden; }
 `;
 
-async function renderMarkdownToHtml(markdown: string): Promise<string> {
+export async function renderMarkdownToHtml(markdown: string): Promise<string> {
   // Only the server renderer and KaTeX are loaded on demand; the rest is already in the app bundle.
   const [{ renderToStaticMarkup }, { default: rehypeKatex }] = await Promise.all([import('react-dom/server'), import('rehype-katex')]);
   return renderToStaticMarkup(
