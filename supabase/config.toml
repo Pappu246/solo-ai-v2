@@ -1,6 +1,9 @@
 [functions.chat]
 verify_jwt = true
 
+[functions.study]
+verify_jwt = true
+
 [functions.image-search]
 verify_jwt = true
 
