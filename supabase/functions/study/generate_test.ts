@@ -134,12 +134,21 @@ Deno.test("generateStudyPack returns a pack from a working free model", async ()
   assertEquals(pack.flashcards.length, 1);
 });
 
+/** Extract the hostname so URL checks compare hosts, never loose substrings. */
+function hostOf(input: string): string {
+  try {
+    return new URL(input).hostname;
+  } catch {
+    return "";
+  }
+}
+
 Deno.test("generateStudyPack falls back to another free provider on failure", async () => {
   const calls: string[] = [];
   const fetchImpl: FetchLike = async (input) => {
     calls.push(input);
-    if (input.includes("groq.com")) return response("provider exploded", 503);
-    if (input.includes("openrouter.ai")) {
+    if (hostOf(input) === "api.groq.com") return response("provider exploded", 503);
+    if (hostOf(input) === "openrouter.ai") {
       return response(JSON.stringify({ choices: [{ message: { content: PACK_JSON } }] }));
     }
     return response("unexpected", 500);
@@ -152,8 +161,8 @@ Deno.test("generateStudyPack falls back to another free provider on failure", as
     truncated: false,
   });
   assertEquals(pack.title, "Quantum basics");
-  assert(calls.some((u) => u.includes("groq.com")), "groq was tried first");
-  assert(calls.some((u) => u.includes("openrouter.ai")), "openrouter was tried as fallback");
+  assert(calls.some((u) => hostOf(u) === "api.groq.com"), "groq was tried first");
+  assert(calls.some((u) => hostOf(u) === "openrouter.ai"), "openrouter was tried as fallback");
 });
 
 Deno.test("generateStudyPack errors when no provider key is configured", async () => {

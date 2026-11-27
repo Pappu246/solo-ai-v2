@@ -115,10 +115,20 @@ Deno.test("parseTimedTextXml returns empty for garbage", () => {
 
 // ── fetchTranscript ───────────────────────────────────────────────────────
 
+/** Extract the hostname so URL checks compare hosts, never loose substrings. */
+function hostOf(input: string): string {
+  try {
+    return new URL(input).hostname;
+  } catch {
+    return "";
+  }
+}
+
 Deno.test("fetchTranscript fetches the watch page then the timedtext URL", async () => {
   const fetchImpl: FetchLike = async (input) => {
-    if (input.includes("/watch?")) return response(WATCH_HTML);
-    if (input.includes("timedtext")) return response(XML);
+    const path = new URL(input).pathname;
+    if (hostOf(input) === "www.youtube.com" && path === "/watch") return response(WATCH_HTML);
+    if (hostOf(input) === "www.youtube.com" && path === "/api/timedtext") return response(XML);
     throw new Error(`unexpected url ${input}`);
   };
   const result = await fetchTranscript("dQw4w9WgXcQ", fetchImpl);
@@ -130,7 +140,8 @@ Deno.test("fetchTranscript trims long transcripts and flags truncated", async ()
   const many = Array.from({ length: 200 }, (_, i) =>
     `<text start="${i}" dur="1">word${i}</text>`).join("");
   const fetchImpl: FetchLike = async (input) => {
-    if (input.includes("/watch?")) return response(WATCH_HTML);
+    const path = new URL(input).pathname;
+    if (hostOf(input) === "www.youtube.com" && path === "/watch") return response(WATCH_HTML);
     return response(`<transcript>${many}</transcript>`);
   };
   const result = await fetchTranscript("dQw4w9WgXcQ", fetchImpl, 120);
