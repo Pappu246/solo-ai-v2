@@ -38,7 +38,7 @@ const WATCH_HTML = `<html><script>var ytInitialPlayerResponse = {"playabilitySta
 ]};</script></html>`;
 
 const XML = `<?xml version="1.0"?><transcript><text start="1.5" dur="2.5">Hello &amp; welcome</text>
-<text start="4.0" dur="3.0">to the video &#1997;<!-- x --></text>
+<text start="4.0" dur="3.0">to the video &#346;</text>
 <text start="7.0">Tail text</text></transcript>`;
 
 // ── parseVideoId ────────────────────────────────────────────────────────────

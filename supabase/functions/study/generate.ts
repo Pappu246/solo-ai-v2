@@ -240,7 +240,11 @@ export async function generateStudyPack(options: GenerateOptions): Promise<Study
     throw new StudyGenerationError('no_model', 'The study model is not available.');
   }
   const chain: ModelSpec[] = fallbackChain(primary, false, {
-    health: { isHealthy: () => true },
+    health: {
+      isHealthy: () => true,
+      recordSuccess: () => {},
+      recordFailure: () => {},
+    },
     isProviderConfigured: (provider) => Boolean(apiKeyFor(provider, env)),
   }).filter((m) => Boolean(apiKeyFor(m.provider, env)));
   if (!chain.length) {
@@ -265,6 +269,9 @@ export async function generateStudyPack(options: GenerateOptions): Promise<Study
       options.log?.('study_generation_ok', { model: model.id, chars: text.length });
       return pack;
     } catch (error) {
+      // A malformed response is a model problem, not a provider outage: report
+      // it precisely instead of burning the remaining fallbacks on it.
+      if (error instanceof StudyGenerationError && error.code === 'invalid_output') throw error;
       const detail = redactSecrets(error instanceof Error ? `${error.name}: ${error.message}` : String(error));
       errors.push(`${model.id}: ${detail.slice(0, 160)}`);
       options.log?.('study_generation_attempt_failed', { model: model.id, error: detail.slice(0, 300) });

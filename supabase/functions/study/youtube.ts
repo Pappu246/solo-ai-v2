@@ -17,16 +17,16 @@ export interface TranscriptSegment {
   text: string;
 }
 
-export type StudyFetchError =
-  | { code: 'invalid_url'; message: string }
-  | { code: 'video_unavailable'; message: string }
-  | { code: 'no_captions'; message: string }
-  | { code: 'transcript_unavailable'; message: string }
-  | { code: 'network'; message: string };
+export type StudyErrorCode =
+  | 'invalid_url'
+  | 'video_unavailable'
+  | 'no_captions'
+  | 'transcript_unavailable'
+  | 'network';
 
 export class StudyFetchError extends Error {
-  readonly code: StudyFetchError['code'];
-  constructor(error: StudyFetchError) {
+  readonly code: StudyErrorCode;
+  constructor(error: { code: StudyErrorCode; message: string }) {
     super(error.message);
     this.name = 'StudyFetchError';
     this.code = error.code;

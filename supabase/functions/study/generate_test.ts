@@ -139,7 +139,7 @@ Deno.test("generateStudyPack falls back to another free provider on failure", as
   const fetchImpl: FetchLike = async (input) => {
     calls.push(input);
     if (input.includes("groq.com")) return response("provider exploded", 503);
-    if (input.includes("openrouter.net")) {
+    if (input.includes("openrouter.ai")) {
       return response(JSON.stringify({ choices: [{ message: { content: PACK_JSON } }] }));
     }
     return response("unexpected", 500);
@@ -153,7 +153,7 @@ Deno.test("generateStudyPack falls back to another free provider on failure", as
   });
   assertEquals(pack.title, "Quantum basics");
   assert(calls.some((u) => u.includes("groq.com")), "groq was tried first");
-  assert(calls.some((u) => u.includes("openrouter.net")), "openrouter was tried as fallback");
+  assert(calls.some((u) => u.includes("openrouter.ai")), "openrouter was tried as fallback");
 });
 
 Deno.test("generateStudyPack errors when no provider key is configured", async () => {
