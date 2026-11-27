@@ -10,6 +10,7 @@ export const FileDetailDialog = lazy(() => loaders.fileDetail().then(m => ({ def
 export const FilePickerDialog = lazy(() => loaders.filePicker().then(m => ({ default: m.FilePickerDialog })));
 export const FilesView = lazy(() => loaders.files().then(m => ({ default: m.FilesView })));
 export const PdfTool = lazy(() => loaders.pdf().then(m => ({ default: m.PdfTool })));
+export const StudyView = lazy(() => loaders.study().then(m => ({ default: m.StudyView })));
 export const MemoryView = lazy(() => loaders.memoryView().then(m => ({ default: m.MemoryView })));
 export const MemoryEditor = lazy(() => loaders.memoryEditor().then(m => ({ default: m.MemoryEditor })));
 export const ProjectView = lazy(() => loaders.project().then(m => ({ default: m.ProjectView })));

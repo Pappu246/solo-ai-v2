@@ -31,7 +31,7 @@ import type { Route } from './lib/routes';
 import { useUrlRoute } from './hooks/useUrlRoute';
 import type { MemoryDraft } from './components/memory/MemoryEditor';
 import {
-  SettingsPanel, SearchPalette, FileDetailDialog, FilePickerDialog, FilesView, PdfTool, MemoryView, MemoryEditor,
+  SettingsPanel, SearchPalette, FileDetailDialog, FilePickerDialog, FilesView, PdfTool, StudyView, MemoryView, MemoryEditor,
   ProjectView, ProjectDialog, LazyDialog, LazyView,
 } from './lazyViews';
 import { prefetchLazyViews } from './lazyLoaders';
@@ -299,6 +299,7 @@ function Shell() {
   const openNewProjectDialog = useCallback(() => setProjectDialog({ open: true, project: null }), []);
   const openFilesView = useCallback(() => setView({ kind: 'files' }), []);
   const openPdfView = useCallback(() => setView({ kind: 'pdf' }), []);
+  const openStudyView = useCallback(() => setView({ kind: 'study' }), []);
   const openMemoryView = useCallback(() => setView({ kind: 'memory' }), []);
   const openSearchPalette = useCallback(() => setSearchOpen(true), []);
   const handleRemember = useCallback((content: string) => { setRememberDraft(content.length > 600 ? { content: `${content.slice(0, 600).trimEnd()}…`, type: 'fact' } : { content, type: 'fact' }); }, []);
@@ -312,6 +313,7 @@ function Shell() {
   const applyRoute = useCallback((r: Route) => {
     if (r.kind === 'files') setView({ kind: 'files' });
     else if (r.kind === 'pdf') setView({ kind: 'pdf' });
+    else if (r.kind === 'study') setView({ kind: 'study' });
     else if (r.kind === 'memory') setView({ kind: 'memory' });
     else if (r.kind === 'project') { const p = projectsCtl.projects.find(x => x.id === r.id); if (p) openProject(p); else startNewChat(); }
     else if (r.conversationId) { const c = chat.conversations.find(x => x.id === r.conversationId); if (c) openConversation(c); else startNewChat(); }
@@ -349,7 +351,7 @@ function Shell() {
 
   const hasMessages = chat.messages.length > 0 || chat.isGenerating || chat.messagesStatus === 'loading';
   const activeProject = view.kind === 'project' ? projectsCtl.projects.find(p => p.id === view.id) ?? null : null;
-  const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'pdf' ? 'PDF' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
+  const topbarTitle = view.kind === 'files' ? 'Files' : view.kind === 'pdf' ? 'PDF' : view.kind === 'study' ? 'Study' : view.kind === 'memory' ? 'Memory' : view.kind === 'project' ? (activeProject?.name ?? 'Project') : chat.activeConversation?.title ?? null;
   // The shell must not paint an opaque background: the ambient glow layer
   // lives behind it (body::before, z -1) and every frosted surface above
   // blurs it. z-10 keeps the whole app above that glow layer.
@@ -379,6 +381,7 @@ function Shell() {
         onNewProject={openNewProjectDialog}
         onOpenFiles={openFilesView}
         onOpenPdf={openPdfView}
+        onOpenStudy={openStudyView}
         onOpenMemory={openMemoryView}
         onOpenSearch={openSearchPalette}
         onMoveToProject={moveWithToast}
@@ -412,6 +415,10 @@ function Shell() {
 
         {view.kind === 'pdf' && (
           <LazyView><PdfTool /></LazyView>
+        )}
+
+        {view.kind === 'study' && (
+          <LazyView><StudyView /></LazyView>
         )}
 
         {view.kind === 'memory' && (

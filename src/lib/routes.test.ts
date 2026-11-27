@@ -7,6 +7,8 @@ describe('routes', () => {
       { kind: 'chat', conversationId: null },
       { kind: 'chat', conversationId: 'abc-123' },
       { kind: 'files' },
+      { kind: 'pdf' },
+      { kind: 'study' },
       { kind: 'memory' },
       { kind: 'project', id: 'p_1' },
     ] as const) expect(parsePath(pathFor(r))).toEqual(r);
